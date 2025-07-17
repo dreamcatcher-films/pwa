@@ -1,11 +1,24 @@
-
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 
 // --- DATA STRUCTURE ---
-const PACKAGES = [
+interface ListItem {
+    id: string;
+    name: string;
+    price?: number;
+    locked?: boolean;
+}
+
+interface Package {
+    id: string;
+    name: string;
+    price: number;
+    description: string;
+    included: ListItem[];
+}
+
+const PACKAGES: Package[] = [
     {
         id: 'gold',
         name: 'Pakiet Złoty',
@@ -41,7 +54,7 @@ const PACKAGES = [
     },
 ];
 
-const ALL_ADDONS = [
+const ALL_ADDONS: ListItem[] = [
     { id: 'pre_wedding', name: 'Sesja narzeczeńska', price: 600 },
     { id: 'drone', name: 'Ujęcia z drona', price: 400 },
     { id: 'social', name: 'Teledysk dla social media', price: 350 },
@@ -49,10 +62,15 @@ const ALL_ADDONS = [
     { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
 ];
 
-const formatCurrency = (value) => value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+const formatCurrency = (value: number) => value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
 
 // --- UI COMPONENTS ---
-const PackageCard = ({ packageInfo, onSelect }) => (
+interface PackageCardProps {
+    packageInfo: Package;
+    onSelect: (packageId: string) => void;
+}
+
+const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
     <div
         onClick={() => onSelect(packageInfo.id)}
         className="cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1"
@@ -71,7 +89,12 @@ const PackageCard = ({ packageInfo, onSelect }) => (
     </div>
 );
 
-const CustomizationListItem = ({ item, isSelected, onToggle }) => (
+interface CustomizationListItemProps {
+    item: ListItem;
+    isSelected: boolean;
+    onToggle: (itemId: string) => void;
+}
+const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelected, onToggle }) => (
      <div className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
         <div className="flex items-center">
             {item.locked ? (
@@ -94,7 +117,12 @@ const CustomizationListItem = ({ item, isSelected, onToggle }) => (
     </div>
 );
 
-const Modal = ({ isOpen, onClose, children }) => {
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    children: ReactNode;
+}
+const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
     if (!isOpen) return null;
 
     return (
@@ -109,10 +137,15 @@ const Modal = ({ isOpen, onClose, children }) => {
     );
 };
 
-const BookingModal = ({ isOpen, onClose, onKeyValidated }) => {
+interface BookingModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onKeyValidated: (accessKey: string) => void;
+}
+const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }) => {
     const [accessKey, setAccessKey] = useState('');
     const [error, setError] = useState('');
-    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
+    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
     const handleConfirm = async () => {
         setError('');
@@ -219,14 +252,14 @@ const BookingModal = ({ isOpen, onClose, onKeyValidated }) => {
 
 
 // --- MAIN CALCULATOR APP ---
-const CalculatorPage = () => {
-    const [step, setStep] = useState('selection'); // 'selection', 'customization', 'form', 'booked'
-    const [selectedPackageId, setSelectedPackageId] = useState(null);
-    const [customizedItems, setCustomizedItems] = useState([]);
+const CalculatorPage: FC = () => {
+    const [step, setStep] = useState<'selection' | 'customization' | 'form' | 'booked'>('selection');
+    const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+    const [customizedItems, setCustomizedItems] = useState<string[]>([]);
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [validatedAccessKey, setValidatedAccessKey] = useState('');
-    const [finalBookingId, setFinalBookingId] = useState(null);
+    const [finalBookingId, setFinalBookingId] = useState<number | null>(null);
     
     const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
 
@@ -240,36 +273,36 @@ const CalculatorPage = () => {
         customizedItems.forEach(itemId => {
             if (!baseItemIds.has(itemId)) {
                 const addon = ALL_ADDONS.find(a => a.id === itemId);
-                if (addon) calculatedPrice += addon.price;
+                if (addon && addon.price) calculatedPrice += addon.price;
             }
         });
         selectedPackage.included.forEach(item => {
             if (!item.locked && !customizedItems.includes(item.id)) {
-                calculatedPrice -= item.price;
+                if(item.price) calculatedPrice -= item.price;
             }
         });
         setTotalPrice(calculatedPrice);
     }, [selectedPackage, customizedItems]);
 
-    const handleSelectPackage = (packageId) => {
+    const handleSelectPackage = (packageId: string) => {
         setSelectedPackageId(packageId);
         const initialItems = PACKAGES.find(p => p.id === packageId)?.included.map(i => i.id) || [];
         setCustomizedItems(initialItems);
         setStep('customization');
     };
     
-    const handleKeyValidated = (accessKey) => {
+    const handleKeyValidated = (accessKey: string) => {
         setValidatedAccessKey(accessKey);
         setIsBookingModalOpen(false);
         setStep('form');
     };
 
-    const handleBookingComplete = (bookingId) => {
+    const handleBookingComplete = (bookingId: number) => {
         setFinalBookingId(bookingId);
         setStep('booked');
     };
 
-    const handleItemToggle = (itemId) => {
+    const handleItemToggle = (itemId: string) => {
         setCustomizedItems(prev =>
             prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
         );
@@ -313,7 +346,7 @@ const CalculatorPage = () => {
             <BookingForm
                 bookingDetails={{
                     accessKey: validatedAccessKey,
-                    packageName: selectedPackage?.name,
+                    packageName: selectedPackage?.name || '',
                     totalPrice: totalPrice,
                     selectedItems: customizedItems,
                 }}
