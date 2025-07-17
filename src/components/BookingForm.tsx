@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LoadingSpinner, ArrowLeftIcon } from './Icons';
+import { LoadingSpinner, ArrowLeftIcon } from './Icons.tsx';
 
 interface BookingDetails {
     accessKey: string;
