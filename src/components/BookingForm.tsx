@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LoadingSpinner, ArrowLeftIcon } from './Icons.tsx';
+import { formatCurrency } from '../utils.ts';
 
 interface BookingDetails {
     accessKey: string;
@@ -113,6 +114,20 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                 <p className="mt-2 text-lg text-slate-600">Uzupełnij poniższe informacje, aby dokończyć rezerwację.</p>
             </header>
             
+            <div className="bg-slate-100 p-6 rounded-2xl mb-8 border border-slate-200">
+                <h2 className="text-xl font-bold text-slate-800 mb-4">Podsumowanie Twojego wyboru</h2>
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <span className="text-slate-600">Wybrany pakiet:</span>
+                        <span className="font-bold text-slate-900">{bookingDetails.packageName}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-lg">
+                        <span className="text-slate-600">Cena końcowa:</span>
+                        <span className="font-bold text-indigo-600">{formatCurrency(bookingDetails.totalPrice)}</span>
+                    </div>
+                </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
                 
                 {error && (
