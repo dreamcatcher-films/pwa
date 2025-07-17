@@ -140,7 +140,7 @@ const Modal = ({ isOpen, onClose, children }) => {
     );
 };
 
-const BookingModal = ({ isOpen, onClose, onConfirm }) => {
+const BookingModal = ({ isOpen, onClose, onKeyValidated }) => {
     const [accessKey, setAccessKey] = useState('');
     const [error, setError] = useState('');
     const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
@@ -148,10 +148,7 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
     const handleConfirm = async () => {
         setError('');
         setStatus('loading');
-
-        // This is where we will call our backend on Render.
-        // We use an environment variable for the API URL for security and flexibility.
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'; // Fallback for local dev
+        const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
             const response = await fetch(`${apiUrl}/api/validate-key`, {
@@ -159,26 +156,11 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: accessKey }),
             });
-
-            if (response.status === 404) {
-                 // For demonstration: Simulate success for '1234' if the backend is not running
-                if (accessKey === '1234') {
-                     setStatus('success');
-                } else {
-                    setError('Usługa backendu jest niedostępna, ale klucz symulowany (1234) nie pasuje.');
-                    setStatus('error');
-                }
-                return;
-            }
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
             }
-            
-            // Success
             setStatus('success');
-
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
             setStatus('error');
@@ -188,9 +170,9 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
     useEffect(() => {
         if (status === 'success') {
             const timer = setTimeout(() => {
-                onConfirm(accessKey);
+                onKeyValidated(accessKey);
                 handleClose();
-            }, 2000);
+            }, 1000); // Shorter delay, as the main screen will show the booking progress
             return () => clearTimeout(timer);
         }
     }, [status]);
@@ -208,9 +190,9 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
             case 'success':
                 return (
                     <div className="text-center">
-                        <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4 animate-pulse" />
-                        <h2 className="text-2xl font-bold text-slate-900">Sukces!</h2>
-                        <p className="text-slate-600 mt-2">Klucz zweryfikowany. Rezerwacja została potwierdzona.</p>
+                        <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                        <h2 className="text-2xl font-bold text-slate-900">Klucz poprawny!</h2>
+                        <p className="text-slate-600 mt-2">Trwa zapisywanie rezerwacji...</p>
                     </div>
                 );
             default:
@@ -218,7 +200,6 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
                     <>
                         <h2 className="text-2xl font-bold text-slate-900 text-center">Potwierdzenie Rezerwacji</h2>
                         <p className="text-slate-600 text-center mt-2">Aby kontynuować, wprowadź swój klucz dostępu.</p>
-                        
                         <div className="mt-6">
                             <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700">Klucz dostępu</label>
                             <input
@@ -233,16 +214,14 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
                             />
                              {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
                         </div>
-
                         <div className="mt-8">
                             <button 
                                 onClick={handleConfirm}
                                 disabled={status === 'loading'}
                                 className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed">
-                                {status === 'loading' ? <LoadingSpinner /> : 'Potwierdź rezerwację'}
+                                {status === 'loading' ? <LoadingSpinner /> : 'Weryfikuj klucz'}
                             </button>
                         </div>
-
                         <p className="text-xs text-slate-500 text-center mt-4">
                             Nie masz klucza? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
                         </p>
@@ -261,11 +240,14 @@ const BookingModal = ({ isOpen, onClose, onConfirm }) => {
 
 // --- MAIN CALCULATOR APP ---
 export const App = () => {
-    const [currentStep, setCurrentStep] = useState('selection'); // 'selection' or 'customization'
+    const [currentStep, setCurrentStep] = useState('selection'); // 'selection', 'customization', 'booked'
     const [selectedPackageId, setSelectedPackageId] = useState(null);
     const [customizedItems, setCustomizedItems] = useState([]);
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+    const [bookingStatus, setBookingStatus] = useState('idle'); // 'idle', 'booking', 'error'
+    const [finalBookingId, setFinalBookingId] = useState(null);
+
 
     const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
 
@@ -274,23 +256,19 @@ export const App = () => {
             setTotalPrice(0);
             return;
         }
-
         let calculatedPrice = selectedPackage.price;
         const baseItemIds = new Set(selectedPackage.included.map(i => i.id));
-
         customizedItems.forEach(itemId => {
             if (!baseItemIds.has(itemId)) {
                 const addon = ALL_ADDONS.find(a => a.id === itemId);
                 if (addon) calculatedPrice += addon.price;
             }
         });
-
         selectedPackage.included.forEach(item => {
             if (!item.locked && !customizedItems.includes(item.id)) {
                 calculatedPrice -= item.price;
             }
         });
-
         setTotalPrice(calculatedPrice);
     }, [selectedPackage, customizedItems]);
 
@@ -301,9 +279,36 @@ export const App = () => {
         setCurrentStep('customization');
     };
     
-    const handleConfirmBooking = (accessKey) => {
-        console.log("Booking confirmed with access key:", accessKey);
-        // Here we will later send the full booking data to the backend API
+    const handleKeyValidated = async (accessKey) => {
+        if (!selectedPackage) return;
+        setBookingStatus('booking');
+
+        const bookingData = {
+            accessKey,
+            packageName: selectedPackage.name,
+            totalPrice,
+            selectedItems: customizedItems
+        };
+        const apiUrl = import.meta.env.VITE_API_URL;
+
+        try {
+            const response = await fetch(`${apiUrl}/api/bookings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bookingData),
+            });
+            if (!response.ok) {
+                throw new Error('Nie udało się zapisać rezerwacji. Spróbuj ponownie.');
+            }
+            const result = await response.json();
+            setFinalBookingId(result.bookingId);
+            setCurrentStep('booked');
+        } catch (error) {
+            console.error(error);
+            setBookingStatus('error'); // Show an error message on the customization screen
+        } finally {
+            setBookingStatus('idle');
+        }
     };
 
     const handleItemToggle = (itemId) => {
@@ -317,6 +322,15 @@ export const App = () => {
         const packageItemIds = new Set(selectedPackage.included.map(i => i.id));
         return ALL_ADDONS.filter(addon => !packageItemIds.has(addon.id));
     };
+    
+    const resetCalculator = () => {
+        setCurrentStep('selection');
+        setSelectedPackageId(null);
+        setCustomizedItems([]);
+        setTotalPrice(0);
+        setBookingStatus('idle');
+        setFinalBookingId(null);
+    }
 
     const renderSelectionScreen = () => (
         <div>
@@ -332,12 +346,34 @@ export const App = () => {
         </div>
     );
     
+    const renderBookedScreen = () => (
+        <div className="text-center py-20">
+             <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto mb-6" />
+             <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dziękujemy za rezerwację!</h1>
+             <p className="mt-4 text-lg text-slate-600">
+                Twoja rezerwacja o numerze <span className="font-bold text-indigo-600">#{finalBookingId}</span> została pomyślnie zapisana.
+             </p>
+             <p className="mt-2 text-slate-600">Wkrótce skontaktujemy się z Tobą w celu omówienia szczegółów.</p>
+             <button 
+                onClick={resetCalculator}
+                className="mt-8 bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                Stwórz nową kalkulację
+            </button>
+        </div>
+    );
+
     const renderCustomizationScreen = () => {
        if (!selectedPackage) return null;
        const availableAddons = getAvailableAddons();
 
        return (
-            <div>
+            <div className="relative">
+                 {bookingStatus === 'booking' && (
+                    <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-10 flex flex-col justify-center items-center">
+                        <LoadingSpinner className="w-12 h-12 text-indigo-600" />
+                        <p className="mt-4 text-lg font-semibold text-slate-700">Zapisywanie rezerwacji...</p>
+                    </div>
+                 )}
                  <header className="relative text-center mb-10">
                      <button 
                         onClick={() => setCurrentStep('selection')} 
@@ -373,6 +409,12 @@ export const App = () => {
                     </div>
                     <div className="lg:col-span-1 mt-8 lg:mt-0">
                         <div className="sticky top-8 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
+                             {bookingStatus === 'error' && (
+                                <div className="p-3 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700">
+                                    <p className="font-bold">Błąd</p>
+                                    <p>Nie udało się zapisać rezerwacji. Proszę, spróbuj ponownie za chwilę.</p>
+                                </div>
+                            )}
                             <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
                             <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
                             
@@ -400,17 +442,30 @@ export const App = () => {
        );
     };
 
+    const renderCurrentScreen = () => {
+        switch (currentStep) {
+            case 'selection':
+                return renderSelectionScreen();
+            case 'customization':
+                return renderCustomizationScreen();
+            case 'booked':
+                return renderBookedScreen();
+            default:
+                return renderSelectionScreen();
+        }
+    }
+
     return (
         <>
             <div className="min-h-screen bg-slate-50 font-sans p-4 sm:p-6 lg:p-8">
                 <div className="max-w-7xl mx-auto">
-                    {currentStep === 'selection' ? renderSelectionScreen() : renderCustomizationScreen()}
+                    {renderCurrentScreen()}
                 </div>
             </div>
             <BookingModal 
                 isOpen={isBookingModalOpen} 
                 onClose={() => setIsBookingModalOpen(false)}
-                onConfirm={handleConfirmBooking}
+                onKeyValidated={handleKeyValidated}
             />
         </>
     );
