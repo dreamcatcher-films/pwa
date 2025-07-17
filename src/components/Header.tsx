@@ -1,5 +1,5 @@
 import React from 'react';
-import { MenuIcon } from './Icons';
+import { MenuIcon } from './Icons.tsx';
 
 interface HeaderProps {
     onMenuToggle: () => void;
