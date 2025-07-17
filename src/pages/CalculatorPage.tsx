@@ -1,6 +1,7 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
+import { formatCurrency } from '../utils.ts';
 
 // --- DATA STRUCTURE ---
 interface ListItem {
@@ -61,8 +62,6 @@ const ALL_ADDONS: ListItem[] = [
     { id: 'guest_interviews', name: 'Wywiady z gośćmi', price: 300 },
     { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
 ];
-
-const formatCurrency = (value: number) => value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
 
 // --- UI COMPONENTS ---
 interface PackageCardProps {
