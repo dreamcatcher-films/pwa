@@ -27,9 +27,15 @@ const XMarkIcon = ({ className = "w-6 h-6" }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
 );
+const LoadingSpinner = ({ className = "w-6 h-6" }) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
 
 
-// --- DATA STRUCTURE FOR HYBRID MODEL ---
+// --- DATA STRUCTURE ---
 const PACKAGES = [
     {
         id: 'gold',
@@ -74,6 +80,8 @@ const ALL_ADDONS = [
     { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
 ];
 
+const formatCurrency = (value) => value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+
 // --- UI COMPONENTS ---
 const PackageCard = ({ packageInfo, onSelect }) => (
     <div
@@ -82,7 +90,7 @@ const PackageCard = ({ packageInfo, onSelect }) => (
     >
         <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
         <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
-        <p className="text-2xl font-bold text-slate-900 mt-4">{packageInfo.price.toLocaleString('pl-PL')} zł</p>
+        <p className="text-2xl font-bold text-slate-900 mt-4">{formatCurrency(packageInfo.price)}</p>
         <ul className="mt-4 space-y-2 text-sm">
             {packageInfo.included.slice(0, 3).map(item => (
                 <li key={item.id} className="flex items-center text-slate-600">
@@ -110,8 +118,8 @@ const CustomizationListItem = ({ item, isSelected, onToggle }) => (
             </div>
         </div>
         <div className="text-right">
-            {item.price !== undefined && (
-                <span className="font-semibold text-slate-800">{item.price.toLocaleString('pl-PL')} zł</span>
+            {item.price !== undefined && !item.locked && (
+                <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
             )}
         </div>
     </div>
@@ -121,7 +129,7 @@ const Modal = ({ isOpen, onClose, children }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
             <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative transform transition-all duration-300 scale-95 animate-modal-in">
                 <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Zamknij okno">
                     <XMarkIcon className="w-6 h-6" />
@@ -135,71 +143,117 @@ const Modal = ({ isOpen, onClose, children }) => {
 const BookingModal = ({ isOpen, onClose, onConfirm }) => {
     const [accessKey, setAccessKey] = useState('');
     const [error, setError] = useState('');
-    const [isSuccess, setIsSuccess] = useState(false);
+    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
 
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
         setError('');
-        // --- Simulation of API call ---
-        if (accessKey === '1234') {
-            setIsSuccess(true);
-            setTimeout(() => {
-                onConfirm(accessKey);
-                onClose();
-                setIsSuccess(false); // Reset for next time
-                setAccessKey('');
-            }, 2000);
-        } else {
-            setError('Nieprawidłowy klucz dostępu. Spróbuj ponownie.');
+        setStatus('loading');
+
+        // This is where we will call our backend on Render.
+        // We use an environment variable for the API URL for security and flexibility.
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'; // Fallback for local dev
+
+        try {
+            const response = await fetch(`${apiUrl}/api/validate-key`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: accessKey }),
+            });
+
+            if (response.status === 404) {
+                 // For demonstration: Simulate success for '1234' if the backend is not running
+                if (accessKey === '1234') {
+                     setStatus('success');
+                } else {
+                    setError('Usługa backendu jest niedostępna, ale klucz symulowany (1234) nie pasuje.');
+                    setStatus('error');
+                }
+                return;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
+            }
+            
+            // Success
+            setStatus('success');
+
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+            setStatus('error');
         }
     };
     
+    useEffect(() => {
+        if (status === 'success') {
+            const timer = setTimeout(() => {
+                onConfirm(accessKey);
+                handleClose();
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [status]);
+
+
     const handleClose = () => {
         setAccessKey('');
         setError('');
-        setIsSuccess(false);
+        setStatus('idle');
         onClose();
     }
 
+    const renderContent = () => {
+        switch (status) {
+            case 'success':
+                return (
+                    <div className="text-center">
+                        <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4 animate-pulse" />
+                        <h2 className="text-2xl font-bold text-slate-900">Sukces!</h2>
+                        <p className="text-slate-600 mt-2">Klucz zweryfikowany. Rezerwacja została potwierdzona.</p>
+                    </div>
+                );
+            default:
+                return (
+                    <>
+                        <h2 className="text-2xl font-bold text-slate-900 text-center">Potwierdzenie Rezerwacji</h2>
+                        <p className="text-slate-600 text-center mt-2">Aby kontynuować, wprowadź swój klucz dostępu.</p>
+                        
+                        <div className="mt-6">
+                            <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700">Klucz dostępu</label>
+                            <input
+                                type="text"
+                                id="accessKey"
+                                value={accessKey}
+                                onChange={(e) => setAccessKey(e.target.value)}
+                                className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400
+                                    focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                placeholder="np. 1234"
+                                disabled={status === 'loading'}
+                            />
+                             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                        </div>
+
+                        <div className="mt-8">
+                            <button 
+                                onClick={handleConfirm}
+                                disabled={status === 'loading'}
+                                className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed">
+                                {status === 'loading' ? <LoadingSpinner /> : 'Potwierdź rezerwację'}
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-slate-500 text-center mt-4">
+                            Nie masz klucza? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
+                        </p>
+                    </>
+                );
+        }
+    };
+    
     return (
         <Modal isOpen={isOpen} onClose={handleClose}>
-            {isSuccess ? (
-                <div className="text-center">
-                    <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4 animate-pulse" />
-                    <h2 className="text-2xl font-bold text-slate-900">Sukces!</h2>
-                    <p className="text-slate-600 mt-2">Rezerwacja została potwierdzona. Wkrótce otrzymasz dalsze instrukcje.</p>
-                </div>
-            ) : (
-                <>
-                    <h2 className="text-2xl font-bold text-slate-900 text-center">Potwierdzenie Rezerwacji</h2>
-                    <p className="text-slate-600 text-center mt-2">Aby kontynuować, wprowadź swój klucz dostępu otrzymany podczas konsultacji.</p>
-                    
-                    <div className="mt-6">
-                        <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700">Klucz dostępu</label>
-                        <input
-                            type="text"
-                            id="accessKey"
-                            value={accessKey}
-                            onChange={(e) => setAccessKey(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400
-                                focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            placeholder="np. 1234"
-                        />
-                         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-                    </div>
-
-                    <div className="mt-8">
-                        <button 
-                            onClick={handleConfirm}
-                            className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
-                            Potwierdź rezerwację
-                        </button>
-                    </div>
-
-                    <p className="text-xs text-slate-500 text-center mt-4">
-                        Nie masz klucza? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>, aby umówić spotkanie.
-                    </p>
-                </>
-            )}
+            {renderContent()}
         </Modal>
     );
 };
@@ -249,7 +303,7 @@ export const App = () => {
     
     const handleConfirmBooking = (accessKey) => {
         console.log("Booking confirmed with access key:", accessKey);
-        // Here we will later send data to the backend API
+        // Here we will later send the full booking data to the backend API
     };
 
     const handleItemToggle = (itemId) => {
@@ -325,7 +379,7 @@ export const App = () => {
                             <div className="mt-6 border-t border-slate-200 pt-6">
                                 <div className="flex justify-between items-center text-2xl font-bold">
                                     <span className="text-slate-900">Suma</span>
-                                    <span className="text-indigo-600">{totalPrice.toLocaleString('pl-PL')} zł</span>
+                                    <span className="text-indigo-600">{formatCurrency(totalPrice)}</span>
                                 </div>
                             </div>
                              
