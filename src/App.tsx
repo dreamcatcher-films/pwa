@@ -150,15 +150,28 @@ const BookingModal = ({ isOpen, onClose, onKeyValidated }) => {
         setStatus('loading');
         const apiUrl = import.meta.env.VITE_API_URL;
 
+        if (!apiUrl) {
+            setError("Błąd konfiguracji: Brak adresu URL API.");
+            setStatus('error');
+            return;
+        }
+
         try {
             const response = await fetch(`${apiUrl}/api/validate-key`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: accessKey }),
             });
+
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.indexOf('application/json') !== -1) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
+                } else {
+                    // This is not a JSON error, likely a server/CORS/404 issue
+                    throw new Error(`Błąd serwera (${response.status}). Sprawdź adres API i konfigurację CORS.`);
+                }
             }
             setStatus('success');
         } catch (err) {
@@ -175,7 +188,7 @@ const BookingModal = ({ isOpen, onClose, onKeyValidated }) => {
             }, 1000); // Shorter delay, as the main screen will show the booking progress
             return () => clearTimeout(timer);
         }
-    }, [status]);
+    }, [status, onKeyValidated]);
 
 
     const handleClose = () => {
@@ -247,6 +260,7 @@ export const App = () => {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [bookingStatus, setBookingStatus] = useState('idle'); // 'idle', 'booking', 'error'
     const [finalBookingId, setFinalBookingId] = useState(null);
+    const [generalError, setGeneralError] = useState('');
 
 
     const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
@@ -277,11 +291,13 @@ export const App = () => {
         const initialItems = PACKAGES.find(p => p.id === packageId)?.included.map(i => i.id) || [];
         setCustomizedItems(initialItems);
         setCurrentStep('customization');
+        setGeneralError('');
     };
     
     const handleKeyValidated = async (accessKey) => {
         if (!selectedPackage) return;
         setBookingStatus('booking');
+        setGeneralError('');
 
         const bookingData = {
             accessKey,
@@ -291,23 +307,40 @@ export const App = () => {
         };
         const apiUrl = import.meta.env.VITE_API_URL;
 
+        if (!apiUrl) {
+            setGeneralError("Błąd konfiguracji: Brak adresu URL API.");
+            setBookingStatus('error');
+            return;
+        }
+
         try {
             const response = await fetch(`${apiUrl}/api/bookings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookingData),
             });
+            
             if (!response.ok) {
-                throw new Error('Nie udało się zapisać rezerwacji. Spróbuj ponownie.');
+                 const contentType = response.headers.get('content-type');
+                if (contentType && contentType.indexOf('application/json') !== -1) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Nie udało się zapisać rezerwacji.');
+                } else {
+                    throw new Error(`Błąd serwera (${response.status}) podczas zapisywania rezerwacji.`);
+                }
             }
+
             const result = await response.json();
             setFinalBookingId(result.bookingId);
             setCurrentStep('booked');
         } catch (error) {
             console.error(error);
-            setBookingStatus('error'); // Show an error message on the customization screen
+            setGeneralError(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
+            setBookingStatus('error');
         } finally {
-            setBookingStatus('idle');
+            if (currentStep !== 'booked') {
+                 setBookingStatus('idle');
+            }
         }
     };
 
@@ -330,6 +363,7 @@ export const App = () => {
         setTotalPrice(0);
         setBookingStatus('idle');
         setFinalBookingId(null);
+        setGeneralError('');
     }
 
     const renderSelectionScreen = () => (
@@ -410,9 +444,9 @@ export const App = () => {
                     <div className="lg:col-span-1 mt-8 lg:mt-0">
                         <div className="sticky top-8 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
                              {bookingStatus === 'error' && (
-                                <div className="p-3 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700">
-                                    <p className="font-bold">Błąd</p>
-                                    <p>Nie udało się zapisać rezerwacji. Proszę, spróbuj ponownie za chwilę.</p>
+                                <div className="p-3 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg">
+                                    <p className="font-bold">Wystąpił błąd</p>
+                                    <p className="text-sm">{generalError}</p>
                                 </div>
                             )}
                             <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
