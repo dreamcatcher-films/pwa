@@ -1,6 +1,6 @@
 import React from 'react';
-import { Page } from '../App';
-import { XMarkIcon } from './Icons';
+import { Page } from '../App.tsx';
+import { XMarkIcon } from './Icons.tsx';
 
 interface SideMenuProps {
     isOpen: boolean;
