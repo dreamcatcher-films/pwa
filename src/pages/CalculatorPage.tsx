@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon } from '../components/Icons';
-import BookingForm from '../components/BookingForm';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon } from '../components/Icons.tsx';
+import BookingForm from '../components/BookingForm.tsx';
 
 // --- DATA STRUCTURE ---
 const PACKAGES = [
@@ -346,9 +347,7 @@ const CalculatorPage = () => {
                      <button 
                         onClick={() => setStep('selection')} 
                         className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                        </svg>
+                        <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
                          Zmień pakiet
                      </button>
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
