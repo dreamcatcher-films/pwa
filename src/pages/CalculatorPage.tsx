@@ -23,14 +23,11 @@ const PACKAGES: Package[] = [
     {
         id: 'gold',
         name: 'Pakiet Złoty',
-        price: 5200,
+        price: 4500,
         description: 'Najbardziej kompletny pakiet, aby stworzyć niezapomnianą pamiątkę.',
         included: [
             { id: 'film', name: 'Film kinowy', locked: true },
             { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', locked: true },
-            { id: 'pre_wedding', name: 'Sesja narzeczeńska', locked: false, price: 600 },
-            { id: 'drone', name: 'Ujęcia z drona', locked: false, price: 400 },
-            { id: 'social', name: 'Teledysk dla social media', locked: false, price: 350 },
         ]
     },
     {
