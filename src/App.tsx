@@ -22,51 +22,56 @@ const ArrowLeftIcon = ({ className = 'w-5 h-5' }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
     </svg>
 );
+const XMarkIcon = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+);
 
 
 // --- DATA STRUCTURE FOR HYBRID MODEL ---
 const PACKAGES = [
     {
         id: 'gold',
-        name: 'Gold Package',
+        name: 'Pakiet Złoty',
         price: 5200,
-        description: 'The ultimate package for a complete and unforgettable memory.',
+        description: 'Najbardziej kompletny pakiet, aby stworzyć niezapomnianą pamiątkę.',
         included: [
-            { id: 'film', name: 'Cinematic Film', locked: true },
-            { id: 'photos', name: 'Full Day Photo Reportage', locked: true },
-            { id: 'pre_wedding', name: 'Pre-wedding Session', locked: false, price: 600 },
-            { id: 'drone', name: 'Drone Footage', locked: false, price: 400 },
-            { id: 'social', name: 'Social Media Teaser', locked: false, price: 350 },
+            { id: 'film', name: 'Film kinowy', locked: true },
+            { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', locked: true },
+            { id: 'pre_wedding', name: 'Sesja narzeczeńska', locked: false, price: 600 },
+            { id: 'drone', name: 'Ujęcia z drona', locked: false, price: 400 },
+            { id: 'social', name: 'Teledysk dla social media', locked: false, price: 350 },
         ]
     },
     {
         id: 'silver',
-        name: 'Silver Package',
+        name: 'Pakiet Srebrny',
         price: 4500,
-        description: 'The most popular choice for comprehensive coverage.',
+        description: 'Najpopularniejszy wybór zapewniający kompleksową relację.',
         included: [
-            { id: 'film', name: 'Cinematic Film', locked: true },
-            { id: 'photos', name: 'Full Day Photo Reportage', locked: true },
-            { id: 'drone', name: 'Drone Footage', locked: false, price: 400 },
+            { id: 'film', name: 'Film kinowy', locked: true },
+            { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', locked: true },
+            { id: 'drone', name: 'Ujęcia z drona', locked: false, price: 400 },
         ]
     },
     {
         id: 'bronze',
-        name: 'Bronze Package',
+        name: 'Pakiet Brązowy',
         price: 3200,
-        description: 'A beautiful cinematic film to capture your day.',
+        description: 'Piękny film kinowy, który uchwyci magię Waszego dnia.',
         included: [
-            { id: 'film', name: 'Cinematic Film', locked: true },
+            { id: 'film', name: 'Film kinowy', locked: true },
         ]
     },
 ];
 
 const ALL_ADDONS = [
-    { id: 'pre_wedding', name: 'Pre-wedding Session', price: 600 },
-    { id: 'drone', name: 'Drone Footage', price: 400 },
-    { id: 'social', name: 'Social Media Teaser', price: 350 },
-    { id: 'guest_interviews', name: 'Guest Interviews', price: 300 },
-    { id: 'smoke_candles', name: 'Smoke Candles Effect', price: 150 },
+    { id: 'pre_wedding', name: 'Sesja narzeczeńska', price: 600 },
+    { id: 'drone', name: 'Ujęcia z drona', price: 400 },
+    { id: 'social', name: 'Teledysk dla social media', price: 350 },
+    { id: 'guest_interviews', name: 'Wywiady z gośćmi', price: 300 },
+    { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
 ];
 
 // --- UI COMPONENTS ---
@@ -77,7 +82,7 @@ const PackageCard = ({ packageInfo, onSelect }) => (
     >
         <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
         <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
-        <p className="text-2xl font-bold text-slate-900 mt-4">${packageInfo.price.toLocaleString()}</p>
+        <p className="text-2xl font-bold text-slate-900 mt-4">{packageInfo.price.toLocaleString('pl-PL')} zł</p>
         <ul className="mt-4 space-y-2 text-sm">
             {packageInfo.included.slice(0, 3).map(item => (
                 <li key={item.id} className="flex items-center text-slate-600">
@@ -95,22 +100,109 @@ const CustomizationListItem = ({ item, isSelected, onToggle }) => (
             {item.locked ? (
                 <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
             ) : (
-                 <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none">
+                 <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
                     {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
                 </button>
             )}
             <div>
                  <span className="font-medium text-slate-800">{item.name}</span>
-                 {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">Included</span>}
+                 {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">W pakiecie</span>}
             </div>
         </div>
         <div className="text-right">
             {item.price !== undefined && (
-                <span className="font-semibold text-slate-800">${item.price.toLocaleString()}</span>
+                <span className="font-semibold text-slate-800">{item.price.toLocaleString('pl-PL')} zł</span>
             )}
         </div>
     </div>
 );
+
+const Modal = ({ isOpen, onClose, children }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative transform transition-all duration-300 scale-95 animate-modal-in">
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Zamknij okno">
+                    <XMarkIcon className="w-6 h-6" />
+                </button>
+                {children}
+            </div>
+        </div>
+    );
+};
+
+const BookingModal = ({ isOpen, onClose, onConfirm }) => {
+    const [accessKey, setAccessKey] = useState('');
+    const [error, setError] = useState('');
+    const [isSuccess, setIsSuccess] = useState(false);
+
+    const handleConfirm = () => {
+        setError('');
+        // --- Simulation of API call ---
+        if (accessKey === '1234') {
+            setIsSuccess(true);
+            setTimeout(() => {
+                onConfirm(accessKey);
+                onClose();
+                setIsSuccess(false); // Reset for next time
+                setAccessKey('');
+            }, 2000);
+        } else {
+            setError('Nieprawidłowy klucz dostępu. Spróbuj ponownie.');
+        }
+    };
+    
+    const handleClose = () => {
+        setAccessKey('');
+        setError('');
+        setIsSuccess(false);
+        onClose();
+    }
+
+    return (
+        <Modal isOpen={isOpen} onClose={handleClose}>
+            {isSuccess ? (
+                <div className="text-center">
+                    <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4 animate-pulse" />
+                    <h2 className="text-2xl font-bold text-slate-900">Sukces!</h2>
+                    <p className="text-slate-600 mt-2">Rezerwacja została potwierdzona. Wkrótce otrzymasz dalsze instrukcje.</p>
+                </div>
+            ) : (
+                <>
+                    <h2 className="text-2xl font-bold text-slate-900 text-center">Potwierdzenie Rezerwacji</h2>
+                    <p className="text-slate-600 text-center mt-2">Aby kontynuować, wprowadź swój klucz dostępu otrzymany podczas konsultacji.</p>
+                    
+                    <div className="mt-6">
+                        <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700">Klucz dostępu</label>
+                        <input
+                            type="text"
+                            id="accessKey"
+                            value={accessKey}
+                            onChange={(e) => setAccessKey(e.target.value)}
+                            className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400
+                                focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            placeholder="np. 1234"
+                        />
+                         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                    </div>
+
+                    <div className="mt-8">
+                        <button 
+                            onClick={handleConfirm}
+                            className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                            Potwierdź rezerwację
+                        </button>
+                    </div>
+
+                    <p className="text-xs text-slate-500 text-center mt-4">
+                        Nie masz klucza? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>, aby umówić spotkanie.
+                    </p>
+                </>
+            )}
+        </Modal>
+    );
+};
 
 
 // --- MAIN CALCULATOR APP ---
@@ -119,6 +211,7 @@ export const App = () => {
     const [selectedPackageId, setSelectedPackageId] = useState(null);
     const [customizedItems, setCustomizedItems] = useState([]);
     const [totalPrice, setTotalPrice] = useState(0);
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
     const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
 
@@ -129,21 +222,18 @@ export const App = () => {
         }
 
         let calculatedPrice = selectedPackage.price;
-        const baseItemIds = selectedPackage.included.map(i => i.id);
+        const baseItemIds = new Set(selectedPackage.included.map(i => i.id));
 
-        // Add price for items not in base package
         customizedItems.forEach(itemId => {
-            if (!baseItemIds.includes(itemId)) {
+            if (!baseItemIds.has(itemId)) {
                 const addon = ALL_ADDONS.find(a => a.id === itemId);
                 if (addon) calculatedPrice += addon.price;
             }
         });
 
-        // Subtract price for items deselected from base package
-        baseItemIds.forEach(itemId => {
-            const itemInfo = selectedPackage.included.find(i => i.id === itemId);
-            if (itemInfo && !itemInfo.locked && !customizedItems.includes(itemId)) {
-                calculatedPrice -= itemInfo.price;
+        selectedPackage.included.forEach(item => {
+            if (!item.locked && !customizedItems.includes(item.id)) {
+                calculatedPrice -= item.price;
             }
         });
 
@@ -156,6 +246,11 @@ export const App = () => {
         setCustomizedItems(initialItems);
         setCurrentStep('customization');
     };
+    
+    const handleConfirmBooking = (accessKey) => {
+        console.log("Booking confirmed with access key:", accessKey);
+        // Here we will later send data to the backend API
+    };
 
     const handleItemToggle = (itemId) => {
         setCustomizedItems(prev =>
@@ -165,15 +260,15 @@ export const App = () => {
 
     const getAvailableAddons = () => {
         if (!selectedPackage) return [];
-        const packageItemIds = selectedPackage.included.map(i => i.id);
-        return ALL_ADDONS.filter(addon => !packageItemIds.includes(addon.id));
+        const packageItemIds = new Set(selectedPackage.included.map(i => i.id));
+        return ALL_ADDONS.filter(addon => !packageItemIds.has(addon.id));
     };
 
     const renderSelectionScreen = () => (
         <div>
             <header className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Choose Your Package</h1>
-                <p className="mt-2 text-lg text-slate-600">Start with a base package and customize it to your needs.</p>
+                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Wybierz swój pakiet</h1>
+                <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {PACKAGES.map(pkg => (
@@ -194,18 +289,16 @@ export const App = () => {
                         onClick={() => setCurrentStep('selection')} 
                         className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
                          <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                         Change Package
+                         Zmień pakiet
                      </button>
-                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Customize Your Package</h1>
-                    <p className="mt-2 text-lg text-slate-600">You've selected the <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Add or remove items below.</p>
+                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
+                    <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dodaj lub usuń elementy poniżej.</p>
                 </header>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
-                    {/* Left side: Configuration */}
                     <div className="lg:col-span-2 space-y-8">
-                        {/* Package Items */}
                         <section>
-                            <h2 className="text-xl font-semibold text-slate-800 mb-4">Included in Your Package</h2>
+                            <h2 className="text-xl font-semibold text-slate-800 mb-4">Elementy w Twoim pakiecie</h2>
                              <div className="space-y-3">
                                 {selectedPackage.included.map(item => (
                                     <CustomizationListItem key={item.id} item={item} isSelected={customizedItems.includes(item.id)} onToggle={handleItemToggle} />
@@ -213,10 +306,9 @@ export const App = () => {
                             </div>
                         </section>
                         
-                        {/* Available Add-ons */}
                         {availableAddons.length > 0 && (
                             <section>
-                                <h2 className="text-xl font-semibold text-slate-800 mb-4">Available Add-ons</h2>
+                                <h2 className="text-xl font-semibold text-slate-800 mb-4">Dostępne dodatki</h2>
                                 <div className="space-y-3">
                                     {availableAddons.map(addon => (
                                          <CustomizationListItem key={addon.id} item={addon} isSelected={customizedItems.includes(addon.id)} onToggle={handleItemToggle} />
@@ -225,25 +317,26 @@ export const App = () => {
                             </section>
                         )}
                     </div>
-                     {/* Right side: Summary */}
                     <div className="lg:col-span-1 mt-8 lg:mt-0">
                         <div className="sticky top-8 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
-                            <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Your Custom Quote</h3>
-                            <p className="text-center text-sm text-slate-500 mb-6">Based on the <span className="font-semibold">{selectedPackage.name}</span></p>
+                            <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
+                            <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
                             
                             <div className="mt-6 border-t border-slate-200 pt-6">
                                 <div className="flex justify-between items-center text-2xl font-bold">
-                                    <span className="text-slate-900">Total</span>
-                                    <span className="text-indigo-600">${totalPrice.toLocaleString()}</span>
+                                    <span className="text-slate-900">Suma</span>
+                                    <span className="text-indigo-600">{totalPrice.toLocaleString('pl-PL')} zł</span>
                                 </div>
                             </div>
                              
                             <div className="mt-6 space-y-3">
-                                <button className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
-                                    Proceed to Booking
+                                <button 
+                                    onClick={() => setIsBookingModalOpen(true)}
+                                    className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                                    Przejdź do rezerwacji
                                 </button>
                                 <button className="w-full bg-slate-100 text-slate-700 font-bold py-3 px-4 rounded-lg hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
-                                    Save as Draft
+                                    Zapisz jako wersję roboczą
                                 </button>
                             </div>
                         </div>
@@ -254,10 +347,17 @@ export const App = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans p-4 sm:p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto">
-                {currentStep === 'selection' ? renderSelectionScreen() : renderCustomizationScreen()}
+        <>
+            <div className="min-h-screen bg-slate-50 font-sans p-4 sm:p-6 lg:p-8">
+                <div className="max-w-7xl mx-auto">
+                    {currentStep === 'selection' ? renderSelectionScreen() : renderCustomizationScreen()}
+                </div>
             </div>
-        </div>
+            <BookingModal 
+                isOpen={isBookingModalOpen} 
+                onClose={() => setIsBookingModalOpen(false)}
+                onConfirm={handleConfirmBooking}
+            />
+        </>
     );
 };
