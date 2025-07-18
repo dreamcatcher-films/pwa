@@ -44,10 +44,8 @@ const BookingsView: FC<Pick<AdminDashboardPageProps, 'onViewDetails'>> = ({ onVi
      useEffect(() => {
         const fetchBookings = async () => {
             const token = localStorage.getItem('adminAuthToken');
-            // No need to check token here, parent component does it.
-            const apiUrl = import.meta.env.VITE_API_URL;
             try {
-                const response = await fetch(`${apiUrl}/api/admin/bookings`, {
+                const response = await fetch('/api/admin/bookings', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await response.json();
@@ -130,9 +128,8 @@ const AccessKeysView: FC = () => {
     const fetchKeys = async () => {
         setIsLoading(true);
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         try {
-            const response = await fetch(`${apiUrl}/api/admin/access-keys`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch('/api/admin/access-keys', { headers: { 'Authorization': `Bearer ${token}` } });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Błąd pobierania kluczy.');
             setKeys(data);
@@ -153,10 +150,9 @@ const AccessKeysView: FC = () => {
         setIsSubmitting(true);
         setError('');
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
-            const response = await fetch(`${apiUrl}/api/admin/access-keys`, {
+            const response = await fetch('/api/admin/access-keys', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ client_name: newClientName }),
@@ -179,10 +175,9 @@ const AccessKeysView: FC = () => {
         
         setError('');
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         
         try {
-            const response = await fetch(`${apiUrl}/api/admin/access-keys/${keyId}`, {
+            const response = await fetch(`/api/admin/access-keys/${keyId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
