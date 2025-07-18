@@ -195,10 +195,10 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                     <InfoCard title="Dane Klienta" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         {isEditing ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <InputField name="bride_name" label="Panna Młoda" value={formData.bride_name} onChange={handleFormChange} />
-                                <InputField name="groom_name" label="Pan Młody" value={formData.groom_name} onChange={handleFormChange} />
-                                <InputField name="email" label="Adres e-mail" type="email" value={formData.email} onChange={handleFormChange} />
-                                <InputField name="phone_number" label="Numer telefonu" type="tel" value={formData.phone_number} onChange={handleFormChange} />
+                                <InputField id="bride_name" name="bride_name" label="Panna Młoda" value={formData.bride_name} onChange={handleFormChange} />
+                                <InputField id="groom_name" name="groom_name" label="Pan Młody" value={formData.groom_name} onChange={handleFormChange} />
+                                <InputField id="email" name="email" label="Adres e-mail" type="email" value={formData.email} onChange={handleFormChange} />
+                                <InputField id="phone_number" name="phone_number" label="Numer telefonu" type="tel" value={formData.phone_number} onChange={handleFormChange} />
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -215,14 +215,14 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                     <InfoCard title="Szczegóły Wydarzenia" icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         {isEditing ? (
                             <div className="space-y-6">
-                                <InputField name="wedding_date" label="Data ślubu" type="date" value={formatDateForInput(formData.wedding_date)} onChange={handleFormChange} />
+                                <InputField id="wedding_date" name="wedding_date" label="Data ślubu" type="date" value={formatDateForInput(formData.wedding_date)} onChange={handleFormChange} />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <InputField name="bride_address" label="Adres przygotowań Panny Młodej" value={formData.bride_address} onChange={handleFormChange} />
-                                    <InputField name="groom_address" label="Adres przygotowań Pana Młodego" value={formData.groom_address} onChange={handleFormChange} />
+                                    <InputField id="bride_address" name="bride_address" label="Adres przygotowań Panny Młodej" value={formData.bride_address} onChange={handleFormChange} />
+                                    <InputField id="groom_address" name="groom_address" label="Adres przygotowań Pana Młodego" value={formData.groom_address} onChange={handleFormChange} />
                                 </div>
-                                <TextAreaField name="locations" label="Lokalizacje (ceremonia, wesele)" value={formData.locations} onChange={handleFormChange} />
-                                <TextAreaField name="schedule" label="Przybliżony harmonogram dnia" value={formData.schedule} onChange={handleFormChange} />
-                                <TextAreaField name="additional_info" label="Dodatkowe informacje od klienta" value={formData.additional_info || ''} onChange={handleFormChange} required={false} />
+                                <TextAreaField id="locations" name="locations" label="Lokalizacje (ceremonia, wesele)" value={formData.locations} onChange={handleFormChange} />
+                                <TextAreaField id="schedule" name="schedule" label="Przybliżony harmonogram dnia" value={formData.schedule} onChange={handleFormChange} />
+                                <TextAreaField id="additional_info" name="additional_info" label="Dodatkowe informacje od klienta" value={formData.additional_info || ''} onChange={handleFormChange} required={false} />
                             </div>
                         ) : (
                              <>
