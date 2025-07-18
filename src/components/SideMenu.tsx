@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { XMarkIcon, Cog6ToothIcon } from './Icons.tsx';
 
@@ -64,7 +64,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                 <div className="p-4 border-t">
                     <a
                         href="#"
-                        onClick={(e) => { e.preventDefault(); onNavigate('adminLogin'); }}
+                        onClick={(e) => { 
+                            e.preventDefault(); 
+                            const token = localStorage.getItem('adminAuthToken');
+                            if (token) {
+                                onNavigate('adminDashboard');
+                            } else {
+                                onNavigate('adminLogin');
+                            }
+                        }}
                         className="flex items-center py-2 px-3 rounded-lg text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
                     >
                        <Cog6ToothIcon className="w-5 h-5 mr-3" />
