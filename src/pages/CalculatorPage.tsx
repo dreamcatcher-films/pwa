@@ -147,29 +147,17 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
     const handleConfirm = async () => {
         setError('');
         setStatus('loading');
-        const apiUrl = import.meta.env.VITE_API_URL;
-
-        if (!apiUrl) {
-            setError("Błąd konfiguracji: Brak adresu URL API.");
-            setStatus('error');
-            return;
-        }
 
         try {
-            const response = await fetch(`${apiUrl}/api/validate-key`, {
+            const response = await fetch('/api/validate-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: accessKey }),
             });
 
             if (!response.ok) {
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.indexOf('application/json') !== -1) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
-                } else {
-                    throw new Error(`Błąd serwera (${response.status}). Sprawdź adres API i konfigurację CORS.`);
-                }
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
             }
             setStatus('success');
         } catch (err) {
