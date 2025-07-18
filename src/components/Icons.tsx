@@ -48,3 +48,25 @@ export const UserIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6"
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
     </svg>
 );
+
+export const LockClosedIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clipRule="evenodd" />
+    </svg>
+);
+
+export const ClipboardIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a2.25 2.25 0 01-2.25 2.25h-1.5a2.25 2.25 0 01-2.25-2.25v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+    </svg>
+);
+
+export const UserGroupIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM4.5 16.875a3.375 3.375 0 106.75 0v-1.5a.75.75 0 00-1.5 0v1.5a1.875 1.875 0 11-3.75 0v-1.5a.75.75 0 00-1.5 0v1.5zM12.75 17.625a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25z" />
+    <path fillRule="evenodd" d="M12.75 3.75a.75.75 0 01.75.75v6.75h1.5a.75.75 0 010 1.5h-1.5v4.5a.75.75 0 01-1.5 0v-4.5h-1.5a.75.75 0 010-1.5h1.5V4.5a.75.75 0 01.75-.75z" clipRule="evenodd" />
+    <path d="M18 17.25a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25z" />
+    <path d="M19.5 15.375a.75.75 0 00-1.5 0v5.25a.75.75 0 001.5 0v-5.25z" />
+    <path fillRule="evenodd" d="M16.5 13.875a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clipRule="evenodd" />
+  </svg>
+);
