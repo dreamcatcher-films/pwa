@@ -199,16 +199,18 @@ const PackageEditor: FC<PackageEditorProps> = ({ pkg, allAddons, onClose, onSave
     };
 
     const includedAddonIds = new Set(editedPkg.addons.map(a => a.id));
+    const inputClasses = "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+
 
     return (
         <Modal onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-6">
                  <h3 className="text-xl font-bold text-slate-800">{pkg.id ? 'Edytuj Pakiet' : 'Nowy Pakiet'}</h3>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <input name="name" value={editedPkg.name} onChange={handleInputChange} placeholder="Nazwa pakietu" className="input" required />
-                     <input name="price" type="number" step="0.01" value={editedPkg.price} onChange={handleInputChange} placeholder="Cena bazowa" className="input" required />
+                     <input name="name" value={editedPkg.name} onChange={handleInputChange} placeholder="Nazwa pakietu" className={inputClasses} required />
+                     <input name="price" type="number" step="0.01" value={editedPkg.price} onChange={handleInputChange} placeholder="Cena bazowa" className={inputClasses} required />
                 </div>
-                 <textarea name="description" value={editedPkg.description} onChange={handleInputChange} placeholder="Opis pakietu" className="input w-full" rows={2}></textarea>
+                 <textarea name="description" value={editedPkg.description} onChange={handleInputChange} placeholder="Opis pakietu" className={inputClasses} rows={2}></textarea>
 
                 <div>
                     <h4 className="font-semibold mb-2">Dodatki w pakiecie</h4>
@@ -249,25 +251,3 @@ const PackageEditor: FC<PackageEditorProps> = ({ pkg, allAddons, onClose, onSave
 };
 
 export default AdminPackagesPage;
-// Add a simple CSS class for the input for reusability
-const style = document.createElement('style');
-style.textContent = `
-.input {
-    display: block;
-    width: 100%;
-    border-radius: 0.375rem;
-    border: 1px solid #cbd5e1;
-    background-color: #fff;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-}
-.input:focus {
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    border-color: #6366f1;
-    box-shadow: 0 0 0 1px #6366f1;
-}
-`;
-document.head.append(style);
