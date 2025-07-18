@@ -1,7 +1,8 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, XMarkIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
+import { InputField, TextAreaField } from '../components/FormControls.tsx';
 
 interface ClientPanelPageProps {
     navigateTo: (page: Page) => void;
@@ -11,7 +12,7 @@ interface BookingData {
     id: number;
     client_id: string;
     package_name: string;
-    total_price: number;
+    total_price: string;
     selected_items: string[];
     bride_name: string;
     groom_name: string;
@@ -26,22 +27,33 @@ interface BookingData {
     created_at: string;
 }
 
-const InfoCard: FC<{title: string; icon?: ReactNode, children: ReactNode}> = ({ title, icon, children }) => (
+interface EditableBookingData {
+    bride_address: string;
+    groom_address: string;
+    locations: string;
+    schedule: string;
+}
+
+const InfoCard: FC<{title: string; icon?: ReactNode, children: ReactNode; actionButton?: ReactNode}> = ({ title, icon, children, actionButton }) => (
     <div className="bg-white rounded-2xl shadow-md p-6">
-        <div className="flex items-center mb-4">
-            {icon}
-            <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+                {icon}
+                <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+            </div>
+            {actionButton}
         </div>
-        <div className="space-y-3 text-slate-700">{children}</div>
+        <div className="space-y-4 text-slate-700">{children}</div>
     </div>
 );
 
 const InfoItem: FC<{label: string; value?: string | number | null}> = ({ label, value }) => {
-    if (!value) return null;
+    if (value === null || value === undefined) return null;
+    const displayValue = typeof value === 'string' && value.trim() === '' ? <span className="italic text-slate-400">Brak danych</span> : value;
     return (
         <div>
             <p className="text-sm text-slate-500">{label}</p>
-            <p className="font-medium whitespace-pre-wrap">{value}</p>
+            <p className="font-medium whitespace-pre-wrap">{displayValue}</p>
         </div>
     );
 };
@@ -51,6 +63,11 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+
+    const [isEditing, setIsEditing] = useState(false);
+    const [formData, setFormData] = useState<EditableBookingData>({ bride_address: '', groom_address: '', locations: '', schedule: '' });
+    const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [updateError, setUpdateError] = useState('');
 
     useEffect(() => {
         const fetchBookingData = async () => {
@@ -64,9 +81,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
 
             try {
                 const response = await fetch(`${apiUrl}/api/my-booking`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (response.status === 401 || response.status === 403) {
@@ -80,6 +95,12 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                     throw new Error(data.message || 'Nie udało się pobrać danych rezerwacji.');
                 }
                 setBookingData(data);
+                setFormData({
+                    bride_address: data.bride_address || '',
+                    groom_address: data.groom_address || '',
+                    locations: data.locations || '',
+                    schedule: data.schedule || '',
+                });
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
             } finally {
@@ -94,6 +115,56 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         localStorage.removeItem('authToken');
         navigateTo('home');
     };
+
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData(prev => ({...prev, [e.target.id]: e.target.value}));
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        if (bookingData) {
+             setFormData({
+                bride_address: bookingData.bride_address || '',
+                groom_address: bookingData.groom_address || '',
+                locations: bookingData.locations || '',
+                schedule: bookingData.schedule || '',
+            });
+        }
+        setUpdateError('');
+        setUpdateStatus('idle');
+    };
+
+    const handleSave = async () => {
+        setUpdateStatus('loading');
+        setUpdateError('');
+        const token = localStorage.getItem('authToken');
+        const apiUrl = import.meta.env.VITE_API_URL;
+
+        try {
+            const response = await fetch(`${apiUrl}/api/my-booking`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(formData),
+            });
+            const result = await response.json();
+            if(!response.ok) {
+                throw new Error(result.message || 'Błąd zapisu danych.');
+            }
+            setBookingData(prev => prev ? {...prev, ...result.booking} : null);
+            setUpdateStatus('success');
+            setTimeout(() => {
+                setIsEditing(false);
+                setUpdateStatus('idle');
+            }, 2000);
+        } catch(err) {
+            setUpdateError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+            setUpdateStatus('error');
+        }
+    };
+
 
     if (isLoading) {
         return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
@@ -113,6 +184,16 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     }
     
     const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const editButton = (
+        <button
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-indigo-50"
+        >
+            <PencilSquareIcon className="w-5 h-5" />
+            Edytuj dane
+        </button>
+    );
 
     return (
         <div>
@@ -140,20 +221,48 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                         </div>
                     </InfoCard>
 
-                     <InfoCard title="Szczegóły wydarzenia">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InfoItem label="Data ślubu" value={formatDate(bookingData.wedding_date)} />
-                            <InfoItem label="Adres przygotowań Panny Młodej" value={bookingData.bride_address} />
-                            <InfoItem label="Adres przygotowań Pana Młodego" value={bookingData.groom_address} />
-                             <InfoItem label="Lokalizacje (ceremonia, wesele)" value={bookingData.locations} />
-                        </div>
-                        <InfoItem label="Przybliżony harmonogram dnia" value={bookingData.schedule} />
-                        <InfoItem label="Dodatkowe informacje" value={bookingData.additional_info} />
+                     <InfoCard 
+                        title="Szczegóły wydarzenia" 
+                        icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500" />}
+                        actionButton={!isEditing ? editButton : undefined}
+                    >
+                        {!isEditing ? (
+                             <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InfoItem label="Data ślubu" value={formatDate(bookingData.wedding_date)} />
+                                    <div></div>
+                                    <InfoItem label="Adres przygotowań Panny Młodej" value={bookingData.bride_address} />
+                                    <InfoItem label="Adres przygotowań Pana Młodego" value={bookingData.groom_address} />
+                                     <InfoItem label="Lokalizacje (ceremonia, wesele)" value={bookingData.locations} />
+                                </div>
+                                <InfoItem label="Przybliżony harmonogram dnia" value={bookingData.schedule} />
+                                <InfoItem label="Dodatkowe informacje" value={bookingData.additional_info} />
+                            </>
+                        ) : (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                     <InputField id="bride_address" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.bride_address} onChange={handleFormChange} />
+                                     <InputField id="groom_address" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groom_address} onChange={handleFormChange} />
+                                </div>
+                                <TextAreaField id="locations" label="Lokalizacje (ceremonia, wesele)" placeholder="Kościół: ..., Sala: ..." value={formData.locations} onChange={handleFormChange} />
+                                <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" placeholder="12:00 - Przygotowania..." value={formData.schedule} onChange={handleFormChange} />
+
+                                {updateStatus === 'error' && <p className="text-red-600 text-sm">{updateError}</p>}
+                                
+                                <div className="flex items-center justify-end gap-3 pt-4 border-t">
+                                    {updateStatus === 'success' && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano pomyślnie!</div>}
+                                    <button onClick={handleCancelEdit} disabled={updateStatus==='loading'} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-200 transition">Anuluj</button>
+                                    <button onClick={handleSave} disabled={updateStatus==='loading'} className="bg-indigo-600 w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex justify-center items-center">
+                                        {updateStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz zmiany'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </InfoCard>
                 </div>
                 <div className="lg:col-span-1">
                     <div className="sticky top-8">
-                         <InfoCard title="Podsumowanie pakietu">
+                         <InfoCard title="Podsumowanie pakietu" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                             <InfoItem label="Wybrany pakiet" value={bookingData.package_name} />
                             <div>
                                 <p className="text-sm text-slate-500">Wybrane usługi</p>
