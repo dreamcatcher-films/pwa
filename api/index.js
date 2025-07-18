@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -5,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { put, del } from '@vercel/blob';
 
-const { Pool } = pg;
+const { Pool, Client } = pg;
 const app = express();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-super-secret-key-for-dev';
@@ -13,8 +14,6 @@ const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'your-default-super-sec
 
 if (!process.env.DATABASE_URL) {
   console.error('FATAL ERROR: DATABASE_URL environment variable is not set.');
-  // In a serverless environment, we can't easily stop the process,
-  // but we can prevent the pool from being created without a connection string.
 }
 
 // --- Database Pool Configuration ---
@@ -269,7 +268,7 @@ initializeDatabase().catch(err => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); 
 app.use((req, res, next) => {
-    if (!pool) {
+    if (!pool && !process.env.DATABASE_URL) {
         const errorMessage = 'A server error occurred: Database connection is not configured.';
         console.error(errorMessage);
         return res.status(500).send(errorMessage);
@@ -307,7 +306,7 @@ const authenticateAdminToken = (req, res, next) => {
 
 // --- API Endpoints ---
 
-// --- DIAGNOSTIC Endpoint ---
+// --- DIAGNOSTIC Endpoints ---
 app.get('/api/health', async (req, res) => {
   try {
     const client = await pool.connect();
@@ -322,6 +321,47 @@ app.get('/api/health', async (req, res) => {
     res.status(500).send(`A server error occurred during health check: ${err.message}`);
   }
 });
+
+app.get('/api/test-db', async (req, res) => {
+    if (!process.env.DATABASE_URL) {
+        return res.status(500).json({
+            success: false,
+            message: 'Database connection failed.',
+            error: { message: 'DATABASE_URL environment variable is not set.' }
+        });
+    }
+    
+    const testClient = new Client({
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+            rejectUnauthorized: false
+        }
+    });
+
+    try {
+        await testClient.connect();
+        const result = await testClient.query('SELECT NOW()');
+        res.status(200).json({
+            success: true,
+            message: 'Database connection successful!',
+            db_time: result.rows[0].now,
+        });
+    } catch (err) {
+        console.error('[/api/test-db] Database connection test failed:', err.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Database connection failed.',
+            error: {
+                message: err.message,
+                code: err.code,
+                stack: err.stack,
+            }
+        });
+    } finally {
+        await testClient.end();
+    }
+});
+
 
 // --- PUBLIC Endpoints ---
 app.get('/api/packages', async (req, res) => {
@@ -726,7 +766,7 @@ app.post('/api/admin/galleries/upload', authenticateAdminToken, async (req, res)
         return res.status(400).json({ message: 'Filename is required in x-vercel-filename header.' });
     }
     try {
-        const blob = await put(filename, req.body, { access: 'public' });
+        const blob = await put(filename, req, { access: 'public', addRandomSuffix: true });
         res.status(200).json(blob);
     } catch(err) {
         console.error('Error uploading file to blob:', err.stack);
@@ -925,4 +965,27 @@ app.use((err, req, res, next) => {
 });
 
 
-export default app;
+export default app;--- START OF FILE public/favicon.svg ---
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M50,5A45,45,0,1,1,5,50,45,45,0,0,1,50,5" fill="#6366f1"/>
+  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
+</svg>
+--- START OF FILE public/apple-touch-icon.svg ---
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="20" fill="#6366f1"/>
+  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
+</svg>
+--- START OF FILE public/icon-192.svg ---
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#6366f1"/>
+  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
+</svg>
+--- START OF FILE public/icon-512.svg ---
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#6366f1"/>
+  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
+</svg>
