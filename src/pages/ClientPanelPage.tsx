@@ -32,6 +32,7 @@ interface EditableBookingData {
     groom_address: string;
     locations: string;
     schedule: string;
+    additional_info: string;
 }
 
 const InfoCard: FC<{title: string; icon?: ReactNode, children: ReactNode; actionButton?: ReactNode}> = ({ title, icon, children, actionButton }) => (
@@ -65,7 +66,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [error, setError] = useState('');
 
     const [isEditing, setIsEditing] = useState(false);
-    const [formData, setFormData] = useState<EditableBookingData>({ bride_address: '', groom_address: '', locations: '', schedule: '' });
+    const [formData, setFormData] = useState<EditableBookingData>({ bride_address: '', groom_address: '', locations: '', schedule: '', additional_info: '' });
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [updateError, setUpdateError] = useState('');
 
@@ -100,6 +101,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                     groom_address: data.groom_address || '',
                     locations: data.locations || '',
                     schedule: data.schedule || '',
+                    additional_info: data.additional_info || '',
                 });
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -128,6 +130,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                 groom_address: bookingData.groom_address || '',
                 locations: bookingData.locations || '',
                 schedule: bookingData.schedule || '',
+                additional_info: bookingData.additional_info || '',
             });
         }
         setUpdateError('');
@@ -246,6 +249,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                                 </div>
                                 <TextAreaField id="locations" label="Lokalizacje (ceremonia, wesele)" placeholder="Kościół: ..., Sala: ..." value={formData.locations} onChange={handleFormChange} />
                                 <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" placeholder="12:00 - Przygotowania..." value={formData.schedule} onChange={handleFormChange} />
+                                <TextAreaField id="additional_info" label="Dodatkowe informacje" placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" value={formData.additional_info} onChange={handleFormChange} required={false} />
 
                                 {updateStatus === 'error' && <p className="text-red-600 text-sm">{updateError}</p>}
                                 
