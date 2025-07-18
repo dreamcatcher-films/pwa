@@ -1,0 +1,46 @@
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+.rbc-calendar {
+    min-height: 700px;
+    background-color: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.rbc-event {
+    background-color: rgb(79 70 229) !important;
+    border: 1px solid rgb(67 56 202) !important;
+}
+
+.rbc-event.rbc-selected {
+    background-color: rgb(55 48 163) !important;
+}
+
+.rbc-off-range-bg {
+    background: #f8fafc; /* slate-50 */
+}
+
+.rbc-today {
+    background-color: #f0f9ff; /* sky-50 */
+}
+
+.rbc-toolbar button {
+    background-color: white !important;
+    color: rgb(51 65 85) !important; /* slate-700 */
+    border: 1px solid rgb(203 213 225) !important; /* slate-300 */
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover, .rbc-toolbar button:focus {
+    background-color: rgb(241 245 249) !important; /* slate-100 */
+    border-color: rgb(100 116 139) !important; /* slate-500 */
+}
+
+.rbc-toolbar button.rbc-active {
+    background-color: rgb(79 70 229) !important; /* indigo-600 */
+    color: white !important;
+    border-color: rgb(79 70 229) !important; /* indigo-600 */
+}
