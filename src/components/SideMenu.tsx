@@ -50,6 +50,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                                 Kalkulator Usług
                             </a>
                         </li>
+                         <li>
+                            <a 
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); onNavigate('login'); }}
+                                className="block py-3 px-4 rounded-lg text-slate-700 font-semibold hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            >
+                                Panel Klienta
+                            </a>
+                        </li>
                     </ul>
                 </nav>
             </div>
