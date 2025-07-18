@@ -1,7 +1,8 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon } from '../components/Icons.tsx';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
-import { formatCurrency } from '../utils.ts';
+import { formatCurrency, copyToClipboard } from '../utils.ts';
+import { Page } from '../App.tsx';
 
 // --- DATA STRUCTURE ---
 interface ListItem {
@@ -248,7 +249,11 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
 
 
 // --- MAIN CALCULATOR APP ---
-const CalculatorPage: FC = () => {
+interface CalculatorPageProps {
+    navigateTo: (page: Page) => void;
+}
+
+const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [step, setStep] = useState<'selection' | 'customization' | 'form' | 'booked'>('selection');
     const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
     const [customizedItems, setCustomizedItems] = useState<string[]>([]);
@@ -256,6 +261,8 @@ const CalculatorPage: FC = () => {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [validatedAccessKey, setValidatedAccessKey] = useState('');
     const [finalBookingId, setFinalBookingId] = useState<number | null>(null);
+    const [finalClientId, setFinalClientId] = useState<string | null>(null);
+    const [copySuccess, setCopySuccess] = useState(false);
     
     const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
 
@@ -293,8 +300,9 @@ const CalculatorPage: FC = () => {
         setStep('form');
     };
 
-    const handleBookingComplete = (bookingId: number) => {
-        setFinalBookingId(bookingId);
+    const handleBookingComplete = (data: {bookingId: number, clientId: string}) => {
+        setFinalBookingId(data.bookingId);
+        setFinalClientId(data.clientId);
         setStep('booked');
     };
 
@@ -316,23 +324,65 @@ const CalculatorPage: FC = () => {
         setCustomizedItems([]);
         setTotalPrice(0);
         setFinalBookingId(null);
+        setFinalClientId(null);
         setValidatedAccessKey('');
     }
 
+    const handleCopyToClipboard = () => {
+        if (finalClientId) {
+            copyToClipboard(finalClientId);
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 2000);
+        }
+    };
+
     if (step === 'booked') {
         return (
-            <div className="text-center py-20">
+            <div className="max-w-2xl mx-auto text-center py-20">
                  <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto mb-6" />
-                 <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dziękujemy za rezerwację!</h1>
+                 <h1 className="text-4xl font-bold tracking-tight text-slate-900">Rezerwacja zakończona sukcesem!</h1>
                  <p className="mt-4 text-lg text-slate-600">
-                    Twoja rezerwacja o numerze <span className="font-bold text-indigo-600">#{finalBookingId}</span> została pomyślnie zapisana.
+                    Twoje konto zostało utworzone. Wkrótce skontaktujemy się z Tobą w celu omówienia szczegółów.
                  </p>
-                 <p className="mt-2 text-slate-600">Wkrótce skontaktujemy się z Tobą w celu omówienia szczegółów.</p>
-                 <button 
-                    onClick={resetCalculator}
-                    className="mt-8 bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
-                    Stwórz nową kalkulację
-                </button>
+                 
+                 <div className="mt-8 bg-indigo-50 border border-indigo-200 rounded-lg p-6 space-y-4">
+                     <h2 className="text-xl font-semibold text-slate-800">Twoje dane do logowania</h2>
+                     <p className="text-slate-600">Zapisz je w bezpiecznym miejscu. Będą potrzebne, aby uzyskać dostęp do Twojego panelu klienta.</p>
+                     
+                     <div className="text-left space-y-3">
+                         <div>
+                            <span className="font-semibold text-slate-700">Numer rezerwacji:</span>
+                            <span className="font-bold text-indigo-600 ml-2">#{finalBookingId}</span>
+                         </div>
+                         <div>
+                             <span className="font-semibold text-slate-700">Twój numer klienta:</span>
+                             <div className="flex items-center gap-2 mt-1">
+                                <span className="font-bold text-2xl text-indigo-600 tracking-widest bg-white px-3 py-1 rounded-md border">{finalClientId}</span>
+                                <button onClick={handleCopyToClipboard} className="p-2 rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors" aria-label="Kopiuj numer klienta">
+                                    <ClipboardIcon className="w-5 h-5" />
+                                </button>
+                                {copySuccess && <span className="text-sm text-green-600">Skopiowano!</span>}
+                             </div>
+                         </div>
+                         <div>
+                             <span className="font-semibold text-slate-700">Twoje hasło:</span>
+                             <span className="text-slate-800 ml-2">[Ustawione w poprzednim kroku]</span>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
+                     <button 
+                        onClick={() => navigateTo('login')}
+                        className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                        Przejdź do Panelu Klienta
+                    </button>
+                    <button 
+                        onClick={resetCalculator}
+                        className="bg-slate-200 text-slate-800 font-bold py-3 px-6 rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
+                        Stwórz nową kalkulację
+                    </button>
+                </div>
             </div>
         );
     }
