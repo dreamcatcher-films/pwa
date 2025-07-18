@@ -1,8 +1,9 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, XMarkIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
+import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 
 interface ClientPanelPageProps {
     navigateTo: (page: Page) => void;
@@ -34,31 +35,6 @@ interface EditableBookingData {
     schedule: string;
     additional_info: string;
 }
-
-const InfoCard: FC<{title: string; icon?: ReactNode, children: ReactNode; actionButton?: ReactNode}> = ({ title, icon, children, actionButton }) => (
-    <div className="bg-white rounded-2xl shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-                {icon}
-                <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-            </div>
-            {actionButton}
-        </div>
-        <div className="space-y-4 text-slate-700">{children}</div>
-    </div>
-);
-
-const InfoItem: FC<{label: string; value?: string | number | null}> = ({ label, value }) => {
-    if (value === null || value === undefined) return null;
-    const displayValue = typeof value === 'string' && value.trim() === '' ? <span className="italic text-slate-400">Brak danych</span> : value;
-    return (
-        <div>
-            <p className="text-sm text-slate-500">{label}</p>
-            <p className="font-medium whitespace-pre-wrap">{displayValue}</p>
-        </div>
-    );
-};
-
 
 const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
