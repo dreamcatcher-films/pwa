@@ -17,10 +17,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
         setError('');
         setIsLoading(true);
 
-        const apiUrl = import.meta.env.VITE_API_URL;
-
         try {
-            const response = await fetch(`${apiUrl}/api/login`, {
+            const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clientId, password }),
