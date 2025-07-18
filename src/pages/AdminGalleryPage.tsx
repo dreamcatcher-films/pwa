@@ -1,5 +1,4 @@
 import React, { useState, useEffect, FC } from 'react';
-import { upload } from '@vercel/blob/client';
 import { LoadingSpinner, CheckCircleIcon, TrashIcon, PhotoIcon } from '../components/Icons';
 
 interface GalleryItem {
@@ -18,7 +17,6 @@ const AdminGalleryPage: FC = () => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [file, setFile] = useState<File | null>(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success'>('idle');
@@ -63,12 +61,20 @@ const AdminGalleryPage: FC = () => {
         const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
-            const newBlob = await upload(file.name, file, {
-                access: 'public',
-                handleUploadUrl: `${apiUrl}/api/admin/galleries/upload`,
-                clientPayload: null, // can pass metadata here if needed
-                token: token || undefined, // Pass token for server-side validation
+            const uploadResponse = await fetch(`${apiUrl}/api/admin/galleries/upload?filename=${encodeURIComponent(file.name)}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': file.type,
+                },
+                body: file,
             });
+
+            if (!uploadResponse.ok) {
+                const errorData = await uploadResponse.json();
+                throw new Error(errorData.message || 'Błąd wysyłania pliku.');
+            }
+            const newBlob = await uploadResponse.json();
 
             const response = await fetch(`${apiUrl}/api/admin/galleries`, {
                 method: 'POST',
