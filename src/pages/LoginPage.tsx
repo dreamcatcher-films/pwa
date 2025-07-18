@@ -24,12 +24,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
                 body: JSON.stringify({ clientId, password }),
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
-                throw new Error(data.message || 'Logowanie nie powiodło się.');
+                const errorData = await response.json().catch(() => ({ message: 'Logowanie nie powiodło się.' }));
+                throw new Error(errorData.message);
             }
             
+            const data = await response.json();
             localStorage.setItem('authToken', data.token);
             navigateTo('clientPanel');
 
