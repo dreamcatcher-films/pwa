@@ -76,10 +76,9 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
             ...bookingDetails,
             ...dataToSend,
         };
-        const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
-            const response = await fetch(`${apiUrl}/api/bookings`, {
+            const response = await fetch('/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(fullBookingData),
