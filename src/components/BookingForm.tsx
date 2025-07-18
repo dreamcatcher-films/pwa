@@ -32,7 +32,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
         password: '',
         confirmPassword: ''
     });
-    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'error'
+    const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
     const [error, setError] = useState('');
     const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
@@ -85,8 +85,8 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
             });
             
             if (!response.ok) {
-                 const errorData = await response.json().catch(() => ({ message: `Błąd serwera (${response.status}).` }));
-                 throw new Error(errorData.message || 'Nie udało się zapisać rezerwacji.');
+                 const errorText = await response.text();
+                 throw new Error(errorText || 'Nie udało się zapisać rezerwacji.');
             }
 
             const result = await response.json();
