@@ -1,14 +1,15 @@
 import React, { useEffect, useState, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
 import { formatCurrency } from '../utils.ts';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon, CalendarIcon } from '../components/Icons.tsx';
+import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
 
 // --- SHARED TYPES ---
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
     onViewDetails: (bookingId: number) => void;
 }
-type AdminTab = 'bookings' | 'accessKeys';
+type AdminTab = 'bookings' | 'accessKeys' | 'availability';
 
 
 // --- TAB: Bookings View ---
@@ -260,7 +261,7 @@ const AccessKeysView: FC = () => {
 
 // --- MAIN COMPONENT ---
 const TabButton: FC<{ isActive: boolean; onClick: () => void; children: ReactNode }> = ({ isActive, onClick, children }) => (
-    <button onClick={onClick} className={`${isActive ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none`}>
+    <button onClick={onClick} className={`flex items-center gap-2 ${isActive ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors focus:outline-none`}>
         {children}
     </button>
 );
@@ -297,15 +298,23 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
             </header>
 
             <div className="border-b border-slate-200 mb-8">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <TabButton isActive={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')}>Rezerwacje</TabButton>
-                    <TabButton isActive={activeTab === 'accessKeys'} onClick={() => setActiveTab('accessKeys')}>Klucze Dostępu</TabButton>
+                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                    <TabButton isActive={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')}>
+                        <InboxStackIcon className="w-5 h-5" /> Rezerwacje
+                    </TabButton>
+                    <TabButton isActive={activeTab === 'accessKeys'} onClick={() => setActiveTab('accessKeys')}>
+                        <KeyIcon className="w-5 h-5" /> Klucze Dostępu
+                    </TabButton>
+                    <TabButton isActive={activeTab === 'availability'} onClick={() => setActiveTab('availability')}>
+                        <CalendarIcon className="w-5 h-5" /> Dostępność
+                    </TabButton>
                 </nav>
             </div>
 
             <div>
                 {activeTab === 'bookings' && <BookingsView onViewDetails={onViewDetails} />}
                 {activeTab === 'accessKeys' && <AccessKeysView />}
+                {activeTab === 'availability' && <AdminAvailabilityPage onViewBookingDetails={onViewDetails} />}
             </div>
         </div>
     );
