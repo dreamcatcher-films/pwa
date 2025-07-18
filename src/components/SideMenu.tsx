@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page } from '../App.tsx';
-import { XMarkIcon } from './Icons.tsx';
+import { XMarkIcon, Cog6ToothIcon } from './Icons.tsx';
 
 interface SideMenuProps {
     isOpen: boolean;
@@ -20,7 +20,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
 
             {/* Side Menu */}
             <div 
-                className={`fixed top-0 left-0 h-full bg-white w-72 shadow-xl z-50 transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                className={`fixed top-0 left-0 h-full bg-white w-72 shadow-xl z-50 flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 role="dialog"
                 aria-modal="true"
             >
@@ -30,7 +30,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                         <XMarkIcon className="w-6 h-6" />
                     </button>
                 </div>
-                <nav className="p-4">
+                <nav className="p-4 flex-grow">
                     <ul>
                         <li>
                             <a 
@@ -61,6 +61,16 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                         </li>
                     </ul>
                 </nav>
+                <div className="p-4 border-t">
+                    <a
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); onNavigate('adminLogin'); }}
+                        className="flex items-center py-2 px-3 rounded-lg text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                    >
+                       <Cog6ToothIcon className="w-5 h-5 mr-3" />
+                       Panel Administratora
+                    </a>
+                </div>
             </div>
         </>
     );
