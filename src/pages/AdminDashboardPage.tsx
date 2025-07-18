@@ -5,6 +5,7 @@ import { LoadingSpinner, InboxStackIcon } from '../components/Icons.tsx';
 
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
+    onViewDetails: (bookingId: number) => void;
 }
 
 interface BookingSummary {
@@ -30,7 +31,7 @@ const StatCard: FC<{ title: string; value: string | number; icon: ReactNode }> =
 );
 
 
-const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo }) => {
+const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onViewDetails }) => {
     const [bookings, setBookings] = useState<BookingSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -139,7 +140,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo }) =
                                         <td className="px-6 py-4 font-semibold">{formatCurrency(Number(booking.total_price))}</td>
                                         <td className="px-6 py-4">{formatDate(booking.created_at)}</td>
                                         <td className="px-6 py-4 text-right">
-                                            <a href="#" className="font-medium text-indigo-600 hover:underline">Szczegóły</a>
+                                            <button onClick={() => onViewDetails(booking.id)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button>
                                         </td>
                                     </tr>
                                 ))}
