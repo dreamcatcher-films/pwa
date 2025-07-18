@@ -54,10 +54,8 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                 return;
             }
 
-            const apiUrl = import.meta.env.VITE_API_URL;
-
             try {
-                const response = await fetch(`${apiUrl}/api/my-booking`, {
+                const response = await fetch('/api/my-booking', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
@@ -117,10 +115,9 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         setUpdateStatus('loading');
         setUpdateError('');
         const token = localStorage.getItem('authToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
-            const response = await fetch(`${apiUrl}/api/my-booking`, {
+            const response = await fetch('/api/my-booking', {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -220,12 +217,12 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                         ) : (
                             <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                     <InputField id="bride_address" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.bride_address} onChange={handleFormChange} />
-                                     <InputField id="groom_address" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groom_address} onChange={handleFormChange} />
+                                     <InputField id="bride_address" name="bride_address" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.bride_address} onChange={handleFormChange} />
+                                     <InputField id="groom_address" name="groom_address" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groom_address} onChange={handleFormChange} />
                                 </div>
-                                <TextAreaField id="locations" label="Lokalizacje (ceremonia, wesele)" placeholder="Kościół: ..., Sala: ..." value={formData.locations} onChange={handleFormChange} />
-                                <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" placeholder="12:00 - Przygotowania..." value={formData.schedule} onChange={handleFormChange} />
-                                <TextAreaField id="additional_info" label="Dodatkowe informacje" placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" value={formData.additional_info} onChange={handleFormChange} required={false} />
+                                <TextAreaField id="locations" name="locations" label="Lokalizacje (ceremonia, wesele)" placeholder="Kościół: ..., Sala: ..." value={formData.locations} onChange={handleFormChange} />
+                                <TextAreaField id="schedule" name="schedule" label="Przybliżony harmonogram dnia" placeholder="12:00 - Przygotowania..." value={formData.schedule} onChange={handleFormChange} />
+                                <TextAreaField id="additional_info" name="additional_info" label="Dodatkowe informacje" placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" value={formData.additional_info} onChange={handleFormChange} required={false} />
 
                                 {updateStatus === 'error' && <p className="text-red-600 text-sm">{updateError}</p>}
                                 
