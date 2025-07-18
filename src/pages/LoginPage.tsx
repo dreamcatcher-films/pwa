@@ -67,7 +67,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
                                 type="text"
                                 id="clientId"
                                 value={clientId}
-                                onChange={(e) => setClientId(e.target.value)}
+                                onChange={(e) => setClientId(e.target.value.trim())}
                                 placeholder="np. 1234"
                                 required
                                 className="block w-full py-2 pl-10 pr-3 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
