@@ -31,12 +31,12 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
                 body: JSON.stringify({ email, password }),
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
-                throw new Error(data.message || 'Logowanie nie powiodło się.');
+                const errorData = await response.json().catch(() => ({ message: 'Logowanie nie powiodło się.' }));
+                throw new Error(errorData.message);
             }
             
+            const data = await response.json();
             localStorage.setItem('adminAuthToken', data.token);
             navigateTo('adminDashboard');
 
