@@ -7,17 +7,27 @@ import LoginPage from './pages/LoginPage.tsx';
 import ClientPanelPage from './pages/ClientPanelPage.tsx';
 import AdminLoginPage from './pages/AdminLoginPage.tsx';
 import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
+import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 
-export type Page = 'home' | 'calculator' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard';
+export type Page = 'home' | 'calculator' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard' | 'adminBookingDetails';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [viewingBookingId, setViewingBookingId] = useState<number | null>(null);
 
     const navigateTo = useCallback((page: Page) => {
         setCurrentPage(page);
         setIsMenuOpen(false);
+        if (page !== 'adminBookingDetails') {
+            setViewingBookingId(null);
+        }
     }, []);
+
+    const handleViewBookingDetails = useCallback((bookingId: number) => {
+        setViewingBookingId(bookingId);
+        navigateTo('adminBookingDetails');
+    }, [navigateTo]);
 
     const renderCurrentPage = () => {
         switch (currentPage) {
@@ -32,7 +42,11 @@ const App = () => {
             case 'adminLogin':
                 return <AdminLoginPage navigateTo={navigateTo} />;
             case 'adminDashboard':
-                return <AdminDashboardPage navigateTo={navigateTo} />;
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} />;
+            case 'adminBookingDetails':
+                return viewingBookingId 
+                    ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
+                    : <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} />;
             default:
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
         }
