@@ -5,8 +5,10 @@ import Header from './components/Header.tsx';
 import SideMenu from './components/SideMenu.tsx';
 import LoginPage from './pages/LoginPage.tsx';
 import ClientPanelPage from './pages/ClientPanelPage.tsx';
+import AdminLoginPage from './pages/AdminLoginPage.tsx';
+import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
 
-export type Page = 'home' | 'calculator' | 'login' | 'clientPanel';
+export type Page = 'home' | 'calculator' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -27,6 +29,10 @@ const App = () => {
                 return <LoginPage navigateTo={navigateTo} />;
             case 'clientPanel':
                 return <ClientPanelPage navigateTo={navigateTo} />;
+            case 'adminLogin':
+                return <AdminLoginPage navigateTo={navigateTo} />;
+            case 'adminDashboard':
+                return <AdminDashboardPage navigateTo={navigateTo} />;
             default:
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
         }
