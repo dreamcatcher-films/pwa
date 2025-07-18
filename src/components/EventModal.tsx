@@ -58,8 +58,7 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave }) => {
         setError('');
 
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
-        const endpoint = event && event.id ? `${apiUrl}/api/admin/availability/${event.id}` : `${apiUrl}/api/admin/availability`;
+        const endpoint = event && event.id ? `/api/admin/availability/${event.id}` : '/api/admin/availability';
         const method = event && event.id ? 'PATCH' : 'POST';
 
         const body = {
@@ -91,10 +90,9 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave }) => {
         setError('');
 
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         
         try {
-             const response = await fetch(`${apiUrl}/api/admin/availability/${event.id}`, {
+             const response = await fetch(`/api/admin/availability/${event.id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
