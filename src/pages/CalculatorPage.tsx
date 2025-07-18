@@ -226,10 +226,11 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             setError('');
             try {
                 const response = await fetch('/api/packages');
-                const data = await response.json();
                 if (!response.ok) {
-                    throw new Error(data.message || 'Błąd ładowania oferty.');
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Błąd ładowania oferty (${response.status})`);
                 }
+                const data = await response.json();
                 setPackages(data.packages);
                 setAllAddons(data.allAddons);
             } catch (err) {
@@ -249,8 +250,6 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             return;
         }
 
-        // This logic assumes the base package price is for "locked" items only.
-        // Any "unlocked" item that is selected adds to the total price.
         let finalPrice = selectedPackage.price;
 
         const addonMap = new Map(allAddons.map(a => [a.id, { ...a, locked: false }]));
