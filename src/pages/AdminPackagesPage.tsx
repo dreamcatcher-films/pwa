@@ -52,12 +52,21 @@ const AdminPackagesPage: FC = () => {
 
     const fetchData = async () => {
         setIsLoading(true);
+        setError('');
         try {
             const [packagesRes, addonsRes] = await Promise.all([
                 fetch('/api/admin/packages', { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch('/api/admin/addons', { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
-            if (!packagesRes.ok || !addonsRes.ok) throw new Error('Błąd ładowania danych oferty.');
+
+            if (!packagesRes.ok) {
+                const errorText = await packagesRes.text();
+                throw new Error(errorText || 'Błąd ładowania pakietów.');
+            }
+            if (!addonsRes.ok) {
+                const errorText = await addonsRes.text();
+                throw new Error(errorText || 'Błąd ładowania dodatków.');
+            }
             
             const packagesData = await packagesRes.json();
             const addonsData = await addonsRes.json();
@@ -89,7 +98,10 @@ const AdminPackagesPage: FC = () => {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(pkg)
             });
-            if (!response.ok) throw new Error('Nie udało się zapisać pakietu.');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Nie udało się zapisać pakietu.');
+            }
             await fetchData();
             setEditingPackage(null);
         } catch(err) {
@@ -102,10 +114,14 @@ const AdminPackagesPage: FC = () => {
     const handleDeletePackage = async (packageId: number) => {
         if (!window.confirm('Czy na pewno chcesz usunąć ten pakiet?')) return;
         try {
-            await fetch(`/api/admin/packages/${packageId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch(`/api/admin/packages/${packageId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+             if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd usuwania pakietu.');
+            }
             fetchData();
         } catch (err) {
-             setError('Błąd usuwania pakietu.');
+             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
         }
     };
 
