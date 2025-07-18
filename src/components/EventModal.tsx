@@ -73,8 +73,10 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave }) => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify(body)
             });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać wydarzenia.');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Nie udało się zapisać wydarzenia.');
+            }
             onSave();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -96,8 +98,10 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave }) => {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Nie udało się usunąć wydarzenia.');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Nie udało się usunąć wydarzenia.');
+            }
             onSave();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
