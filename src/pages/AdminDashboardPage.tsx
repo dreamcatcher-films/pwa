@@ -1,15 +1,16 @@
 import React, { useEffect, useState, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
 import { formatCurrency } from '../utils.ts';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon, CalendarIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon, CalendarIcon, PhotoIcon } from '../components/Icons.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
+import AdminGalleryPage from './AdminGalleryPage.tsx';
 
 // --- SHARED TYPES ---
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
     onViewDetails: (bookingId: number) => void;
 }
-type AdminTab = 'bookings' | 'accessKeys' | 'availability';
+type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery';
 
 
 // --- TAB: Bookings View ---
@@ -298,7 +299,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
             </header>
 
             <div className="border-b border-slate-200 mb-8">
-                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
                     <TabButton isActive={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')}>
                         <InboxStackIcon className="w-5 h-5" /> Rezerwacje
                     </TabButton>
@@ -308,6 +309,9 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                     <TabButton isActive={activeTab === 'availability'} onClick={() => setActiveTab('availability')}>
                         <CalendarIcon className="w-5 h-5" /> Dostępność
                     </TabButton>
+                    <TabButton isActive={activeTab === 'gallery'} onClick={() => setActiveTab('gallery')}>
+                        <PhotoIcon className="w-5 h-5" /> Galeria
+                    </TabButton>
                 </nav>
             </div>
 
@@ -315,6 +319,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                 {activeTab === 'bookings' && <BookingsView onViewDetails={onViewDetails} />}
                 {activeTab === 'accessKeys' && <AccessKeysView />}
                 {activeTab === 'availability' && <AdminAvailabilityPage onViewBookingDetails={onViewDetails} />}
+                {activeTab === 'gallery' && <AdminGalleryPage />}
             </div>
         </div>
     );
