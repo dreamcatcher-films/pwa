@@ -73,9 +73,8 @@ const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBoo
     const fetchEvents = useCallback(async () => {
         setIsLoading(true);
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         try {
-            const response = await fetch(`${apiUrl}/api/admin/availability`, {
+            const response = await fetch('/api/admin/availability', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await response.json();
