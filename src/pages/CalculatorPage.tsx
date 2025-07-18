@@ -5,66 +5,28 @@ import { formatCurrency, copyToClipboard } from '../utils.ts';
 import { Page } from '../App.tsx';
 
 // --- DATA STRUCTURE ---
-interface ListItem {
-    id: string;
+interface Addon {
+    id: number;
     name: string;
-    price?: number;
-    locked?: boolean;
+    price: number;
+}
+
+interface PackageAddon extends Addon {
+    locked: boolean;
 }
 
 interface Package {
-    id: string;
+    id: number;
     name: string;
     price: number;
     description: string;
-    included: ListItem[];
+    included: PackageAddon[];
 }
-
-const PACKAGES: Package[] = [
-    {
-        id: 'gold',
-        name: 'Pakiet Złoty',
-        price: 4500,
-        description: 'Najbardziej kompletny pakiet, aby stworzyć niezapomnianą pamiątkę.',
-        included: [
-            { id: 'film', name: 'Film kinowy', locked: true },
-            { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', locked: true },
-        ]
-    },
-    {
-        id: 'silver',
-        name: 'Pakiet Srebrny',
-        price: 4500,
-        description: 'Najpopularniejszy wybór zapewniający kompleksową relację.',
-        included: [
-            { id: 'film', name: 'Film kinowy', locked: true },
-            { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', locked: true },
-            { id: 'drone', name: 'Ujęcia z drona', locked: false, price: 400 },
-        ]
-    },
-    {
-        id: 'bronze',
-        name: 'Pakiet Brązowy',
-        price: 3200,
-        description: 'Piękny film kinowy, który uchwyci magię Waszego dnia.',
-        included: [
-            { id: 'film', name: 'Film kinowy', locked: true },
-        ]
-    },
-];
-
-const ALL_ADDONS: ListItem[] = [
-    { id: 'pre_wedding', name: 'Sesja narzeczeńska', price: 600 },
-    { id: 'drone', name: 'Ujęcia z drona', price: 400 },
-    { id: 'social', name: 'Teledysk dla social media', price: 350 },
-    { id: 'guest_interviews', name: 'Wywiady z gośćmi', price: 300 },
-    { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
-];
 
 // --- UI COMPONENTS ---
 interface PackageCardProps {
     packageInfo: Package;
-    onSelect: (packageId: string) => void;
+    onSelect: (packageId: number) => void;
 }
 
 const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
@@ -87,9 +49,9 @@ const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
 );
 
 interface CustomizationListItemProps {
-    item: ListItem;
+    item: PackageAddon;
     isSelected: boolean;
-    onToggle: (itemId: string) => void;
+    onToggle: (itemId: number) => void;
 }
 const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelected, onToggle }) => (
      <div className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
@@ -107,7 +69,7 @@ const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelecte
             </div>
         </div>
         <div className="text-right">
-            {item.price !== undefined && !item.locked && (
+            {item.price > 0 && !item.locked && (
                 <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
             )}
         </div>
@@ -243,16 +205,43 @@ interface CalculatorPageProps {
 
 const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [step, setStep] = useState<'selection' | 'customization' | 'form' | 'booked'>('selection');
-    const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
-    const [customizedItems, setCustomizedItems] = useState<string[]>([]);
+    const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
+    const [customizedItems, setCustomizedItems] = useState<number[]>([]);
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [validatedAccessKey, setValidatedAccessKey] = useState('');
     const [finalBookingId, setFinalBookingId] = useState<number | null>(null);
     const [finalClientId, setFinalClientId] = useState<string | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
+
+    // Dynamic offer state
+    const [packages, setPackages] = useState<Package[]>([]);
+    const [allAddons, setAllAddons] = useState<Addon[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const fetchOffer = async () => {
+            setIsLoading(true);
+            setError('');
+            try {
+                const response = await fetch('/api/packages');
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Błąd ładowania oferty.');
+                }
+                setPackages(data.packages);
+                setAllAddons(data.allAddons);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Nie można załadować oferty. Spróbuj ponownie później.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchOffer();
+    }, []);
     
-    const selectedPackage = PACKAGES.find(p => p.id === selectedPackageId);
+    const selectedPackage = packages.find(p => p.id === selectedPackageId);
 
     useEffect(() => {
         if (!selectedPackage) {
@@ -260,24 +249,64 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             return;
         }
         let calculatedPrice = selectedPackage.price;
+        const availableAddons = getAvailableAddons();
+
+        // Add prices of selected addons that are NOT in the base package
         const baseItemIds = new Set(selectedPackage.included.map(i => i.id));
         customizedItems.forEach(itemId => {
             if (!baseItemIds.has(itemId)) {
-                const addon = ALL_ADDONS.find(a => a.id === itemId);
-                if (addon && addon.price) calculatedPrice += addon.price;
+                const addon = allAddons.find(a => a.id === itemId);
+                if (addon) calculatedPrice += addon.price;
             }
         });
+        
+        // Add or subtract prices of toggleable addons WITHIN the base package
         selectedPackage.included.forEach(item => {
-            if (!item.locked && !customizedItems.includes(item.id)) {
-                if(item.price) calculatedPrice -= item.price;
+            if (!item.locked) {
+                if(customizedItems.includes(item.id)) {
+                    // This logic assumes base price includes all toggleable items
+                    // To make it simpler, let's adjust the base price calculation
+                } else {
+                    // Item is deselected, so we subtract its price if it was part of the base package price.
+                    // This depends on how base price is defined. Let's simplify.
+                }
             }
         });
-        setTotalPrice(calculatedPrice);
-    }, [selectedPackage, customizedItems]);
 
-    const handleSelectPackage = (packageId: string) => {
+        const allPackageItems = [...selectedPackage.included, ...availableAddons];
+        const newTotalPrice = allPackageItems.reduce((acc, item) => {
+            if(customizedItems.includes(item.id)) {
+                // If it's a locked item, its price is in the base.
+                // If it's not locked, add its price.
+                if(item.locked) {
+                    return acc; // price is already in selectedPackage.price
+                }
+                return acc + item.price;
+            }
+            return acc;
+        }, selectedPackage.price);
+
+
+        let finalPrice = selectedPackage.price;
+        const addonMap = new Map(allAddons.map(a => [a.id, a]));
+        selectedPackage.included.forEach(i => addonMap.set(i.id, i));
+
+        customizedItems.forEach(itemId => {
+            const item = addonMap.get(itemId);
+            if (item && !item.locked) {
+                finalPrice += item.price;
+            }
+        });
+
+        setTotalPrice(finalPrice);
+
+
+    }, [selectedPackage, customizedItems, allAddons]);
+
+    const handleSelectPackage = (packageId: number) => {
         setSelectedPackageId(packageId);
-        const initialItems = PACKAGES.find(p => p.id === packageId)?.included.map(i => i.id) || [];
+        const pkg = packages.find(p => p.id === packageId);
+        const initialItems = pkg?.included.map(i => i.id) || [];
         setCustomizedItems(initialItems);
         setStep('customization');
     };
@@ -294,16 +323,18 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         setStep('booked');
     };
 
-    const handleItemToggle = (itemId: string) => {
+    const handleItemToggle = (itemId: number) => {
         setCustomizedItems(prev =>
             prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
         );
     };
 
-    const getAvailableAddons = () => {
+    const getAvailableAddons = (): PackageAddon[] => {
         if (!selectedPackage) return [];
         const packageItemIds = new Set(selectedPackage.included.map(i => i.id));
-        return ALL_ADDONS.filter(addon => !packageItemIds.has(addon.id));
+        return allAddons
+            .filter(addon => !packageItemIds.has(addon.id))
+            .map(addon => ({ ...addon, locked: false }));
     };
     
     const resetCalculator = () => {
@@ -324,7 +355,21 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         }
     };
 
+    if (isLoading) {
+        return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+    }
+
+    if (error) {
+         return <div className="text-center py-20"><p className="text-red-500">{error}</p></div>;
+    }
+
     if (step === 'booked') {
+        const addonMap = new Map(allAddons.map(a => [a.id, a]));
+        if (selectedPackage) {
+            selectedPackage.included.forEach(i => addonMap.set(i.id, i));
+        }
+        const selectedItemNames = customizedItems.map(id => addonMap.get(id)?.name).filter(Boolean);
+
         return (
             <div className="max-w-2xl mx-auto text-center py-20">
                  <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto mb-6" />
@@ -376,13 +421,19 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     }
 
     if (step === 'form') {
+        const addonMap = new Map(allAddons.map(a => [a.id, a]));
+        if (selectedPackage) {
+            selectedPackage.included.forEach(i => addonMap.set(i.id, i));
+        }
+        const selectedItemNames = customizedItems.map(id => addonMap.get(id)?.name).filter(Boolean);
+
         return (
             <BookingForm
                 bookingDetails={{
                     accessKey: validatedAccessKey,
                     packageName: selectedPackage?.name || '',
                     totalPrice: totalPrice,
-                    selectedItems: customizedItems,
+                    selectedItems: selectedItemNames,
                 }}
                 onBookingComplete={handleBookingComplete}
                 onBack={() => setStep('customization')}
@@ -397,7 +448,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                 <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {PACKAGES.map(pkg => (
+                {packages.map(pkg => (
                     <PackageCard key={pkg.id} packageInfo={pkg} onSelect={handleSelectPackage} />
                 ))}
             </div>
