@@ -65,10 +65,11 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                      return;
                 }
 
-                const data = await response.json();
                 if (!response.ok) {
-                    throw new Error(data.message || 'Nie udało się pobrać danych rezerwacji.');
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Nie udało się pobrać danych rezerwacji.');
                 }
+                const data = await response.json();
                 setBookingData(data);
                 setFormData({
                     bride_address: data.bride_address || '',
@@ -125,10 +126,12 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                 },
                 body: JSON.stringify(formData),
             });
-            const result = await response.json();
+            
             if(!response.ok) {
-                throw new Error(result.message || 'Błąd zapisu danych.');
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd zapisu danych.');
             }
+            const result = await response.json();
             setBookingData(prev => prev ? {...prev, ...result.booking} : null);
             setUpdateStatus('success');
             setTimeout(() => {
