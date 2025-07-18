@@ -8,8 +8,9 @@ import ClientPanelPage from './pages/ClientPanelPage.tsx';
 import AdminLoginPage from './pages/AdminLoginPage.tsx';
 import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
 import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
+import GalleryPage from './pages/GalleryPage.tsx';
 
-export type Page = 'home' | 'calculator' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard' | 'adminBookingDetails';
+export type Page = 'home' | 'calculator' | 'gallery' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard' | 'adminBookingDetails';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -35,6 +36,8 @@ const App = () => {
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
             case 'calculator':
                 return <CalculatorPage navigateTo={navigateTo} />;
+            case 'gallery':
+                return <GalleryPage />;
             case 'login':
                 return <LoginPage navigateTo={navigateTo} />;
             case 'clientPanel':
