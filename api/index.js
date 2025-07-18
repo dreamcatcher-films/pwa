@@ -102,6 +102,31 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `);
+    
+    // --- New Tables for Offer Management ---
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS packages (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            price NUMERIC(10, 2) NOT NULL
+        );
+    `);
+     await client.query(`
+        CREATE TABLE IF NOT EXISTS addons (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            price NUMERIC(10, 2) NOT NULL
+        );
+    `);
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS package_addons (
+            package_id INT NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+            addon_id INT NOT NULL REFERENCES addons(id) ON DELETE CASCADE,
+            is_locked BOOLEAN DEFAULT FALSE,
+            PRIMARY KEY (package_id, addon_id)
+        );
+    `);
 
     // Add a sample key if it doesn't exist for testing
     const resKeys = await client.query("SELECT * FROM access_keys WHERE key = '1234'");
@@ -123,6 +148,55 @@ const initializeDatabase = async () => {
         console.log(`Password: ${adminPassword}`);
         console.log('============================================');
     }
+
+    // --- Migrate hardcoded offer to database ---
+    const packagesCount = await client.query('SELECT COUNT(*) FROM packages');
+    if (parseInt(packagesCount.rows[0].count, 10) === 0) {
+        console.log('Migrating hardcoded offer to database...');
+        const hardcodedAddons = [
+            { id: 'pre_wedding', name: 'Sesja narzeczeńska', price: 600 },
+            { id: 'drone', name: 'Ujęcia z drona', price: 400 },
+            { id: 'social', name: 'Teledysk dla social media', price: 350 },
+            { id: 'guest_interviews', name: 'Wywiady z gośćmi', price: 300 },
+            { id: 'smoke_candles', name: 'Świece dymne', price: 150 },
+            { id: 'film', name: 'Film kinowy', price: 0 }, // internal
+            { id: 'photos', name: 'Reportaż zdjęciowy (cały dzień)', price: 0 }, // internal
+        ];
+        
+        const addonMap = new Map();
+        for (const addon of hardcodedAddons) {
+            const res = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [addon.name, addon.price]);
+            addonMap.set(addon.id, res.rows[0].id);
+        }
+        
+        const hardcodedPackages = [
+            {
+                id: 'gold', name: 'Pakiet Złoty', price: 4500, description: 'Najbardziej kompletny pakiet, aby stworzyć niezapomnianą pamiątkę.',
+                included: [ { id: 'film', locked: true }, { id: 'photos', locked: true } ]
+            },
+            {
+                id: 'silver', name: 'Pakiet Srebrny', price: 4500, description: 'Najpopularniejszy wybór zapewniający kompleksową relację.',
+                included: [ { id: 'film', locked: true }, { id: 'photos', locked: true }, { id: 'drone', locked: false } ]
+            },
+             {
+                id: 'bronze', name: 'Pakiet Brązowy', price: 3200, description: 'Piękny film kinowy, który uchwyci magię Waszego dnia.',
+                included: [ { id: 'film', locked: true } ]
+            },
+        ];
+
+        for (const pkg of hardcodedPackages) {
+            const res = await client.query('INSERT INTO packages (name, description, price) VALUES ($1, $2, $3) RETURNING id', [pkg.name, pkg.description, pkg.price]);
+            const packageId = res.rows[0].id;
+            for (const item of pkg.included) {
+                const addonId = addonMap.get(item.id);
+                if (addonId) {
+                    await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [packageId, addonId, item.locked]);
+                }
+            }
+        }
+        console.log('Offer migration complete.');
+    }
+
 
     // Add a sample booking for testing if it doesn't exist
     const testClientId = '9999';
@@ -200,7 +274,51 @@ const authenticateAdminToken = (req, res, next) => {
 
 
 // --- API Endpoints ---
-// --- GALLERY Endpoints (PUBLIC) ---
+
+// --- PUBLIC Endpoints ---
+
+app.get('/api/packages', async (req, res) => {
+    try {
+        const packagesRes = await pool.query('SELECT * FROM packages ORDER BY price DESC');
+        const addonsRes = await pool.query('SELECT * FROM addons');
+        const relationsRes = await pool.query('SELECT * FROM package_addons');
+        
+        const addonsMap = new Map(addonsRes.rows.map(a => [a.id, a]));
+        
+        const packages = packagesRes.rows.map(pkg => {
+            const included = relationsRes.rows
+                .filter(r => r.package_id === pkg.id)
+                .map(r => {
+                    const addon = addonsMap.get(r.addon_id);
+                    if (!addon) return null;
+                    // For the frontend structure, the addon price should be included if it's not locked.
+                    // This logic is now handled more granularly on the client side.
+                    return {
+                        id: addon.id, // Use database ID for consistency
+                        name: addon.name,
+                        price: Number(addon.price),
+                        locked: r.is_locked,
+                    };
+                }).filter(Boolean);
+            
+            return {
+                ...pkg,
+                price: Number(pkg.price),
+                included
+            };
+        });
+        
+        const allAddons = addonsRes.rows.map(a => ({ ...a, price: Number(a.price) }));
+
+        res.json({ packages, allAddons });
+
+    } catch (err) {
+        console.error('Error fetching packages and addons:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas pobierania oferty.' });
+    }
+});
+
+
 app.get('/api/gallery', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM galleries ORDER BY created_at DESC');
@@ -667,6 +785,143 @@ app.delete('/api/admin/galleries/:id', authenticateAdminToken, async (req, res) 
         res.status(500).json({ message: 'Błąd serwera podczas usuwania elementu galerii.' });
     } finally {
         client.release();
+    }
+});
+
+// --- ADMIN PACKAGES & ADDONS ENDPOINTS ---
+app.get('/api/admin/packages', authenticateAdminToken, async (req, res) => {
+  try {
+    const packagesRes = await pool.query(`
+      SELECT p.*, COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name, 'price', a.price, 'is_locked', pa.is_locked)) FILTER (WHERE a.id IS NOT NULL), '[]') as addons
+      FROM packages p
+      LEFT JOIN package_addons pa ON p.id = pa.package_id
+      LEFT JOIN addons a ON pa.addon_id = a.id
+      GROUP BY p.id
+      ORDER BY p.price DESC
+    `);
+    res.json(packagesRes.rows);
+  } catch (err) {
+    console.error('Error fetching packages for admin:', err);
+    res.status(500).json({ message: 'Błąd serwera podczas pobierania pakietów.' });
+  }
+});
+
+app.get('/api/admin/addons', authenticateAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM addons ORDER BY name ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching addons for admin:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas pobierania dodatków.' });
+    }
+});
+
+app.post('/api/admin/addons', authenticateAdminToken, async (req, res) => {
+    const { name, price } = req.body;
+    if (!name || price === undefined) {
+        return res.status(400).json({ message: 'Nazwa i cena są wymagane.' });
+    }
+    try {
+        const result = await pool.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Error creating addon:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas tworzenia dodatku.' });
+    }
+});
+
+app.patch('/api/admin/addons/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, price } = req.body;
+    if (!name || price === undefined) {
+        return res.status(400).json({ message: 'Nazwa i cena są wymagane.' });
+    }
+    try {
+        const result = await pool.query('UPDATE addons SET name = $1, price = $2 WHERE id = $3 RETURNING *', [name, price, id]);
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Dodatek nie znaleziony.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Error updating addon:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji dodatku.' });
+    }
+});
+
+app.delete('/api/admin/addons/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM addons WHERE id = $1', [id]);
+        res.status(204).send();
+    } catch (err) {
+        console.error('Error deleting addon:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas usuwania dodatku.' });
+    }
+});
+
+app.post('/api/admin/packages', authenticateAdminToken, async (req, res) => {
+    const { name, description, price, addons } = req.body;
+    if (!name || price === undefined) {
+        return res.status(400).json({ message: 'Nazwa i cena pakietu są wymagane.' });
+    }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const pkgRes = await client.query('INSERT INTO packages (name, description, price) VALUES ($1, $2, $3) RETURNING id', [name, description, price]);
+        const packageId = pkgRes.rows[0].id;
+
+        if (addons && addons.length > 0) {
+            for (const addon of addons) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [packageId, addon.id, addon.is_locked]);
+            }
+        }
+        await client.query('COMMIT');
+        res.status(201).json({ id: packageId, name, description, price, addons });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error creating package:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas tworzenia pakietu.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/admin/packages/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, description, price, addons } = req.body;
+    if (!name || price === undefined) {
+        return res.status(400).json({ message: 'Nazwa i cena pakietu są wymagane.' });
+    }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE packages SET name = $1, description = $2, price = $3 WHERE id = $4', [name, description, price, id]);
+        
+        // Clear and re-insert addons for simplicity
+        await client.query('DELETE FROM package_addons WHERE package_id = $1', [id]);
+        if (addons && addons.length > 0) {
+            for (const addon of addons) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [id, addon.id, addon.is_locked]);
+            }
+        }
+        await client.query('COMMIT');
+        res.json({ id, name, description, price, addons });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error updating package:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji pakietu.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/packages/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        // ON DELETE CASCADE will handle package_addons
+        await pool.query('DELETE FROM packages WHERE id = $1', [id]);
+        res.status(204).send();
+    } catch (err) {
+        console.error('Error deleting package:', err);
+        res.status(500).json({ message: 'Błąd serwera podczas usuwania pakietu.' });
     }
 });
 
