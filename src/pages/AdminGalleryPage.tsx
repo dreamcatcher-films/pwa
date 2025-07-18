@@ -1,5 +1,6 @@
 import React, { useState, useEffect, FC } from 'react';
 import { LoadingSpinner, CheckCircleIcon, TrashIcon, PhotoIcon } from '../components/Icons';
+import { upload } from '@vercel/blob/client';
 
 interface GalleryItem {
     id: number;
@@ -24,9 +25,8 @@ const AdminGalleryPage: FC = () => {
     const fetchItems = async () => {
         setIsLoading(true);
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         try {
-            const response = await fetch(`${apiUrl}/api/admin/galleries`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch('/api/admin/galleries', { headers: { 'Authorization': `Bearer ${token}` } });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Błąd pobierania elementów galerii.');
             setItems(data);
@@ -58,25 +58,16 @@ const AdminGalleryPage: FC = () => {
         setError('');
         
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
 
         try {
-            const uploadResponse = await fetch(`${apiUrl}/api/admin/galleries/upload?filename=${encodeURIComponent(file.name)}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': file.type,
-                },
-                body: file,
+            // Use Vercel's client upload helper
+            const newBlob = await upload(file.name, file, {
+              access: 'public',
+              handleUploadUrl: '/api/admin/galleries/upload',
             });
 
-            if (!uploadResponse.ok) {
-                const errorData = await uploadResponse.json();
-                throw new Error(errorData.message || 'Błąd wysyłania pliku.');
-            }
-            const newBlob = await uploadResponse.json();
-
-            const response = await fetch(`${apiUrl}/api/admin/galleries`, {
+            // Save the metadata to our database
+            const response = await fetch('/api/admin/galleries', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ title, description, image_url: newBlob.url }),
@@ -106,10 +97,9 @@ const AdminGalleryPage: FC = () => {
         
         setError('');
         const token = localStorage.getItem('adminAuthToken');
-        const apiUrl = import.meta.env.VITE_API_URL;
         
         try {
-            const response = await fetch(`${apiUrl}/api/admin/galleries/${itemId}`, {
+            const response = await fetch(`/api/admin/galleries/${itemId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
