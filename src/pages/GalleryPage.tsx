@@ -17,10 +17,11 @@ const GalleryPage: React.FC = () => {
         const fetchGallery = async () => {
             try {
                 const response = await fetch('/api/gallery');
-                const data = await response.json();
                 if (!response.ok) {
-                    throw new Error(data.message || 'Nie udało się pobrać galerii.');
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Nie udało się pobrać galerii.');
                 }
+                const data = await response.json();
                 setGalleryItems(data);
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
