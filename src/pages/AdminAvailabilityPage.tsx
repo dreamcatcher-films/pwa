@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, FC } from 'react';
 import { Calendar, dateFnsLocalizer, Views, EventProps } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format } from 'date-fns/format';
+import { parse } from 'date-fns/parse';
+import { startOfWeek } from 'date-fns/startOfWeek';
+import { getDay } from 'date-fns/getDay';
 import { pl } from 'date-fns/locale/pl';
 import { LoadingSpinner } from '../components/Icons.tsx';
 import EventModal from '../components/EventModal.tsx';
@@ -22,12 +25,16 @@ interface AdminAvailabilityPageProps {
     onViewBookingDetails: (bookingId: number) => void;
 }
 
+const locales = {
+    'pl': pl,
+};
+
 const localizer = dateFnsLocalizer({
     format,
     parse,
-    startOfWeek: (date) => startOfWeek(date, { locale: pl }),
+    startOfWeek,
     getDay,
-    locales: { 'pl': pl },
+    locales,
 });
 
 const messages = {
