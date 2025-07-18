@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
 
@@ -11,6 +11,13 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        const token = localStorage.getItem('adminAuthToken');
+        if (token) {
+            navigateTo('adminDashboard');
+        }
+    }, [navigateTo]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
