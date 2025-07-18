@@ -1,16 +1,17 @@
 import React, { useEffect, useState, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
 import { formatCurrency } from '../utils.ts';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon, CalendarIcon, PhotoIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, TrashIcon, CheckCircleIcon, CalendarIcon, PhotoIcon, TagIcon } from '../components/Icons.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
 import AdminGalleryPage from './AdminGalleryPage.tsx';
+import AdminPackagesPage from './AdminPackagesPage.tsx';
 
 // --- SHARED TYPES ---
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
     onViewDetails: (bookingId: number) => void;
 }
-type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery';
+type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages';
 
 
 // --- TAB: Bookings View ---
@@ -307,6 +308,9 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                     <TabButton isActive={activeTab === 'gallery'} onClick={() => setActiveTab('gallery')}>
                         <PhotoIcon className="w-5 h-5" /> Galeria
                     </TabButton>
+                    <TabButton isActive={activeTab === 'packages'} onClick={() => setActiveTab('packages')}>
+                        <TagIcon className="w-5 h-5" /> Oferta
+                    </TabButton>
                 </nav>
             </div>
 
@@ -315,6 +319,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                 {activeTab === 'accessKeys' && <AccessKeysView />}
                 {activeTab === 'availability' && <AdminAvailabilityPage onViewBookingDetails={onViewDetails} />}
                 {activeTab === 'gallery' && <AdminGalleryPage />}
+                {activeTab === 'packages' && <AdminPackagesPage />}
             </div>
         </div>
     );
