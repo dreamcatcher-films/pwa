@@ -15,9 +15,8 @@ const GalleryPage: React.FC = () => {
 
     useEffect(() => {
         const fetchGallery = async () => {
-            const apiUrl = import.meta.env.VITE_API_URL;
             try {
-                const response = await fetch(`${apiUrl}/api/gallery`);
+                const response = await fetch('/api/gallery');
                 const data = await response.json();
                 if (!response.ok) {
                     throw new Error(data.message || 'Nie udało się pobrać galerii.');
