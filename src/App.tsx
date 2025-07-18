@@ -1,26 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
 import Header from './components/Header.tsx';
 import SideMenu from './components/SideMenu.tsx';
+import LoginPage from './pages/LoginPage.tsx';
+import ClientPanelPage from './pages/ClientPanelPage.tsx';
 
-export type Page = 'home' | 'calculator';
+export type Page = 'home' | 'calculator' | 'login' | 'clientPanel';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const navigateTo = (page: Page) => {
+    const navigateTo = useCallback((page: Page) => {
         setCurrentPage(page);
         setIsMenuOpen(false);
-    };
+    }, []);
 
     const renderCurrentPage = () => {
         switch (currentPage) {
             case 'home':
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
             case 'calculator':
-                return <CalculatorPage />;
+                return <CalculatorPage navigateTo={navigateTo} />;
+            case 'login':
+                return <LoginPage navigateTo={navigateTo} />;
+            case 'clientPanel':
+                return <ClientPanelPage navigateTo={navigateTo} />;
             default:
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
         }
