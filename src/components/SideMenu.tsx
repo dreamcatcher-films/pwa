@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Page } from '../App.tsx';
-import { XMarkIcon, Cog6ToothIcon } from './Icons.tsx';
+import { XMarkIcon, Cog6ToothIcon, PhotoIcon } from './Icons.tsx';
 
 interface SideMenuProps {
     isOpen: boolean;
@@ -48,6 +48,16 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                                 className="block py-3 px-4 rounded-lg text-slate-700 font-semibold hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                             >
                                 Kalkulator Usług
+                            </a>
+                        </li>
+                         <li>
+                            <a 
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); onNavigate('gallery'); }}
+                                className="flex items-center py-3 px-4 rounded-lg text-slate-700 font-semibold hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            >
+                                <PhotoIcon className="w-5 h-5 mr-3" />
+                                Galeria
                             </a>
                         </li>
                          <li>
