@@ -248,47 +248,12 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             setTotalPrice(0);
             return;
         }
-        let calculatedPrice = selectedPackage.price;
-        const availableAddons = getAvailableAddons();
 
-        // Add prices of selected addons that are NOT in the base package
-        const baseItemIds = new Set(selectedPackage.included.map(i => i.id));
-        customizedItems.forEach(itemId => {
-            if (!baseItemIds.has(itemId)) {
-                const addon = allAddons.find(a => a.id === itemId);
-                if (addon) calculatedPrice += addon.price;
-            }
-        });
-        
-        // Add or subtract prices of toggleable addons WITHIN the base package
-        selectedPackage.included.forEach(item => {
-            if (!item.locked) {
-                if(customizedItems.includes(item.id)) {
-                    // This logic assumes base price includes all toggleable items
-                    // To make it simpler, let's adjust the base price calculation
-                } else {
-                    // Item is deselected, so we subtract its price if it was part of the base package price.
-                    // This depends on how base price is defined. Let's simplify.
-                }
-            }
-        });
-
-        const allPackageItems = [...selectedPackage.included, ...availableAddons];
-        const newTotalPrice = allPackageItems.reduce((acc, item) => {
-            if(customizedItems.includes(item.id)) {
-                // If it's a locked item, its price is in the base.
-                // If it's not locked, add its price.
-                if(item.locked) {
-                    return acc; // price is already in selectedPackage.price
-                }
-                return acc + item.price;
-            }
-            return acc;
-        }, selectedPackage.price);
-
-
+        // This logic assumes the base package price is for "locked" items only.
+        // Any "unlocked" item that is selected adds to the total price.
         let finalPrice = selectedPackage.price;
-        const addonMap = new Map(allAddons.map(a => [a.id, a]));
+
+        const addonMap = new Map(allAddons.map(a => [a.id, { ...a, locked: false }]));
         selectedPackage.included.forEach(i => addonMap.set(i.id, i));
 
         customizedItems.forEach(itemId => {
@@ -299,8 +264,6 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         });
 
         setTotalPrice(finalPrice);
-
-
     }, [selectedPackage, customizedItems, allAddons]);
 
     const handleSelectPackage = (packageId: number) => {
