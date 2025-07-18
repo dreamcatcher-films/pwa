@@ -12,21 +12,29 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-default-super-secret-key-for-
 const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'your-default-super-secret-admin-key-for-dev';
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('FATAL ERROR: DATABASE_URL environment variable is not set.');
+  console.error('FATAL ERROR: DATABASE_URL environment variable is not set.');
+  // In a serverless environment, we can't easily stop the process,
+  // but we can prevent the pool from being created without a connection string.
 }
 
 // --- Database Pool Configuration ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+let pool;
+try {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+  pool.on('error', (err, client) => {
+    console.error('Unexpected error on idle client', err);
+    process.exit(-1);
+  });
+} catch (err) {
+    console.error('Failed to create database pool:', err);
+}
+
 
 // --- Helper Functions ---
 const generateUniqueClientId = async (client) => {
@@ -44,6 +52,10 @@ const generateUniqueClientId = async (client) => {
 
 // --- Database Initialization ---
 const initializeDatabase = async () => {
+  if (!pool) {
+      console.error("Database pool not available. Skipping initialization.");
+      return;
+  }
   const client = await pool.connect();
   try {
     console.log('Connected to the database. Initializing schema...');
@@ -248,12 +260,23 @@ const initializeDatabase = async () => {
   }
 };
 
-initializeDatabase().catch(console.error);
+initializeDatabase().catch(err => {
+    console.error("Failed to initialize database on startup:", err);
+});
 
 
 // --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); 
+app.use((req, res, next) => {
+    if (!pool) {
+        const errorMessage = 'A server error occurred: Database connection is not configured.';
+        console.error(errorMessage);
+        return res.status(500).send(errorMessage);
+    }
+    next();
+});
+
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -295,8 +318,8 @@ app.get('/api/health', async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Health check failed:', err);
-    res.status(500).json({ status: 'error', message: 'Database connection failed.', error: err.message });
+    console.error('Health check failed:', err.stack);
+    res.status(500).send(`A server error occurred during health check: ${err.message}`);
   }
 });
 
@@ -333,8 +356,8 @@ app.get('/api/packages', async (req, res) => {
         const allAddons = addonsRes.rows.map(a => ({ ...a, price: Number(a.price) }));
         res.json({ packages, allAddons });
     } catch (err) {
-        console.error('Error fetching packages and addons:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania oferty.' });
+        console.error('Error fetching packages and addons:', err.stack);
+        res.status(500).send('A server error occurred while fetching the offer.');
     }
 });
 
@@ -343,8 +366,8 @@ app.get('/api/gallery', async (req, res) => {
         const result = await pool.query('SELECT * FROM galleries ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
-        console.error('Error fetching public gallery:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania galerii.' });
+        console.error('Error fetching public gallery:', err.stack);
+        res.status(500).send('A server error occurred while fetching the gallery.');
     }
 });
 
@@ -362,8 +385,8 @@ app.post('/api/validate-key', async (req, res) => {
       res.status(404).json({ valid: false, message: 'Nieprawidłowy klucz dostępu.' });
     }
   } catch (err) {
-    console.error('Error validating key:', err);
-    res.status(500).json({ message: 'Server error during key validation.' });
+    console.error('Error validating key:', err.stack);
+    res.status(500).send('A server error occurred during key validation.');
   }
 });
 
@@ -404,8 +427,8 @@ app.post('/api/bookings', async (req, res) => {
         });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error creating booking:', err);
-        res.status(500).json({ message: 'Server error while creating booking.' });
+        console.error('Error creating booking:', err.stack);
+        res.status(500).send('A server error occurred while creating booking.');
     } finally {
         client.release();
     }
@@ -430,8 +453,8 @@ app.post('/api/login', async (req, res) => {
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
         res.json({ token });
     } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas logowania.' });
+        console.error('Login error:', err.stack);
+        res.status(500).send('A server error occurred during login.');
     }
 });
 
@@ -445,8 +468,8 @@ app.get('/api/my-booking', authenticateToken, async (req, res) => {
         const { password_hash, ...bookingData } = result.rows[0];
         res.json(bookingData);
     } catch (err) {
-        console.error('Error fetching booking data:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania danych.' });
+        console.error('Error fetching booking data:', err.stack);
+        res.status(500).send('A server error occurred while fetching booking data.');
     }
 });
 
@@ -467,8 +490,8 @@ app.patch('/api/my-booking', authenticateToken, async (req, res) => {
         const { password_hash, ...updatedBooking } = result.rows[0];
         res.json({ message: 'Dane zostały pomyślnie zaktualizowane.', booking: updatedBooking });
     } catch (err) {
-        console.error('Error updating booking data:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji danych.' });
+        console.error('Error updating booking data:', err.stack);
+        res.status(500).send('A server error occurred while updating data.');
     }
 });
 
@@ -492,8 +515,8 @@ app.post('/api/admin/login', async (req, res) => {
         const token = jwt.sign(payload, ADMIN_JWT_SECRET, { expiresIn: '1d' });
         res.json({ token });
     } catch(err) {
-        console.error('Admin login error:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas logowania administratora.' });
+        console.error('Admin login error:', err.stack);
+        res.status(500).send('A server error occurred during admin login.');
     }
 });
 
@@ -506,8 +529,8 @@ app.get('/api/admin/bookings', authenticateAdminToken, async (req, res) => {
         );
         res.json(result.rows);
     } catch(err) {
-        console.error('Error fetching bookings for admin:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania rezerwacji.' });
+        console.error('Error fetching bookings for admin:', err.stack);
+        res.status(500).send('A server error occurred while fetching bookings.');
     }
 });
 
@@ -521,8 +544,8 @@ app.get('/api/admin/bookings/:id', authenticateAdminToken, async (req, res) => {
         const { password_hash, ...bookingData } = result.rows[0];
         res.json(bookingData);
     } catch (err) {
-        console.error(`Error fetching booking details for admin (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania szczegółów rezerwacji.' });
+        console.error(`Error fetching booking details for admin (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while fetching booking details.');
     }
 });
 
@@ -554,8 +577,8 @@ app.patch('/api/admin/bookings/:id', authenticateAdminToken, async (req, res) =>
         const { password_hash, ...updatedBooking } = result.rows[0];
         res.json({ message: 'Rezerwacja została pomyślnie zaktualizowana.', booking: updatedBooking });
     } catch (err) {
-        console.error(`Błąd podczas aktualizacji rezerwacji (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji rezerwacji.' });
+        console.error(`Błąd podczas aktualizacji rezerwacji (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while updating booking.');
     }
 });
 
@@ -564,8 +587,8 @@ app.get('/api/admin/access-keys', authenticateAdminToken, async (req, res) => {
         const result = await pool.query('SELECT * FROM access_keys ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
-        console.error('Error fetching access keys for admin:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania kluczy dostępu.' });
+        console.error('Error fetching access keys for admin:', err.stack);
+        res.status(500).send('A server error occurred while fetching access keys.');
     }
 });
 
@@ -594,8 +617,8 @@ app.post('/api/admin/access-keys', authenticateAdminToken, async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error creating access key:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas tworzenia klucza dostępu.' });
+        console.error('Error creating access key:', err.stack);
+        res.status(500).send('A server error occurred while creating access key.');
     } finally {
         client.release();
     }
@@ -610,8 +633,8 @@ app.delete('/api/admin/access-keys/:id', authenticateAdminToken, async (req, res
         }
         res.status(200).json({ message: 'Klucz dostępu został pomyślnie usunięty.' });
     } catch (err) {
-        console.error(`Error deleting access key (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas usuwania klucza dostępu.' });
+        console.error(`Error deleting access key (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while deleting access key.');
     }
 });
 
@@ -639,8 +662,8 @@ app.get('/api/admin/availability', authenticateAdminToken, async (req, res) => {
         }));
         res.json([...customEvents, ...bookingEvents]);
     } catch (err) {
-        console.error('Error fetching availability:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania dostępności.' });
+        console.error('Error fetching availability:', err.stack);
+        res.status(500).send('A server error occurred while fetching availability.');
     }
 });
 
@@ -656,8 +679,8 @@ app.post('/api/admin/availability', authenticateAdminToken, async (req, res) => 
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error('Error creating availability event:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas tworzenia wydarzenia.' });
+        console.error('Error creating availability event:', err.stack);
+        res.status(500).send('A server error occurred while creating event.');
     }
 });
 
@@ -677,8 +700,8 @@ app.patch('/api/admin/availability/:id', authenticateAdminToken, async (req, res
         }
         res.json(result.rows[0]);
     } catch (err) {
-        console.error(`Error updating availability event (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji wydarzenia.' });
+        console.error(`Error updating availability event (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while updating event.');
     }
 });
 
@@ -691,8 +714,8 @@ app.delete('/api/admin/availability/:id', authenticateAdminToken, async (req, re
         }
         res.status(200).json({ message: 'Wydarzenie zostało pomyślnie usunięte.' });
     } catch (err) {
-        console.error(`Error deleting availability event (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas usuwania wydarzenia.' });
+        console.error(`Error deleting availability event (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while deleting event.');
     }
 });
 
@@ -703,14 +726,11 @@ app.post('/api/admin/galleries/upload', authenticateAdminToken, async (req, res)
         return res.status(400).json({ message: 'Filename is required in x-vercel-filename header.' });
     }
     try {
-        const blob = await put(filename, req, {
-          access: 'public',
-          addRandomSuffix: false
-        });
+        const blob = await put(filename, req.body, { access: 'public' });
         res.status(200).json(blob);
     } catch(err) {
-        console.error('Error uploading file to blob:', err);
-        res.status(500).json({ message: `Error uploading file: ${err.message}` });
+        console.error('Error uploading file to blob:', err.stack);
+        res.status(500).send(`A server error occurred during file upload: ${err.message}`);
     }
 });
 
@@ -719,8 +739,8 @@ app.get('/api/admin/galleries', authenticateAdminToken, async (req, res) => {
         const result = await pool.query('SELECT * FROM galleries ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
-        console.error('Error fetching admin gallery:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania galerii.' });
+        console.error('Error fetching admin gallery:', err.stack);
+        res.status(500).send('A server error occurred while fetching the admin gallery.');
     }
 });
 
@@ -736,8 +756,8 @@ app.post('/api/admin/galleries', authenticateAdminToken, async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch(err) {
-        console.error('Error saving gallery item:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas zapisu do galerii.' });
+        console.error('Error saving gallery item:', err.stack);
+        res.status(500).send('A server error occurred while saving gallery item.');
     }
 });
 
@@ -758,8 +778,8 @@ app.delete('/api/admin/galleries/:id', authenticateAdminToken, async (req, res) 
         res.status(200).json({ message: 'Element galerii został usunięty.' });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`Error deleting gallery item (id: ${id}):`, err);
-        res.status(500).json({ message: 'Błąd serwera podczas usuwania elementu galerii.' });
+        console.error(`Error deleting gallery item (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while deleting gallery item.');
     } finally {
         client.release();
     }
@@ -778,8 +798,8 @@ app.get('/api/admin/packages', authenticateAdminToken, async (req, res) => {
     `);
     res.json(packagesRes.rows);
   } catch (err) {
-    console.error('Error fetching packages for admin:', err);
-    res.status(500).json({ message: 'Błąd serwera podczas pobierania pakietów.' });
+    console.error('Error fetching packages for admin:', err.stack);
+    res.status(500).send('A server error occurred while fetching packages.');
   }
 });
 
@@ -788,8 +808,8 @@ app.get('/api/admin/addons', authenticateAdminToken, async (req, res) => {
         const result = await pool.query('SELECT * FROM addons ORDER BY name ASC');
         res.json(result.rows);
     } catch (err) {
-        console.error('Error fetching addons for admin:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas pobierania dodatków.' });
+        console.error('Error fetching addons for admin:', err.stack);
+        res.status(500).send('A server error occurred while fetching addons.');
     }
 });
 
@@ -802,8 +822,8 @@ app.post('/api/admin/addons', authenticateAdminToken, async (req, res) => {
         const result = await pool.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error('Error creating addon:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas tworzenia dodatku.' });
+        console.error('Error creating addon:', err.stack);
+        res.status(500).send('A server error occurred while creating addon.');
     }
 });
 
@@ -818,8 +838,8 @@ app.patch('/api/admin/addons/:id', authenticateAdminToken, async (req, res) => {
         if (result.rowCount === 0) return res.status(404).json({ message: 'Dodatek nie znaleziony.' });
         res.json(result.rows[0]);
     } catch (err) {
-        console.error('Error updating addon:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji dodatku.' });
+        console.error('Error updating addon:', err.stack);
+        res.status(500).send('A server error occurred while updating addon.');
     }
 });
 
@@ -829,8 +849,8 @@ app.delete('/api/admin/addons/:id', authenticateAdminToken, async (req, res) => 
         await pool.query('DELETE FROM addons WHERE id = $1', [id]);
         res.status(204).send();
     } catch (err) {
-        console.error('Error deleting addon:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas usuwania dodatku.' });
+        console.error('Error deleting addon:', err.stack);
+        res.status(500).send('A server error occurred while deleting addon.');
     }
 });
 
@@ -853,8 +873,8 @@ app.post('/api/admin/packages', authenticateAdminToken, async (req, res) => {
         res.status(201).json({ id: packageId, name, description, price, addons });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error creating package:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas tworzenia pakietu.' });
+        console.error('Error creating package:', err.stack);
+        res.status(500).send('A server error occurred while creating package.');
     } finally {
         client.release();
     }
@@ -880,8 +900,8 @@ app.patch('/api/admin/packages/:id', authenticateAdminToken, async (req, res) =>
         res.json({ id, name, description, price, addons });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Error updating package:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas aktualizacji pakietu.' });
+        console.error('Error updating package:', err.stack);
+        res.status(500).send('A server error occurred while updating package.');
     } finally {
         client.release();
     }
@@ -893,458 +913,16 @@ app.delete('/api/admin/packages/:id', authenticateAdminToken, async (req, res) =
         await pool.query('DELETE FROM packages WHERE id = $1', [id]);
         res.status(204).send();
     } catch (err) {
-        console.error('Error deleting package:', err);
-        res.status(500).json({ message: 'Błąd serwera podczas usuwania pakietu.' });
+        console.error('Error deleting package:', err.stack);
+        res.status(500).send('A server error occurred while deleting package.');
     }
 });
 
-export default app;--- START OF FILE src/App.tsx ---
+// Fallback error handler
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
 
-import React, { useState, useCallback, ReactNode } from 'react';
-import HomePage from './pages/HomePage.tsx';
-import CalculatorPage from './pages/CalculatorPage.tsx';
-import Header from './components/Header.tsx';
-import SideMenu from './components/SideMenu.tsx';
-import LoginPage from './pages/LoginPage.tsx';
-import ClientPanelPage from './pages/ClientPanelPage.tsx';
-import AdminLoginPage from './pages/AdminLoginPage.tsx';
-import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
-import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
-import GalleryPage from './pages/GalleryPage.tsx';
 
-export type Page = 
-  | 'home' 
-  | 'calculator' 
-  | 'gallery' 
-  | 'login' 
-  | 'clientPanel' 
-  | 'adminLogin' 
-  | 'adminDashboard' 
-  | 'adminBookingDetails';
-  
-export type AdminSubPage = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages';
-
-const App = () => {
-    const [currentPage, setCurrentPage] = useState<Page>('home');
-    const [currentAdminPage, setCurrentAdminPage] = useState<AdminSubPage>('bookings');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [viewingBookingId, setViewingBookingId] = useState<number | null>(null);
-
-    const navigateTo = useCallback((page: Page, adminPage?: AdminSubPage) => {
-        setCurrentPage(page);
-        if (adminPage) {
-            setCurrentAdminPage(adminPage);
-        }
-        setIsMenuOpen(false);
-        if (page !== 'adminBookingDetails') {
-            setViewingBookingId(null);
-        }
-    }, []);
-
-    const handleViewBookingDetails = useCallback((bookingId: number) => {
-        setViewingBookingId(bookingId);
-        navigateTo('adminBookingDetails');
-    }, [navigateTo]);
-
-    const renderCurrentPage = () => {
-        switch (currentPage) {
-            case 'home':
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
-            case 'calculator':
-                return <CalculatorPage navigateTo={navigateTo} />;
-            case 'gallery':
-                return <GalleryPage />;
-            case 'login':
-                return <LoginPage navigateTo={navigateTo} />;
-            case 'clientPanel':
-                return <ClientPanelPage navigateTo={navigateTo} />;
-            case 'adminLogin':
-                return <AdminLoginPage navigateTo={navigateTo} />;
-            case 'adminDashboard':
-                return <AdminDashboardPage 
-                            navigateTo={navigateTo} 
-                            onViewDetails={handleViewBookingDetails} 
-                            activeTab={currentAdminPage}
-                            setActiveTab={(tab) => setCurrentAdminPage(tab)}
-                       />;
-            case 'adminBookingDetails':
-                return viewingBookingId 
-                    ? <AdminBookingDetailsPage 
-                        navigateTo={(page) => navigateTo(page, 'bookings')} 
-                        bookingId={viewingBookingId} /> 
-                    : <AdminDashboardPage 
-                        navigateTo={navigateTo} 
-                        onViewDetails={handleViewBookingDetails} 
-                        activeTab="bookings"
-                        setActiveTab={(tab) => setCurrentAdminPage(tab)}
-                      />;
-            default:
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-slate-50 font-sans">
-            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
-            <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-            <main className="p-4 sm:p-6 lg:p-8">
-                <div className="max-w-7xl mx-auto">
-                    {renderCurrentPage()}
-                </div>
-            </main>
-        </div>
-    );
-};
-
-export default App;--- START OF FILE src/pages/AdminDashboardPage.tsx ---
-
-import React, { useEffect, FC, ReactNode } from 'react';
-import { Page, AdminSubPage } from '../App.tsx';
-import AdminBookingsPage from './AdminBookingsPage.tsx';
-import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
-import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
-import AdminGalleryPage from './AdminGalleryPage.tsx';
-import AdminPackagesPage from './AdminPackagesPage.tsx';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon } from '../components/Icons.tsx';
-
-interface AdminDashboardPageProps {
-    navigateTo: (page: Page, adminPage?: AdminSubPage) => void;
-    onViewDetails: (bookingId: number) => void;
-    activeTab: AdminSubPage;
-    setActiveTab: (tab: AdminSubPage) => void;
-}
-
-const TabButton: FC<{ isActive: boolean; onClick: () => void; children: ReactNode }> = ({ isActive, onClick, children }) => (
-    <button onClick={onClick} className={`flex items-center gap-2 ${isActive ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors focus:outline-none`}>
-        {children}
-    </button>
-);
-
-const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onViewDetails, activeTab, setActiveTab }) => {
-    
-    useEffect(() => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (!token) {
-            navigateTo('adminLogin');
-            return;
-        }
-    }, [navigateTo]);
-
-    const handleLogout = () => {
-        localStorage.removeItem('adminAuthToken');
-        navigateTo('home');
-    };
-    
-    const renderActiveTab = () => {
-        switch(activeTab) {
-            case 'bookings':
-                return <AdminBookingsPage onViewDetails={onViewDetails} />;
-            case 'accessKeys':
-                return <AdminAccessKeysPage />;
-            case 'availability':
-                 return <AdminAvailabilityPage onViewBookingDetails={onViewDetails} />;
-            case 'gallery':
-                return <AdminGalleryPage />;
-            case 'packages':
-                return <AdminPackagesPage />;
-            default:
-                return <AdminBookingsPage onViewDetails={onViewDetails} />;
-        }
-    };
-
-    return (
-        <div className="max-w-7xl mx-auto">
-            <header className="flex flex-col sm:flex-row justify-between items-center mb-6">
-                <div className="text-center sm:text-left">
-                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Panel Administratora</h1>
-                    <p className="mt-2 text-lg text-slate-600">Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.</p>
-                </div>
-                <button 
-                    onClick={handleLogout}
-                    className="mt-4 sm:mt-0 bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition"
-                >
-                    Wyloguj się
-                </button>
-            </header>
-
-            <div className="border-b border-slate-200 mb-8">
-                <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
-                    <TabButton isActive={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')}>
-                        <InboxStackIcon className="w-5 h-5" /> Rezerwacje
-                    </TabButton>
-                    <TabButton isActive={activeTab === 'accessKeys'} onClick={() => setActiveTab('accessKeys')}>
-                        <KeyIcon className="w-5 h-5" /> Klucze Dostępu
-                    </TabButton>
-                    <TabButton isActive={activeTab === 'availability'} onClick={() => setActiveTab('availability')}>
-                        <CalendarIcon className="w-5 h-5" /> Dostępność
-                    </TabButton>
-                    <TabButton isActive={activeTab === 'gallery'} onClick={() => setActiveTab('gallery')}>
-                        <PhotoIcon className="w-5 h-5" /> Galeria
-                    </TabButton>
-                    <TabButton isActive={activeTab === 'packages'} onClick={() => setActiveTab('packages')}>
-                        <TagIcon className="w-5 h-5" /> Oferta
-                    </TabButton>
-                </nav>
-            </div>
-
-            <div>
-                {renderActiveTab()}
-            </div>
-        </div>
-    );
-};
-
-export default AdminDashboardPage;--- START OF FILE src/pages/AdminBookingsPage.tsx ---
-
-import React, { useEffect, useState, FC } from 'react';
-import { formatCurrency } from '../utils.ts';
-import { LoadingSpinner, InboxStackIcon } from '../components/Icons.tsx';
-
-interface AdminBookingsPageProps {
-    onViewDetails: (bookingId: number) => void;
-}
-
-interface BookingSummary {
-    id: number;
-    client_id: string;
-    bride_name: string;
-    groom_name: string;
-    wedding_date: string;
-    total_price: string;
-    created_at: string;
-}
-
-const StatCard: FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
-    <div className="bg-white rounded-2xl shadow p-6 flex items-center">
-        <div className="bg-indigo-100 text-indigo-600 rounded-full p-3 mr-4">
-            {icon}
-        </div>
-        <div>
-            <p className="text-sm text-slate-500 font-medium">{title}</p>
-            <p className="text-2xl font-bold text-slate-900">{value}</p>
-        </div>
-    </div>
-);
-
-const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
-    const [bookings, setBookings] = useState<BookingSummary[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-
-     useEffect(() => {
-        const fetchBookings = async () => {
-            const token = localStorage.getItem('adminAuthToken');
-            try {
-                const response = await fetch('/api/admin/bookings', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.message || 'Nie udało się pobrać rezerwacji.');
-                }
-                setBookings(data);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchBookings();
-    }, []);
-
-    const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    
-    if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
-    if (error) return <p className="text-red-500 text-center py-20">{error}</p>;
-
-    return (
-        <>
-            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Wszystkie rezerwacje" value={bookings.length} icon={<InboxStackIcon className="w-6 h-6"/>} />
-            </section>
-            
-            <section>
-                 <h2 className="text-2xl font-bold text-slate-800 mb-4">Ostatnie rezerwacje</h2>
-                 <div className="bg-white rounded-2xl shadow overflow-hidden">
-                    <div className="overflow-x-auto">
-                         <table className="w-full text-sm text-left text-slate-500">
-                            <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3">ID Rezerwacji</th>
-                                    <th scope="col" className="px-6 py-3">Klient</th>
-                                    <th scope="col" className="px-6 py-3">Data ślubu</th>
-                                    <th scope="col" className="px-6 py-3">Cena</th>
-                                    <th scope="col" className="px-6 py-3">Data rezerwacji</th>
-                                    <th scope="col" className="px-6 py-3"><span className="sr-only">Akcje</span></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {bookings.map(booking => (
-                                    <tr key={booking.id} className="bg-white border-b hover:bg-slate-50">
-                                        <th scope="row" className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap">#{booking.id}</th>
-                                        <td className="px-6 py-4"><div>{booking.bride_name}</div><div className="text-xs text-slate-400">{booking.groom_name}</div></td>
-                                        <td className="px-6 py-4">{booking.wedding_date ? formatDate(booking.wedding_date) : '-'}</td>
-                                        <td className="px-6 py-4 font-semibold">{formatCurrency(Number(booking.total_price))}</td>
-                                        <td className="px-6 py-4">{formatDate(booking.created_at)}</td>
-                                        <td className="px-6 py-4 text-right"><button onClick={() => onViewDetails(booking.id)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button></td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {bookings.length === 0 && <p className="text-center p-8 text-slate-500">Nie znaleziono żadnych rezerwacji.</p>}
-                 </div>
-            </section>
-        </>
-    );
-};
---- START OF FILE src/pages/AdminAccessKeysPage.tsx ---
-
-import React, { useState, useEffect, FC } from 'react';
-import { LoadingSpinner, CheckCircleIcon, TrashIcon, KeyIcon } from '../components/Icons.tsx';
-
-const AdminAccessKeysPage: FC = () => {
-    const [keys, setKeys] = useState<AccessKey[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [newClientName, setNewClientName] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitStatus, setSubmitStatus] = useState<'idle'|'success'>('idle');
-
-    interface AccessKey {
-        id: number;
-        key: string;
-        client_name: string;
-        created_at: string;
-    }
-
-    const fetchKeys = async () => {
-        setIsLoading(true);
-        const token = localStorage.getItem('adminAuthToken');
-        try {
-            const response = await fetch('/api/admin/access-keys', { headers: { 'Authorization': `Bearer ${token}` } });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Błąd pobierania kluczy.');
-            setKeys(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchKeys();
-    }, []);
-    
-    const handleAddKey = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newClientName) return;
-        setIsSubmitting(true);
-        setError('');
-        const token = localStorage.getItem('adminAuthToken');
-
-        try {
-            const response = await fetch('/api/admin/access-keys', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ client_name: newClientName }),
-            });
-            const newKey = await response.json();
-            if (!response.ok) throw new Error(newKey.message || 'Błąd tworzenia klucza.');
-            setKeys(prev => [newKey, ...prev]);
-            setNewClientName('');
-            setSubmitStatus('success');
-            setTimeout(() => setSubmitStatus('idle'), 3000);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-    
-    const handleDeleteKey = async (keyId: number) => {
-        if (!window.confirm('Czy na pewno chcesz usunąć ten klucz? Tej operacji nie można cofnąć.')) return;
-        
-        setError('');
-        const token = localStorage.getItem('adminAuthToken');
-        
-        try {
-            const response = await fetch(`/api/admin/access-keys/${keyId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message || 'Błąd usuwania klucza.');
-            setKeys(prev => prev.filter(key => key.id !== keyId));
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        }
-    };
-
-    const formatDate = (dateString: string) => new Date(dateString).toLocaleString('pl-PL');
-
-    if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-                <h2 className="text-2xl font-bold text-slate-800 mb-4">Aktywne Klucze Dostępu</h2>
-                {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg mb-4">{error}</p>}
-                <div className="bg-white rounded-2xl shadow overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left text-slate-500">
-                             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3">Klucz</th>
-                                    <th scope="col" className="px-6 py-3">Przypisany do Klienta</th>
-                                    <th scope="col" className="px-6 py-3">Data Utworzenia</th>
-                                    <th scope="col" className="px-6 py-3"><span className="sr-only">Akcje</span></th>
-                                </tr>
-                            </thead>
-                             <tbody>
-                                {keys.map(key => (
-                                    <tr key={key.id} className="bg-white border-b hover:bg-slate-50">
-                                        <td className="px-6 py-4 font-mono text-indigo-600 font-bold">{key.key}</td>
-                                        <td className="px-6 py-4 text-slate-800 font-medium">{key.client_name}</td>
-                                        <td className="px-6 py-4">{formatDate(key.created_at)}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => handleDeleteKey(key.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50" aria-label="Usuń klucz">
-                                                <TrashIcon className="w-5 h-5" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                             </tbody>
-                        </table>
-                    </div>
-                     {keys.length === 0 && <p className="text-center p-8 text-slate-500">Brak aktywnych kluczy dostępu.</p>}
-                </div>
-            </div>
-            <div className="lg:col-span-1">
-                 <h2 className="text-2xl font-bold text-slate-800 mb-4">Wygeneruj Nowy Klucz</h2>
-                 <form onSubmit={handleAddKey} className="bg-white rounded-2xl shadow p-6 space-y-4">
-                    <div>
-                        <label htmlFor="clientName" className="block text-sm font-medium text-slate-700">Nazwa klienta</label>
-                        <input
-                            type="text"
-                            id="clientName"
-                            value={newClientName}
-                            onChange={e => setNewClientName(e.target.value)}
-                            placeholder="np. Anna i Piotr"
-                            required
-                            className="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                        />
-                    </div>
-                    <button type="submit" disabled={isSubmitting || !newClientName} className="w-full flex justify-center items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition">
-                        {isSubmitting ? <LoadingSpinner className="w-5 h-5" /> : <KeyIcon className="w-5 h-5" />}
-                        <span>Wygeneruj</span>
-                    </button>
-                    {submitStatus === 'success' && <p className="flex items-center gap-2 text-sm text-green-600"><CheckCircleIcon className="w-5 h-5"/> Klucz został pomyślnie utworzony!</p>}
-                 </form>
-            </div>
-        </div>
-    );
-};
-
-export default AdminAccessKeysPage;
+export default app;
