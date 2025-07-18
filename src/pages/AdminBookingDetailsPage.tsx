@@ -59,10 +59,12 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                      navigateTo('adminLogin');
                      return;
                 }
-                const data = await response.json();
+                
                 if (!response.ok) {
-                    throw new Error(data.message || 'Nie udało się pobrać szczegółów rezerwacji.');
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Nie udało się pobrać szczegółów rezerwacji.');
                 }
+                const data = await response.json();
                 setBookingData(data);
                 setFormData(data);
             } catch (err) {
@@ -110,10 +112,12 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                 },
                 body: JSON.stringify(formData),
             });
-            const result = await response.json();
+            
             if(!response.ok) {
-                throw new Error(result.message || 'Błąd zapisu danych.');
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd zapisu danych.');
             }
+            const result = await response.json();
             setBookingData(result.booking);
             setFormData(result.booking);
             setUpdateStatus('success');
