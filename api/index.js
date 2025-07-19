@@ -1,3 +1,4 @@
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -134,6 +135,14 @@ const initializeDatabase = async () => {
                 stage_id INTEGER REFERENCES production_stages(id),
                 status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
                 completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
+                content TEXT NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -805,6 +814,50 @@ app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) 
     }
 });
 
+// Communication Endpoints
+app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching messages: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
+    try {
+        const { content } = req.body;
+        const result = await pool.query(
+            'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
+            [req.params.bookingId, 'admin', content]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error sending message: ${err.message}`);
+    }
+});
+
+app.get('/api/messages', verifyToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching messages: ${err.message}`);
+    }
+});
+
+app.post('/api/messages', verifyToken, async (req, res) => {
+    try {
+        const { content } = req.body;
+        const result = await pool.query(
+            'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
+            [req.user.bookingId, 'client', content]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error sending message: ${err.message}`);
+    }
+});
 
 // Export the app for Vercel
 export default app;
