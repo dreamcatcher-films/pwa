@@ -1,6 +1,6 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -26,6 +26,8 @@ interface BookingData {
     phone_number: string;
     additional_info: string | null;
     created_at: string;
+    payment_status: 'pending' | 'partial' | 'paid';
+    amount_paid: string;
 }
 
 interface EditableBookingData {
@@ -210,6 +212,15 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
             default: return <ClockIcon className="w-6 h-6 text-slate-400" />;
         }
     };
+    
+    const getPaymentStatusText = (status: BookingData['payment_status']) => {
+        switch (status) {
+            case 'pending': return 'Oczekuje na płatność';
+            case 'partial': return 'Częściowo opłacone';
+            case 'paid': return 'Opłacono w całości';
+            default: return 'Nieznany';
+        }
+    };
 
     return (
         <div>
@@ -304,7 +315,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                     </InfoCard>
                 </div>
                 <div className="lg:col-span-1">
-                    <div className="sticky top-8">
+                    <div className="sticky top-8 space-y-8">
                          <InfoCard title="Podsumowanie pakietu" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                             <InfoItem label="Wybrany pakiet" value={bookingData.package_name} />
                             <div>
@@ -313,7 +324,14 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                                     {bookingData.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}
                                </ul>
                             </div>
-                            <div className="border-t pt-4 mt-2">
+                         </InfoCard>
+                         <InfoCard title="Rozliczenie" icon={<CurrencyDollarIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
+                            <InfoItem label="Status płatności" value={<span className="font-bold">{getPaymentStatusText(bookingData.payment_status)}</span>} />
+                            <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-2">
+                                <InfoItem label="Wpłacono" value={formatCurrency(Number(bookingData.amount_paid))} />
+                                <InfoItem label="Pozostało" value={formatCurrency(Number(bookingData.total_price) - Number(bookingData.amount_paid))} />
+                            </div>
+                             <div className="border-t pt-4 mt-2">
                                 <div className="flex justify-between items-baseline">
                                     <p className="text-lg font-bold text-slate-900">Suma</p>
                                     <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(bookingData.total_price))}</p>
