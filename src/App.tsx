@@ -9,8 +9,18 @@ import AdminLoginPage from './pages/AdminLoginPage.tsx';
 import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
 import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 import GalleryPage from './pages/GalleryPage.tsx';
+import AdminDiscountsPage from './pages/AdminDiscountsPage.tsx';
+import AdminPackagesPage from './pages/AdminPackagesPage.tsx';
+import AdminGalleryPage from './pages/AdminGalleryPage.tsx';
+import AdminAvailabilityPage from './pages/AdminAvailabilityPage.tsx';
+import AdminAccessKeysPage from './pages/AdminAccessKeysPage.tsx';
+import AdminBookingsPage from './pages/AdminBookingsPage.tsx';
 
-export type Page = 'home' | 'calculator' | 'gallery' | 'login' | 'clientPanel' | 'adminLogin' | 'adminDashboard' | 'adminBookingDetails';
+export type Page = 
+  'home' | 'calculator' | 'gallery' | 
+  'login' | 'clientPanel' | 
+  'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
+  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -45,11 +55,21 @@ const App = () => {
             case 'adminLogin':
                 return <AdminLoginPage navigateTo={navigateTo} />;
             case 'adminDashboard':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} />;
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='bookings' />;
+             case 'adminAccessKeys':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='accessKeys' />;
+             case 'adminAvailability':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='availability' />;
+            case 'adminGallery':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='gallery' />;
+            case 'adminPackages':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='packages' />;
+            case 'adminDiscounts':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='discounts' />;
             case 'adminBookingDetails':
-                return viewingBookingId 
+                 return viewingBookingId 
                     ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
-                    : <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} />;
+                    : <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='bookings' />;
             default:
                 return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
         }
