@@ -1,6 +1,6 @@
-import React, { useState, useEffect, FC, ReactNode } from 'react';
+import React, { useState, useEffect, FC, ReactNode, useRef } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -46,9 +46,19 @@ interface ProductionStage {
     completed_at: string | null;
 }
 
+interface Message {
+    id: number | string;
+    sender: 'client' | 'admin';
+    content: string;
+    created_at: string;
+    status?: 'sending' | 'error';
+}
+
+
 const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [stages, setStages] = useState<ProductionStage[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -57,18 +67,26 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [updateError, setUpdateError] = useState('');
 
+    const [newMessage, setNewMessage] = useState('');
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [messageError, setMessageError] = useState('');
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
     const token = localStorage.getItem('authToken');
 
-    const fetchAllData = async () => {
+    const fetchAllData = async (shouldScrollChat = false) => {
         if (!token) {
             navigateTo('login');
             return;
         }
-        setIsLoading(true);
+        
+        if (!bookingData) setIsLoading(true); // Only show full-page loader on initial load
+
         try {
-            const [bookingRes, stagesRes] = await Promise.all([
+            const [bookingRes, stagesRes, messagesRes] = await Promise.all([
                 fetch('/api/my-booking', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/booking-stages', { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch('/api/booking-stages', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/messages', { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
 
             if (bookingRes.status === 401 || bookingRes.status === 403) {
@@ -79,19 +97,29 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
 
             if (!bookingRes.ok) throw new Error(await bookingRes.text() || 'Błąd pobierania rezerwacji.');
             if (!stagesRes.ok) throw new Error(await stagesRes.text() || 'Błąd pobierania etapów.');
+            if (!messagesRes.ok) throw new Error(await messagesRes.text() || 'Błąd pobierania wiadomości.');
             
-            const bookingData = await bookingRes.json();
+            const bookingDataResult = await bookingRes.json();
             const stagesData = await stagesRes.json();
+            const messagesData = await messagesRes.json();
             
-            setBookingData(bookingData);
+            setBookingData(bookingDataResult);
             setStages(stagesData);
-            setFormData({
-                bride_address: bookingData.bride_address || '',
-                groom_address: bookingData.groom_address || '',
-                locations: bookingData.locations || '',
-                schedule: bookingData.schedule || '',
-                additional_info: bookingData.additional_info || '',
-            });
+            setMessages(messagesData);
+
+            if (!isEditing) {
+                setFormData({
+                    bride_address: bookingDataResult.bride_address || '',
+                    groom_address: bookingDataResult.groom_address || '',
+                    locations: bookingDataResult.locations || '',
+                    schedule: bookingDataResult.schedule || '',
+                    additional_info: bookingDataResult.additional_info || '',
+                });
+            }
+
+            if (shouldScrollChat) {
+                scrollToChatBottom();
+            }
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -100,9 +128,17 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         }
     };
     
+    const scrollToChatBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
     useEffect(() => {
         fetchAllData();
     }, [navigateTo, token]);
+
+     useEffect(() => {
+        scrollToChatBottom();
+    }, [messages]);
     
     const handleLogout = () => {
         localStorage.removeItem('authToken');
@@ -169,9 +205,53 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                 const errorText = await response.text();
                 throw new Error(errorText || 'Błąd zatwierdzania etapu.');
             }
-            await fetchAllData(); // Refresh all data
+            await fetchAllData();
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        }
+    };
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const content = newMessage.trim();
+        if (!content || isSendingMessage) return;
+
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMessage: Message = {
+            id: tempId,
+            sender: 'client',
+            content,
+            created_at: new Date().toISOString(),
+            status: 'sending',
+        };
+
+        setMessages(prev => [...prev, optimisticMessage]);
+        setNewMessage('');
+        setMessageError('');
+        setIsSendingMessage(true);
+        
+        setTimeout(() => scrollToChatBottom(), 0);
+
+        try {
+            const response = await fetch('/api/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ content }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd wysyłania wiadomości.');
+            }
+            
+            const savedMessage = await response.json();
+            setMessages(prev => prev.map(msg => msg.id === tempId ? savedMessage : msg));
+
+        } catch (err) {
+            setMessageError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+            setMessages(prev => prev.map(msg => msg.id === tempId ? { ...msg, status: 'error' } : msg));
+        } finally {
+            setIsSendingMessage(false);
         }
     };
 
@@ -194,6 +274,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     }
     
     const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formatMessageDate = (dateString: string) => new Date(dateString).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
     const editButton = (
         <button
@@ -262,6 +343,46 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                     </div>
                 </section>
             )}
+
+            <section className="mb-8">
+                 <InfoCard title="Komunikacja z nami" icon={<ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
+                     <div className="space-y-4 pr-2 max-h-96 overflow-y-auto">
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`flex ${msg.sender === 'client' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'client' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
+                                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                    <p className={`text-xs mt-1 ${msg.sender === 'client' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                        {msg.status === 'sending' && 'Wysyłanie...'}
+                                        {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
+                                        {!msg.status && formatMessageDate(msg.created_at)}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                         <div ref={chatEndRef} />
+                    </div>
+                     <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
+                        {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
+                        <textarea
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            placeholder="Napisz wiadomość..."
+                            rows={3}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                            disabled={isSendingMessage}
+                        />
+                        <div className="text-right mt-2">
+                            <button
+                                type="submit"
+                                disabled={isSendingMessage || !newMessage.trim()}
+                                className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto"
+                            >
+                                {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
+                            </button>
+                        </div>
+                    </form>
+                </InfoCard>
+            </section>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
