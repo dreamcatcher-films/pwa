@@ -11,24 +11,24 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-default-super-secret-key-for-dev';
 const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'your-default-super-secret-admin-key-for-dev';
 
-if (!process.env.DATABASE_URL) {
-  console.error('FATAL ERROR: DATABASE_URL environment variable is not set.');
-}
-
 // --- Database Pool Configuration ---
 let pool;
-try {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: true // Use `ssl: true` for Supabase
-  });
+if (process.env.DATABASE_URL) {
+  try {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: true // Use `ssl: true` for Supabase
+    });
 
-  pool.on('error', (err, client) => {
-    console.error('Unexpected error on idle client', err);
-    process.exit(-1);
-  });
-} catch (err) {
-    console.error('Failed to create database pool:', err);
+    pool.on('error', (err, client) => {
+      console.error('Unexpected error on idle client', err);
+      process.exit(-1);
+    });
+  } catch (err) {
+      console.error('Failed to create database pool:', err);
+  }
+} else {
+    console.error('FATAL ERROR: DATABASE_URL environment variable is not set.');
 }
 
 
@@ -265,7 +265,7 @@ initializeDatabase().catch(err => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); 
 app.use((req, res, next) => {
-    if (!pool && !process.env.DATABASE_URL) {
+    if (!pool) {
         const errorMessage = 'A server error occurred: Database connection is not configured.';
         console.error(errorMessage);
         return res.status(500).send(errorMessage);
@@ -960,16 +960,4 @@ app.use((err, req, res, next) => {
 });
 
 
-export default app;--- START OF FILE public/favicon.svg ---
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
---- START OF FILE public/apple-touch-icon.svg ---
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
---- START OF FILE public/icon-192.svg ---
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
---- START OF FILE public/icon-512.svg ---
-
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
---- END OF FILE ---
+export default app;
