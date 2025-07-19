@@ -380,6 +380,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
                 sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
                 content TEXT NOT NULL,
+                is_read_by_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -823,7 +824,7 @@ app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) 
     }
 });
 
-// Communication Endpoints
+// Communication & Notification Endpoints
 app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
@@ -862,11 +863,74 @@ app.post('/api/messages', verifyToken, async (req, res) => {
             'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
             [req.user.bookingId, 'client', content]
         );
+
+        // --- Email Notification Simulation ---
+        const bookingRes = await pool.query('SELECT bride_name FROM bookings WHERE id = $1', [req.user.bookingId]);
+        const clientName = bookingRes.rows.length > 0 ? bookingRes.rows[0].bride_name : 'Klient';
+        console.log(`
+            ==============================================
+            SIMULATING EMAIL NOTIFICATION TO ADMIN
+            To: admin@dreamcatcher.com
+            From: system@dreamcatcher.com
+            Subject: Nowa wiadomość od ${clientName}
+            ---
+            Otrzymałeś nową wiadomość w rezerwacji #${req.user.bookingId}.
+            
+            Wiadomość:
+            "${content}"
+            ==============================================
+        `);
+        // --- End Simulation ---
+        
         res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(500).send(`Error sending message: ${err.message}`);
     }
 });
+
+app.get('/api/admin/notifications/count', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query("SELECT COUNT(*) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
+        res.json({ count: parseInt(result.rows[0].count, 10) });
+    } catch (err) {
+        res.status(500).send(`Error fetching notification count: ${err.message}`);
+    }
+});
+
+app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT
+                b.id AS booking_id,
+                b.bride_name,
+                b.groom_name,
+                COUNT(m.id) AS unread_count,
+                (array_agg(m.content ORDER BY m.created_at DESC))[1] AS latest_message_preview
+            FROM messages m
+            JOIN bookings b ON m.booking_id = b.id
+            WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE
+            GROUP BY b.id, b.bride_name, b.groom_name
+            ORDER BY MAX(m.created_at) DESC;
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching notifications: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminToken, async (req, res) => {
+    try {
+        await pool.query(
+            "UPDATE messages SET is_read_by_admin = TRUE WHERE booking_id = $1 AND sender = 'client'",
+            [req.params.bookingId]
+        );
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error marking messages as read: ${err.message}`);
+    }
+});
+
 
 // Export the app for Vercel
 export default app;
