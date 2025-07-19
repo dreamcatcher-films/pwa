@@ -753,7 +753,7 @@ app.patch('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, re
         res.status(500).send(`Błąd aktualizacji statusu etapu: ${err.message}`);
     }
 });
-a
+
 app.delete('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, res) => {
     try {
         await pool.query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
