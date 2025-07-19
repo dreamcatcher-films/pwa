@@ -26,7 +26,7 @@ const initializeDatabase = async () => {
     try {
         pool = new Pool({
             connectionString: process.env.DATABASE_URL,
-            ssl: true, // Required for Supabase
+            ssl: { rejectUnauthorized: false }, // Required for Supabase on Vercel
         });
 
         // Test the connection
