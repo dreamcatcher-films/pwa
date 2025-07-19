@@ -14,7 +14,7 @@ export type Page =
   'home' | 'calculator' | 'gallery' | 
   'login' | 'clientPanel' | 
   'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages';
+  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -62,6 +62,8 @@ const App = () => {
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='discounts' />;
             case 'adminStages':
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='stages' />;
+            case 'adminSettings':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='settings' />;
             case 'adminBookingDetails':
                  return viewingBookingId 
                     ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
