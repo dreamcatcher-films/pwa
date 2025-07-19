@@ -162,3 +162,9 @@ export const CurrencyDollarIcon: React.FC<{className?: string}> = ({ className =
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182.79-.621 1.672-.621 2.46 0l.86.678" />
     </svg>
 );
+
+export const ChatBubbleLeftRightIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.72.372a3.75 3.75 0 01-3.653-3.653V8.511S15 8 16.5 8s3.75.511 3.75.511zm-10.5 0S10 8 8.5 8 4.75 8.511 4.75 8.511c-.884.284-1.5 1.128-1.5 2.097v4.286c0 1.136.847 2.1 1.98 2.193l3.72.372a3.75 3.75 0 013.653-3.653V8.511z" />
+    </svg>
+);
