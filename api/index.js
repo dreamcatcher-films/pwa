@@ -120,7 +120,6 @@ const initializeDatabase = async () => {
         );
     `);
     
-    // --- New Tables for Offer Management ---
     await client.query(`
         CREATE TABLE IF NOT EXISTS packages (
             id SERIAL PRIMARY KEY,
@@ -144,6 +143,20 @@ const initializeDatabase = async () => {
             PRIMARY KEY (package_id, addon_id)
         );
     `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discount_codes (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(255) UNIQUE NOT NULL,
+        type VARCHAR(20) NOT NULL, -- 'percentage' or 'fixed'
+        value NUMERIC(10, 2) NOT NULL,
+        usage_limit INT,
+        times_used INT DEFAULT 0,
+        expires_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
 
     // Add a sample key if it doesn't exist for testing
     const resKeys = await client.query("SELECT * FROM access_keys WHERE key = '1234'");
@@ -406,6 +419,33 @@ app.get('/api/gallery', async (req, res) => {
     }
 });
 
+app.post('/api/validate-discount', async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ message: 'Kod jest wymagany.' });
+
+    try {
+        const result = await pool.query('SELECT * FROM discount_codes WHERE code = $1', [code.toUpperCase()]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono takiego kodu.' });
+        }
+        const discount = result.rows[0];
+        if (discount.expires_at && new Date(discount.expires_at) < new Date()) {
+            return res.status(410).json({ message: 'Ten kod wygasł.' });
+        }
+        if (discount.usage_limit && discount.times_used >= discount.usage_limit) {
+            return res.status(410).json({ message: 'Limit użyć tego kodu został wyczerpany.' });
+        }
+        res.json({
+            code: discount.code,
+            type: discount.type,
+            value: Number(discount.value)
+        });
+    } catch (err) {
+        console.error('Error validating discount code:', err.stack);
+        res.status(500).send('A server error occurred during discount validation.');
+    }
+});
+
 // --- CLIENT Endpoints ---
 app.post('/api/validate-key', async (req, res) => {
   const { key } = req.body;
@@ -437,6 +477,12 @@ app.post('/api/bookings', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        
+        // If a discount code was used, increment its usage count
+        if (discountCode) {
+            await client.query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [discountCode]);
+        }
+        
         const clientId = await generateUniqueClientId(client);
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
@@ -454,6 +500,7 @@ app.post('/api/bookings', async (req, res) => {
             locations || null, schedule || null, email, phoneNumber, additionalInfo || null, discountCode || null
         ];
         const result = await client.query(query, values);
+        
         await client.query('COMMIT');
         res.status(201).json({ 
             message: 'Booking created successfully.', 
@@ -950,6 +997,51 @@ app.delete('/api/admin/packages/:id', authenticateAdminToken, async (req, res) =
     } catch (err) {
         console.error('Error deleting package:', err.stack);
         res.status(500).send('A server error occurred while deleting package.');
+    }
+});
+
+// --- ADMIN DISCOUNT CODES ENDPOINTS ---
+app.get('/api/admin/discounts', authenticateAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM discount_codes ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching discount codes:', err.stack);
+        res.status(500).send('A server error occurred while fetching codes.');
+    }
+});
+
+app.post('/api/admin/discounts', authenticateAdminToken, async (req, res) => {
+    const { code, type, value, usage_limit, expires_at } = req.body;
+    if (!code || !type || value === undefined) {
+        return res.status(400).json({ message: 'Kod, typ i wartość są wymagane.' });
+    }
+    try {
+        const result = await pool.query(
+            'INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [code.toUpperCase(), type, value, usage_limit || null, expires_at || null]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Error creating discount code:', err.stack);
+        if (err.code === '23505') { // unique_violation
+            return res.status(409).json({ message: 'Ten kod już istnieje.' });
+        }
+        res.status(500).send('A server error occurred while creating code.');
+    }
+});
+
+app.delete('/api/admin/discounts/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM discount_codes WHERE id = $1 RETURNING id', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono kodu do usunięcia.' });
+        }
+        res.status(200).json({ message: 'Kod rabatowy został pomyślnie usunięty.' });
+    } catch (err) {
+        console.error(`Error deleting discount code (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while deleting code.');
     }
 });
 
