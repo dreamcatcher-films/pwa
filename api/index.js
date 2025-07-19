@@ -385,6 +385,21 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             );
         `);
 
+        // --- MIGRATION: Add is_read_by_admin column to messages if it doesn't exist ---
+        // This is necessary to update existing installations that were created before this feature.
+        const columnCheck = await client.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'messages' 
+            AND column_name = 'is_read_by_admin'
+        `);
+
+        if (columnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
+            console.log("MIGRATION APPLIED: Added 'is_read_by_admin' column to 'messages' table.");
+        }
+
+
         // Seed default admin
         const adminRes = await client.query('SELECT * FROM admins');
         if (adminRes.rows.length === 0) {
@@ -404,7 +419,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.status(200).json({ message: 'Database schema initialized successfully.' });
+        res.status(200).json({ message: 'Database schema initialized and migrated successfully.' });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Database setup error:', err);
