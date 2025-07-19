@@ -1,10 +1,10 @@
 
-import express from 'express';
-import pg from 'pg';
-import cors from 'cors';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { put, del } from '@vercel/blob';
+const express = require('express');
+const pg = require('pg');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { put, del } = require('@vercel/blob');
 
 const { Pool, Client } = pg;
 const app = express();
@@ -961,115 +961,4 @@ app.use((err, req, res, next) => {
 });
 
 
-export default app;--- START OF FILE src/App.tsx ---
-
-import React, { useState, useCallback, FC, ReactNode } from 'react';
-import HomePage from './pages/HomePage.tsx';
-import CalculatorPage from './pages/CalculatorPage.tsx';
-import Header from './components/Header.tsx';
-import SideMenu from './components/SideMenu.tsx';
-import LoginPage from './pages/LoginPage.tsx';
-import ClientPanelPage from './pages/ClientPanelPage.tsx';
-import AdminLoginPage from './pages/AdminLoginPage.tsx';
-import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
-import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
-import GalleryPage from './pages/GalleryPage.tsx';
-import AdminBookingsPage from './pages/AdminBookingsPage.tsx';
-import AdminAccessKeysPage from './pages/AdminAccessKeysPage.tsx';
-import AdminAvailabilityPage from './pages/AdminAvailabilityPage.tsx';
-import AdminGalleryPage from './pages/AdminGalleryPage.tsx';
-import AdminPackagesPage from './pages/AdminPackagesPage.tsx';
-
-export type Page = 
-    'home' | 'calculator' | 'gallery' | 'login' | 'clientPanel' | 
-    'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-    'adminBookings' | 'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages';
-
-
-const App: FC = () => {
-    const [currentPage, setCurrentPage] = useState<Page>('home');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [viewingBookingId, setViewingBookingId] = useState<number | null>(null);
-    const [adminActiveTab, setAdminActiveTab] = useState<string>('bookings');
-
-
-    const navigateTo = useCallback((page: Page, options?: { adminTab?: string }) => {
-        setCurrentPage(page);
-        setIsMenuOpen(false);
-        if (page !== 'adminBookingDetails') {
-            setViewingBookingId(null);
-        }
-        if (options?.adminTab) {
-            setAdminActiveTab(options.adminTab);
-        }
-    }, []);
-
-    const handleViewBookingDetails = useCallback((bookingId: number) => {
-        setViewingBookingId(bookingId);
-        navigateTo('adminBookingDetails');
-    }, [navigateTo]);
-
-    const renderAdminPage = (): ReactNode => {
-        switch (adminActiveTab) {
-            case 'bookings': return <AdminBookingsPage onViewDetails={handleViewBookingDetails} />;
-            case 'accessKeys': return <AdminAccessKeysPage />;
-            case 'availability': return <AdminAvailabilityPage onViewBookingDetails={handleViewBookingDetails}/>;
-            case 'gallery': return <AdminGalleryPage />;
-            case 'packages': return <AdminPackagesPage />;
-            default: return <AdminBookingsPage onViewDetails={handleViewBookingDetails} />;
-        }
-    };
-
-    const renderCurrentPage = (): ReactNode => {
-        switch (currentPage) {
-            case 'home':
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
-            case 'calculator':
-                return <CalculatorPage navigateTo={navigateTo} />;
-            case 'gallery':
-                return <GalleryPage />;
-            case 'login':
-                return <LoginPage navigateTo={navigateTo} />;
-            case 'clientPanel':
-                return <ClientPanelPage navigateTo={navigateTo} />;
-            case 'adminLogin':
-                return <AdminLoginPage navigateTo={navigateTo} />;
-            case 'adminDashboard':
-                return (
-                    <AdminDashboardPage 
-                        navigateTo={navigateTo} 
-                        activeTab={adminActiveTab} 
-                        setActiveTab={setAdminActiveTab}
-                    >
-                        {renderAdminPage()}
-                    </AdminDashboardPage>
-                );
-            case 'adminBookingDetails':
-                return viewingBookingId 
-                    ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
-                    : <AdminDashboardPage 
-                        navigateTo={navigateTo} 
-                        activeTab="bookings" 
-                        setActiveTab={setAdminActiveTab}
-                      >
-                         <AdminBookingsPage onViewDetails={handleViewBookingDetails} />
-                      </AdminDashboardPage>;
-            default:
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-slate-50 font-sans">
-            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
-            <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-            <main className="p-4 sm:p-6 lg:p-8">
-                <div className="max-w-7xl mx-auto">
-                    {renderCurrentPage()}
-                </div>
-            </main>
-        </div>
-    );
-};
-
-export default App;
+module.exports = app;
