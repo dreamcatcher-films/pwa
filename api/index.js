@@ -20,8 +20,6 @@ let pool;
 const initializeDatabase = async () => {
     if (!process.env.DATABASE_URL) {
         console.error("FATAL ERROR: DATABASE_URL is not set.");
-        // In a serverless environment, we can't stop the process,
-        // but subsequent requests will fail gracefully.
         return;
     }
     
@@ -31,151 +29,13 @@ const initializeDatabase = async () => {
             ssl: true, // Required for Supabase
         });
 
-        // Test the connection and create tables
+        // Test the connection
         const client = await pool.connect();
-        console.log('Successfully connected to the database!');
-
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS access_keys (
-                id SERIAL PRIMARY KEY,
-                key VARCHAR(4) UNIQUE NOT NULL,
-                client_name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS bookings (
-                id SERIAL PRIMARY KEY,
-                client_id VARCHAR(4) UNIQUE,
-                access_key VARCHAR(4),
-                package_name VARCHAR(255) NOT NULL,
-                total_price NUMERIC(10, 2) NOT NULL,
-                selected_items TEXT[] NOT NULL,
-                bride_name VARCHAR(255) NOT NULL,
-                groom_name VARCHAR(255) NOT NULL,
-                wedding_date DATE NOT NULL,
-                bride_address TEXT,
-                groom_address TEXT,
-                locations TEXT,
-                schedule TEXT,
-                email VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(255),
-                additional_info TEXT,
-                password_hash VARCHAR(255) NOT NULL,
-                discount_code VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS admins (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS availability (
-                id SERIAL PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                description TEXT,
-                start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                is_all_day BOOLEAN DEFAULT FALSE
-            );
-
-            CREATE TABLE IF NOT EXISTS galleries (
-                id SERIAL PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                description TEXT,
-                image_url TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS packages (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) NOT NULL,
-              description TEXT,
-              price NUMERIC(10, 2) NOT NULL,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS addons (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) NOT NULL,
-              price NUMERIC(10, 2) NOT NULL,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS package_addons (
-              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
-              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
-              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-              PRIMARY KEY (package_id, addon_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS discount_codes (
-                id SERIAL PRIMARY KEY,
-                code VARCHAR(255) UNIQUE NOT NULL,
-                type VARCHAR(50) NOT NULL, -- 'percentage' or 'fixed'
-                value NUMERIC(10, 2) NOT NULL,
-                usage_limit INTEGER,
-                times_used INTEGER DEFAULT 0,
-                expires_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-             CREATE TABLE IF NOT EXISTS production_stages (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS booking_stages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                stage_id INTEGER REFERENCES production_stages(id),
-                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
-                completed_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
-                content TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Smart migration for payment columns
-            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending';
-            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10, 2) DEFAULT 0.00;
-        `);
-
-        // Seed default admin
-        const adminRes = await client.query('SELECT * FROM admins');
-        if (adminRes.rows.length === 0) {
-            const adminPassword = 'adminpassword';
-            const hashedPassword = await bcrypt.hash(adminPassword, 10);
-            await client.query('INSERT INTO admins (email, password_hash) VALUES ($1, $2)', ['admin@dreamcatcher.com', hashedPassword]);
-            console.log('Default admin created: admin@dreamcatcher.com / adminpassword');
-        }
-        
-        // Seed test booking
-        const testBookingRes = await client.query("SELECT * FROM bookings WHERE client_id = '9999'");
-        if (testBookingRes.rows.length === 0) {
-            const testPassword = await bcrypt.hash('password123', 10);
-            await client.query(
-              `INSERT INTO bookings (client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, email, password_hash, payment_status, amount_paid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-              ['9999', 'Test Package', 5000.00, '{"Test Item 1", "Test Item 2"}', 'Janina', 'Krzysztof', '2025-10-10', 'test@example.com', testPassword, 'partial', 1000.00]
-            );
-            console.log("Created test booking for client 9999.");
-        }
-
-
+        console.log('Successfully connected to the database pool!');
         client.release();
 
     } catch (err) {
-        console.error('Database initialization error:', err.stack);
+        console.error('Database connection pool initialization error:', err.stack);
         pool = null; // Set pool to null on failure
     }
 };
@@ -387,7 +247,7 @@ app.patch('/api/my-booking', verifyToken, async (req, res) => {
     }
 });
 
-// Admin Login
+// Admin Login & Setup
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -404,6 +264,155 @@ app.post('/api/admin/login', async (req, res) => {
         res.status(500).send(`Server error: ${err.message}`);
     }
 });
+
+app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS access_keys (
+                id SERIAL PRIMARY KEY,
+                key VARCHAR(4) UNIQUE NOT NULL,
+                client_name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS bookings (
+                id SERIAL PRIMARY KEY,
+                client_id VARCHAR(4) UNIQUE,
+                access_key VARCHAR(4),
+                package_name VARCHAR(255) NOT NULL,
+                total_price NUMERIC(10, 2) NOT NULL,
+                selected_items TEXT[] NOT NULL,
+                bride_name VARCHAR(255) NOT NULL,
+                groom_name VARCHAR(255) NOT NULL,
+                wedding_date DATE NOT NULL,
+                bride_address TEXT,
+                groom_address TEXT,
+                locations TEXT,
+                schedule TEXT,
+                email VARCHAR(255) NOT NULL,
+                phone_number VARCHAR(255),
+                additional_info TEXT,
+                password_hash VARCHAR(255) NOT NULL,
+                discount_code VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                payment_status VARCHAR(50) DEFAULT 'pending',
+                amount_paid NUMERIC(10, 2) DEFAULT 0.00
+            );
+
+            CREATE TABLE IF NOT EXISTS admins (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS availability (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                is_all_day BOOLEAN DEFAULT FALSE
+            );
+
+            CREATE TABLE IF NOT EXISTS galleries (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                image_url TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS packages (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) NOT NULL,
+              description TEXT,
+              price NUMERIC(10, 2) NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS addons (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) NOT NULL,
+              price NUMERIC(10, 2) NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS package_addons (
+              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
+              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+              PRIMARY KEY (package_id, addon_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS discount_codes (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(255) UNIQUE NOT NULL,
+                type VARCHAR(50) NOT NULL, -- 'percentage' or 'fixed'
+                value NUMERIC(10, 2) NOT NULL,
+                usage_limit INTEGER,
+                times_used INTEGER DEFAULT 0,
+                expires_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+             CREATE TABLE IF NOT EXISTS production_stages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS booking_stages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                stage_id INTEGER REFERENCES production_stages(id),
+                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
+                content TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Seed default admin
+        const adminRes = await client.query('SELECT * FROM admins');
+        if (adminRes.rows.length === 0) {
+            const adminPassword = 'adminpassword';
+            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            await client.query('INSERT INTO admins (email, password_hash) VALUES ($1, $2)', ['admin@dreamcatcher.com', hashedPassword]);
+        }
+        
+        // Seed test booking
+        const testBookingRes = await client.query("SELECT * FROM bookings WHERE client_id = '9999'");
+        if (testBookingRes.rows.length === 0) {
+            const testPassword = await bcrypt.hash('password123', 10);
+            await client.query(
+              `INSERT INTO bookings (client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, email, password_hash, payment_status, amount_paid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+              ['9999', 'Test Package', 5000.00, '{"Test Item 1", "Test Item 2"}', 'Janina', 'Krzysztof', '2025-10-10', 'test@example.com', testPassword, 'partial', 1000.00]
+            );
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Database schema initialized successfully.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Database setup error:', err);
+        res.status(500).json({ message: 'Error setting up database schema.', error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
 
 // Admin Endpoints - All protected
 app.get('/api/admin/bookings', verifyAdminToken, async (req, res) => {
