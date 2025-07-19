@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
@@ -49,6 +49,15 @@ interface PaymentData {
     amount_paid: string;
 }
 
+interface Message {
+    id: number | string;
+    sender: 'client' | 'admin';
+    content: string;
+    created_at: string;
+    status?: 'sending' | 'error';
+}
+
+
 const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navigateTo, bookingId }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -67,52 +76,75 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const [bookingStages, setBookingStages] = useState<BookingStage[]>([]);
     const [allStageTemplates, setAllStageTemplates] = useState<ProductionStageTemplate[]>([]);
     const [selectedStageToAdd, setSelectedStageToAdd] = useState('');
+
+    // Messages state
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [messageError, setMessageError] = useState('');
+    const chatEndRef = useRef<HTMLDivElement>(null);
     
     const token = localStorage.getItem('adminAuthToken');
 
+    const fetchAllData = async (shouldScrollChat = false) => {
+        if (!token) {
+            navigateTo('adminLogin');
+            return;
+        }
+
+        try {
+            const [bookingRes, bookingStagesRes, allStagesRes, messagesRes] = await Promise.all([
+                fetch(`/api/admin/bookings/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`/api/admin/booking-stages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`/api/admin/stages`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`/api/admin/messages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+            
+            if (bookingRes.status === 401 || bookingRes.status === 403) {
+                 localStorage.removeItem('adminAuthToken');
+                 navigateTo('adminLogin');
+                 return;
+            }
+
+            if (!bookingRes.ok) throw new Error(await bookingRes.text() || 'Błąd pobierania rezerwacji.');
+            if (!bookingStagesRes.ok) throw new Error(await bookingStagesRes.text() || 'Błąd pobierania etapów projektu.');
+            if (!allStagesRes.ok) throw new Error(await allStagesRes.text() || 'Błąd pobierania szablonów etapów.');
+            if (!messagesRes.ok) throw new Error(await messagesRes.text() || 'Błąd pobierania wiadomości.');
+            
+            const bookingDataResult = await bookingRes.json();
+            const bookingStagesData = await bookingStagesRes.json();
+            const allStagesData = await allStagesRes.json();
+            const messagesData = await messagesRes.json();
+
+            setBookingData(bookingDataResult);
+            setFormData(bookingDataResult);
+            setPaymentData({ payment_status: bookingDataResult.payment_status, amount_paid: bookingDataResult.amount_paid });
+            setBookingStages(bookingStagesData);
+            setAllStageTemplates(allStagesData);
+            setMessages(messagesData);
+
+            if (shouldScrollChat) {
+                scrollToChatBottom();
+            }
+
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const scrollToChatBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
     useEffect(() => {
-        const fetchAllData = async () => {
-            if (!token) {
-                navigateTo('adminLogin');
-                return;
-            }
-
-            try {
-                const [bookingRes, bookingStagesRes, allStagesRes] = await Promise.all([
-                    fetch(`/api/admin/bookings/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch(`/api/admin/booking-stages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                    fetch(`/api/admin/stages`, { headers: { 'Authorization': `Bearer ${token}` } })
-                ]);
-                
-                if (bookingRes.status === 401 || bookingRes.status === 403) {
-                     localStorage.removeItem('adminAuthToken');
-                     navigateTo('adminLogin');
-                     return;
-                }
-
-                if (!bookingRes.ok) throw new Error(await bookingRes.text() || 'Błąd pobierania rezerwacji.');
-                if (!bookingStagesRes.ok) throw new Error(await bookingStagesRes.text() || 'Błąd pobierania etapów projektu.');
-                if (!allStagesRes.ok) throw new Error(await allStagesRes.text() || 'Błąd pobierania szablonów etapów.');
-                
-                const bookingData = await bookingRes.json();
-                const bookingStagesData = await bookingStagesRes.json();
-                const allStagesData = await allStagesRes.json();
-
-                setBookingData(bookingData);
-                setFormData(bookingData);
-                setPaymentData({ payment_status: bookingData.payment_status, amount_paid: bookingData.amount_paid });
-                setBookingStages(bookingStagesData);
-                setAllStageTemplates(allStagesData);
-
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         fetchAllData();
     }, [navigateTo, bookingId, token]);
+
+    useEffect(() => {
+        scrollToChatBottom();
+    }, [messages]);
 
     const handleBack = () => navigateTo('adminDashboard');
 
@@ -190,6 +222,50 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             setPaymentUpdateStatus('error');
         }
     };
+
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const content = newMessage.trim();
+        if (!content || isSendingMessage) return;
+
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMessage: Message = {
+            id: tempId,
+            sender: 'admin',
+            content,
+            created_at: new Date().toISOString(),
+            status: 'sending',
+        };
+
+        setMessages(prev => [...prev, optimisticMessage]);
+        setNewMessage('');
+        setMessageError('');
+        setIsSendingMessage(true);
+        
+        setTimeout(() => scrollToChatBottom(), 0);
+
+        try {
+            const response = await fetch(`/api/admin/messages/${bookingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ content }),
+            });
+
+             if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd wysyłania wiadomości.');
+            }
+            
+            const savedMessage = await response.json();
+            setMessages(prev => prev.map(msg => msg.id === tempId ? savedMessage : msg));
+
+        } catch (err) {
+            setMessageError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+            setMessages(prev => prev.map(msg => msg.id === tempId ? { ...msg, status: 'error' } : msg));
+        } finally {
+            setIsSendingMessage(false);
+        }
+    };
     
     // Stage Management Handlers
     const handleAddStageToBooking = async () => {
@@ -255,6 +331,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
     const formatDateForDisplay = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const formatDateForInput = (dateString: string) => dateString.split('T')[0];
+    const formatMessageDate = (dateString: string) => new Date(dateString).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const availableStagesToAdd = allStageTemplates.filter(template => !bookingStages.some(bs => bs.name === template.name));
 
     return (
@@ -344,6 +421,44 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                  <InfoItem label="Dodatkowe informacje od klienta" value={bookingData.additional_info} />
                              </>
                         )}
+                    </InfoCard>
+
+                    <InfoCard title="Komunikacja z Klientem" icon={<ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
+                         <div className="space-y-4 pr-2 max-h-96 overflow-y-auto">
+                            {messages.map(msg => (
+                                <div key={msg.id} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'admin' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
+                                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                        <p className={`text-xs mt-1 ${msg.sender === 'admin' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                            {msg.status === 'sending' && 'Wysyłanie...'}
+                                            {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
+                                            {!msg.status && formatMessageDate(msg.created_at)}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                            <div ref={chatEndRef} />
+                        </div>
+                         <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
+                            {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
+                            <textarea
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                placeholder="Napisz odpowiedź do klienta..."
+                                rows={3}
+                                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                                disabled={isSendingMessage}
+                            />
+                            <div className="text-right mt-2">
+                                <button
+                                    type="submit"
+                                    disabled={isSendingMessage || !newMessage.trim()}
+                                    className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto"
+                                >
+                                    {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
+                                </button>
+                            </div>
+                        </form>
                     </InfoCard>
 
                     <InfoCard title="Postęp Produkcji">
