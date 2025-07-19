@@ -161,6 +161,30 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     }, [messages]);
 
     const handleBack = () => navigateTo('adminDashboard');
+    
+    const handleDeleteBooking = async () => {
+        if (!window.confirm(`Czy na pewno chcesz usunąć rezerwację #${bookingId}? Tej operacji nie można cofnąć.`)) {
+            return;
+        }
+
+        setError('');
+        try {
+            const response = await fetch(`/api/admin/bookings/${bookingId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Nie udało się usunąć rezerwacji.');
+            }
+
+            navigateTo('adminDashboard');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        }
+    };
+
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         if (formData) {
@@ -374,19 +398,29 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 </button>
                             </>
                         ) : (
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50"
-                            >
-                                <PencilSquareIcon className="w-5 h-5" />
-                                Edytuj rezerwację
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => setIsEditing(true)}
+                                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50"
+                                >
+                                    <PencilSquareIcon className="w-5 h-5" />
+                                    Edytuj rezerwację
+                                </button>
+                                <button
+                                    onClick={handleDeleteBooking}
+                                    className="flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-800 transition-colors px-3 py-1.5 rounded-lg bg-red-50"
+                                >
+                                    <TrashIcon className="w-5 h-5" />
+                                    Usuń rezerwację
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
             </header>
             
             {updateStatus === 'error' && <p className="text-red-600 text-sm bg-red-100 p-3 rounded-lg mb-4">{updateError}</p>}
+            {error && <p className="text-red-600 text-sm bg-red-100 p-3 rounded-lg mb-4">{error}</p>}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
