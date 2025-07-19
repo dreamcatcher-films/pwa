@@ -1,15 +1,16 @@
 import React, { useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon } from '../components/Icons.tsx';
 import AdminBookingsPage from './AdminBookingsPage.tsx';
 import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
 import AdminGalleryPage from './AdminGalleryPage.tsx';
 import AdminPackagesPage from './AdminPackagesPage.tsx';
 import AdminDiscountsPage from './AdminDiscountsPage.tsx';
+import AdminStagesPage from './AdminStagesPage.tsx';
 
 // --- SHARED TYPES ---
-export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts';
+export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages';
 
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
@@ -53,6 +54,8 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                 return <AdminPackagesPage />;
             case 'discounts':
                 return <AdminDiscountsPage />;
+            case 'stages':
+                return <AdminStagesPage />;
             default:
                 return <AdminBookingsPage onViewDetails={onViewDetails} />;
         }
@@ -92,6 +95,9 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                     </TabButton>
                     <TabButton isActive={currentPage === 'discounts'} onClick={() => navigateTo('adminDiscounts')}>
                         <TicketIcon className="w-5 h-5" /> Kody Rabatowe
+                    </TabButton>
+                    <TabButton isActive={currentPage === 'stages'} onClick={() => navigateTo('adminStages')}>
+                        <ClipboardDocumentListIcon className="w-5 h-5" /> Etapy Produkcji
                     </TabButton>
                 </nav>
             </div>
