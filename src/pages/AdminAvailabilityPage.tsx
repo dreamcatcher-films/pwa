@@ -105,13 +105,9 @@ const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBoo
     }, []);
     
     const handleSelectEvent = useCallback((event: CalendarEvent) => {
-        if (event.resource?.type === 'booking' && event.resource.bookingId) {
-            onViewBookingDetails(event.resource.bookingId);
-        } else {
-             setSelectedEvent(event);
-             setIsModalOpen(true);
-        }
-    }, [onViewBookingDetails]);
+        setSelectedEvent(event);
+        setIsModalOpen(true);
+    }, []);
 
     const handleModalClose = () => {
         setIsModalOpen(false);
@@ -120,7 +116,7 @@ const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBoo
 
     const handleModalSave = () => {
         handleModalClose();
-        fetchEvents(); // Refresh events after save
+        fetchEvents(); // Refresh events after save or delete
     };
     
     if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
@@ -158,6 +154,7 @@ const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBoo
                     event={selectedEvent}
                     onClose={handleModalClose}
                     onSave={handleModalSave}
+                    onViewBookingDetails={onViewBookingDetails}
                 />
             )}
         </div>
