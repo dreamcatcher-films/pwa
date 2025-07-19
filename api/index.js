@@ -8,8 +8,8 @@ import { put, del } from '@vercel/blob';
 const { Pool, Client } = pg;
 const app = express();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-default-super-secret-key-for-dev';
-const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'your-default-super-secret-admin-key-for-dev';
+const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET;
 
 // --- Database Pool Configuration ---
 let pool;
@@ -299,6 +299,11 @@ initializeDatabase().catch(err => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); 
 app.use((req, res, next) => {
+    if (!JWT_SECRET || !ADMIN_JWT_SECRET) {
+        const errorMessage = 'FATAL ERROR: JWT secrets are not configured in environment variables.';
+        console.error(errorMessage);
+        return res.status(500).send(errorMessage);
+    }
     if (!pool) {
         const errorMessage = 'A server error occurred: Database connection is not configured.';
         console.error(errorMessage);
