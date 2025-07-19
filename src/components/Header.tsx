@@ -1,11 +1,78 @@
-import React from 'react';
-import { MenuIcon } from './Icons.tsx';
+
+import React, { useState, useEffect } from 'react';
+import { MenuIcon, BellIcon } from './Icons.tsx';
+import NotificationPanel from './NotificationPanel.tsx';
+import { Page } from '../App.tsx';
 
 interface HeaderProps {
     onMenuToggle: () => void;
+    onViewDetails: (bookingId: number) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuToggle, onViewDetails }) => {
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    const checkAdminStatus = () => {
+        const token = localStorage.getItem('adminAuthToken');
+        setIsAdmin(!!token);
+        if (!token) {
+            setUnreadCount(0);
+            setIsPanelOpen(false);
+        }
+    };
+
+    useEffect(() => {
+        checkAdminStatus();
+        const interval = setInterval(checkAdminStatus, 2000); // Check login status periodically
+        return () => clearInterval(interval);
+    }, []);
+
+    const fetchUnreadCount = async () => {
+        const token = localStorage.getItem('adminAuthToken');
+        if (!token) {
+            if (unreadCount > 0) setUnreadCount(0);
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/admin/notifications/count', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setUnreadCount(data.count);
+            } else {
+                setUnreadCount(0);
+            }
+        } catch (error) {
+            console.error('Failed to fetch notification count:', error);
+            setUnreadCount(0);
+        }
+    };
+
+    useEffect(() => {
+        if (isAdmin) {
+            fetchUnreadCount();
+            const interval = setInterval(fetchUnreadCount, 15000);
+            return () => clearInterval(interval);
+        }
+    }, [isAdmin]);
+
+    const handleNavigateToBooking = (bookingId: number) => {
+        onViewDetails(bookingId);
+        setIsPanelOpen(false);
+        setTimeout(fetchUnreadCount, 1200);
+    };
+
+    const handleBellClick = () => {
+      setIsPanelOpen(prev => !prev);
+      if(!isPanelOpen) {
+          fetchUnreadCount();
+      }
+    };
+
     return (
         <header className="bg-white shadow-md sticky top-0 z-40">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,7 +89,30 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                     <div className="text-xl font-bold text-slate-800">
                         Dreamcatcher Films
                     </div>
-                    <div className="w-8"></div>
+                    <div className="w-8 flex items-center justify-end">
+                        {isAdmin && (
+                            <div className="relative">
+                                <button
+                                    onClick={handleBellClick}
+                                    className="p-2 rounded-md text-slate-600 hover:text-slate-900 hover:bg-slate-100 relative"
+                                    aria-label="Powiadomienia"
+                                >
+                                    <BellIcon className="h-6 w-6" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold ring-2 ring-white">
+                                            {unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {isPanelOpen && (
+                                    <NotificationPanel 
+                                        onNavigateToBooking={handleNavigateToBooking}
+                                        onClose={() => setIsPanelOpen(false)}
+                                    />
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </header>
