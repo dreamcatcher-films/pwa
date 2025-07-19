@@ -1,6 +1,6 @@
 import React, { useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon } from '../components/Icons.tsx';
 import AdminBookingsPage from './AdminBookingsPage.tsx';
 import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
@@ -8,9 +8,10 @@ import AdminGalleryPage from './AdminGalleryPage.tsx';
 import AdminPackagesPage from './AdminPackagesPage.tsx';
 import AdminDiscountsPage from './AdminDiscountsPage.tsx';
 import AdminStagesPage from './AdminStagesPage.tsx';
+import AdminSettingsPage from './AdminSettingsPage.tsx';
 
 // --- SHARED TYPES ---
-export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages';
+export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages' | 'settings';
 
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
@@ -56,6 +57,8 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                 return <AdminDiscountsPage />;
             case 'stages':
                 return <AdminStagesPage />;
+            case 'settings':
+                return <AdminSettingsPage />;
             default:
                 return <AdminBookingsPage onViewDetails={onViewDetails} />;
         }
@@ -98,6 +101,9 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                     </TabButton>
                     <TabButton isActive={currentPage === 'stages'} onClick={() => navigateTo('adminStages')}>
                         <ClipboardDocumentListIcon className="w-5 h-5" /> Etapy Produkcji
+                    </TabButton>
+                     <TabButton isActive={currentPage === 'settings'} onClick={() => navigateTo('adminSettings')}>
+                        <CircleStackIcon className="w-5 h-5" /> Ustawienia
                     </TabButton>
                 </nav>
             </div>
