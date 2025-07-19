@@ -1,6 +1,6 @@
 import React, { useEffect, useState, FC } from 'react';
 import { formatCurrency } from '../utils.ts';
-import { LoadingSpinner, InboxStackIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, TrashIcon } from '../components/Icons.tsx';
 
 interface AdminBookingsPageProps {
     onViewDetails: (bookingId: number) => void;
@@ -55,6 +55,32 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
         fetchBookings();
     }, []);
 
+    const handleDeleteBooking = async (bookingId: number) => {
+        if (!window.confirm(`Czy na pewno chcesz usunąć rezerwację #${bookingId}? Tej operacji nie można cofnąć.`)) {
+            return;
+        }
+
+        const token = localStorage.getItem('adminAuthToken');
+        setError('');
+
+        try {
+            const response = await fetch(`/api/admin/bookings/${bookingId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Nie udało się usunąć rezerwacji.');
+            }
+
+            setBookings(prev => prev.filter(b => b.id !== bookingId));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        }
+    };
+
+
     const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
     
     if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
@@ -78,7 +104,7 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
                                     <th scope="col" className="px-6 py-3">Data ślubu</th>
                                     <th scope="col" className="px-6 py-3">Cena</th>
                                     <th scope="col" className="px-6 py-3">Data rezerwacji</th>
-                                    <th scope="col" className="px-6 py-3"><span className="sr-only">Akcje</span></th>
+                                    <th scope="col" className="px-6 py-3 text-right">Akcje</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -89,7 +115,14 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
                                         <td className="px-6 py-4">{booking.wedding_date ? formatDate(booking.wedding_date) : '-'}</td>
                                         <td className="px-6 py-4 font-semibold">{formatCurrency(Number(booking.total_price))}</td>
                                         <td className="px-6 py-4">{formatDate(booking.created_at)}</td>
-                                        <td className="px-6 py-4 text-right"><button onClick={() => onViewDetails(booking.id)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button></td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => onViewDetails(booking.id)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button>
+                                                <button onClick={() => handleDeleteBooking(booking.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50" aria-label="Usuń rezerwację">
+                                                    <TrashIcon className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
