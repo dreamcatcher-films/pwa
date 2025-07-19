@@ -85,6 +85,8 @@ const initializeDatabase = async () => {
           phone_number VARCHAR(255) NOT NULL,
           additional_info TEXT,
           discount_code VARCHAR(255),
+          payment_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'partial', 'paid'
+          amount_paid NUMERIC(10, 2) DEFAULT 0.00,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -319,7 +321,7 @@ const authenticateToken = (req, res, next) => {
 
     if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
         next();
@@ -332,7 +334,7 @@ const authenticateAdminToken = (req, res, next) => {
 
     if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, ADMIN_JWT_SECRET, (err, admin) => {
+    jwt.verify(token, process.env.ADMIN_JWT_SECRET, (err, admin) => {
         if (err) return res.sendStatus(403);
         req.admin = admin;
         next();
@@ -725,6 +727,28 @@ app.patch('/api/admin/bookings/:id', authenticateAdminToken, async (req, res) =>
     } catch (err) {
         console.error(`Błąd podczas aktualizacji rezerwacji (id: ${id}):`, err.stack);
         res.status(500).send('A server error occurred while updating booking.');
+    }
+});
+
+app.patch('/api/admin/bookings/:id/payment', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    const { payment_status, amount_paid } = req.body;
+
+    try {
+        const result = await pool.query(
+            `UPDATE bookings
+             SET payment_status = $1, amount_paid = $2
+             WHERE id = $3
+             RETURNING id, payment_status, amount_paid`,
+            [payment_status, amount_paid, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono rezerwacji do zaktualizowania.' });
+        }
+        res.json({ message: 'Status płatności został zaktualizowany.', payment_details: result.rows[0] });
+    } catch (err) {
+        console.error(`Błąd podczas aktualizacji płatności (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while updating payment.');
     }
 });
 
