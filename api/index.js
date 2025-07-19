@@ -21,9 +21,7 @@ let pool;
 try {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    }
+    ssl: true // Use `ssl: true` for Supabase
   });
 
   pool.on('error', (err, client) => {
@@ -333,9 +331,7 @@ app.get('/api/test-db', async (req, res) => {
     
     const testClient = new Client({
         connectionString: process.env.DATABASE_URL,
-        ssl: {
-            rejectUnauthorized: false
-        }
+        ssl: true // Use `ssl: true` for Supabase
     });
 
     try {
@@ -965,27 +961,115 @@ app.use((err, req, res, next) => {
 });
 
 
-export default app;--- START OF FILE public/favicon.svg ---
+export default app;--- START OF FILE src/App.tsx ---
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <path d="M50,5A45,45,0,1,1,5,50,45,45,0,0,1,50,5" fill="#6366f1"/>
-  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
-</svg>
---- START OF FILE public/apple-touch-icon.svg ---
+import React, { useState, useCallback, FC, ReactNode } from 'react';
+import HomePage from './pages/HomePage.tsx';
+import CalculatorPage from './pages/CalculatorPage.tsx';
+import Header from './components/Header.tsx';
+import SideMenu from './components/SideMenu.tsx';
+import LoginPage from './pages/LoginPage.tsx';
+import ClientPanelPage from './pages/ClientPanelPage.tsx';
+import AdminLoginPage from './pages/AdminLoginPage.tsx';
+import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
+import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
+import GalleryPage from './pages/GalleryPage.tsx';
+import AdminBookingsPage from './pages/AdminBookingsPage.tsx';
+import AdminAccessKeysPage from './pages/AdminAccessKeysPage.tsx';
+import AdminAvailabilityPage from './pages/AdminAvailabilityPage.tsx';
+import AdminGalleryPage from './pages/AdminGalleryPage.tsx';
+import AdminPackagesPage from './pages/AdminPackagesPage.tsx';
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="20" fill="#6366f1"/>
-  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
-</svg>
---- START OF FILE public/icon-192.svg ---
+export type Page = 
+    'home' | 'calculator' | 'gallery' | 'login' | 'clientPanel' | 
+    'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
+    'adminBookings' | 'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages';
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" fill="#6366f1"/>
-  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
-</svg>
---- START OF FILE public/icon-512.svg ---
 
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" fill="#6366f1"/>
-  <text x="50" y="68" font-size="50" font-family="Arial, sans-serif" fill="white" text-anchor="middle" font-weight="bold">D</text>
-</svg>
+const App: FC = () => {
+    const [currentPage, setCurrentPage] = useState<Page>('home');
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [viewingBookingId, setViewingBookingId] = useState<number | null>(null);
+    const [adminActiveTab, setAdminActiveTab] = useState<string>('bookings');
+
+
+    const navigateTo = useCallback((page: Page, options?: { adminTab?: string }) => {
+        setCurrentPage(page);
+        setIsMenuOpen(false);
+        if (page !== 'adminBookingDetails') {
+            setViewingBookingId(null);
+        }
+        if (options?.adminTab) {
+            setAdminActiveTab(options.adminTab);
+        }
+    }, []);
+
+    const handleViewBookingDetails = useCallback((bookingId: number) => {
+        setViewingBookingId(bookingId);
+        navigateTo('adminBookingDetails');
+    }, [navigateTo]);
+
+    const renderAdminPage = (): ReactNode => {
+        switch (adminActiveTab) {
+            case 'bookings': return <AdminBookingsPage onViewDetails={handleViewBookingDetails} />;
+            case 'accessKeys': return <AdminAccessKeysPage />;
+            case 'availability': return <AdminAvailabilityPage onViewBookingDetails={handleViewBookingDetails}/>;
+            case 'gallery': return <AdminGalleryPage />;
+            case 'packages': return <AdminPackagesPage />;
+            default: return <AdminBookingsPage onViewDetails={handleViewBookingDetails} />;
+        }
+    };
+
+    const renderCurrentPage = (): ReactNode => {
+        switch (currentPage) {
+            case 'home':
+                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
+            case 'calculator':
+                return <CalculatorPage navigateTo={navigateTo} />;
+            case 'gallery':
+                return <GalleryPage />;
+            case 'login':
+                return <LoginPage navigateTo={navigateTo} />;
+            case 'clientPanel':
+                return <ClientPanelPage navigateTo={navigateTo} />;
+            case 'adminLogin':
+                return <AdminLoginPage navigateTo={navigateTo} />;
+            case 'adminDashboard':
+                return (
+                    <AdminDashboardPage 
+                        navigateTo={navigateTo} 
+                        activeTab={adminActiveTab} 
+                        setActiveTab={setAdminActiveTab}
+                    >
+                        {renderAdminPage()}
+                    </AdminDashboardPage>
+                );
+            case 'adminBookingDetails':
+                return viewingBookingId 
+                    ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
+                    : <AdminDashboardPage 
+                        navigateTo={navigateTo} 
+                        activeTab="bookings" 
+                        setActiveTab={setAdminActiveTab}
+                      >
+                         <AdminBookingsPage onViewDetails={handleViewBookingDetails} />
+                      </AdminDashboardPage>;
+            default:
+                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 font-sans">
+            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
+            <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
+            <main className="p-4 sm:p-6 lg:p-8">
+                <div className="max-w-7xl mx-auto">
+                    {renderCurrentPage()}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default App;
