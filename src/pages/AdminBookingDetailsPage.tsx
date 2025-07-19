@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon } from '../components/Icons.tsx';
@@ -139,7 +140,20 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     };
 
     useEffect(() => {
+        const markMessagesAsRead = async () => {
+            if (!token) return;
+            try {
+                await fetch(`/api/admin/bookings/${bookingId}/messages/mark-as-read`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+            } catch (err) {
+                console.error('Failed to mark messages as read:', err);
+            }
+        };
+
         fetchAllData();
+        markMessagesAsRead();
     }, [navigateTo, bookingId, token]);
 
     useEffect(() => {
