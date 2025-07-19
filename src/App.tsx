@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -75,7 +76,10 @@ const App = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
-            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
+            <Header
+                onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
+                onViewDetails={handleViewBookingDetails}
+            />
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
             <main className="p-4 sm:p-6 lg:p-8">
                 <div className="max-w-7xl mx-auto">
