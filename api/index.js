@@ -8,9 +8,6 @@ import { put, del } from '@vercel/blob';
 const { Pool, Client } = pg;
 const app = express();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET;
-
 // --- Database Pool Configuration ---
 let pool;
 if (process.env.DATABASE_URL) {
@@ -85,11 +82,13 @@ const initializeDatabase = async () => {
           phone_number VARCHAR(255) NOT NULL,
           additional_info TEXT,
           discount_code VARCHAR(255),
-          payment_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'partial', 'paid'
-          amount_paid NUMERIC(10, 2) DEFAULT 0.00,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Smartly alter table to add columns if they don't exist, preventing errors on redeploy.
+    await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending';`);
+    await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10, 2) DEFAULT 0.00;`);
     
      await client.query(`
       CREATE TABLE IF NOT EXISTS admins (
@@ -301,7 +300,7 @@ initializeDatabase().catch(err => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); 
 app.use((req, res, next) => {
-    if (!JWT_SECRET || !ADMIN_JWT_SECRET) {
+    if (!process.env.JWT_SECRET || !process.env.ADMIN_JWT_SECRET) {
         const errorMessage = 'FATAL ERROR: JWT secrets are not configured in environment variables.';
         console.error(errorMessage);
         return res.status(500).send(errorMessage);
@@ -560,7 +559,7 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
         }
         const payload = { user: { clientId: booking.client_id, bookingId: booking.id } };
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' });
         res.json({ token });
     } catch (err) {
         console.error('Login error:', err.stack);
@@ -660,7 +659,7 @@ app.post('/api/admin/login', async (req, res) => {
             return res.status(401).json({ message: 'Nieprawidłowy email lub hasło.' });
         }
         const payload = { admin: { id: admin.id, email: admin.email } };
-        const token = jwt.sign(payload, ADMIN_JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(payload, process.env.ADMIN_JWT_SECRET, { expiresIn: '1d' });
         res.json({ token });
     } catch(err) {
         console.error('Admin login error:', err.stack);
@@ -1229,4 +1228,11 @@ app.use((err, req, res, next) => {
 });
 
 
-export default app;
+export default app;--- START OF FILE public/favicon.svg ---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>
+--- START OF FILE public/apple-touch-icon.svg ---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>
+--- START OF FILE public/icon-192.svg ---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>
+--- START OF FILE public/icon-512.svg ---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>
