@@ -156,7 +156,28 @@ const initializeDatabase = async () => {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS production_stages (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        sort_order INT DEFAULT 0
+      );
+    `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS booking_stages (
+        id SERIAL PRIMARY KEY,
+        booking_id INT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        stage_id INT NOT NULL REFERENCES production_stages(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
+        notes TEXT,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        sort_order INT DEFAULT 0,
+        UNIQUE(booking_id, stage_id)
+      );
+    `);
 
     // Add a sample key if it doesn't exist for testing
     const resKeys = await client.query("SELECT * FROM access_keys WHERE key = '1234'");
@@ -531,7 +552,7 @@ app.post('/api/login', async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
         }
-        const payload = { user: { clientId: booking.client_id } };
+        const payload = { user: { clientId: booking.client_id, bookingId: booking.id } };
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
         res.json({ token });
     } catch (err) {
@@ -574,6 +595,44 @@ app.patch('/api/my-booking', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('Error updating booking data:', err.stack);
         res.status(500).send('A server error occurred while updating data.');
+    }
+});
+
+app.get('/api/booking-stages', authenticateToken, async (req, res) => {
+    try {
+        const { bookingId } = req.user.user;
+        const result = await pool.query(`
+            SELECT bs.id, bs.status, bs.completed_at, ps.name, ps.description
+            FROM booking_stages bs
+            JOIN production_stages ps ON bs.stage_id = ps.id
+            WHERE bs.booking_id = $1
+            ORDER BY bs.sort_order ASC, ps.sort_order ASC
+        `, [bookingId]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching booking stages:', err.stack);
+        res.status(500).send('A server error occurred while fetching stages.');
+    }
+});
+
+app.patch('/api/booking-stages/:id/approve', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { bookingId } = req.user.user;
+    try {
+        const result = await pool.query(
+            `UPDATE booking_stages 
+             SET status = 'completed', completed_at = CURRENT_TIMESTAMP 
+             WHERE id = $1 AND booking_id = $2 AND status = 'awaiting_approval'
+             RETURNING *`,
+            [id, bookingId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono etapu do zatwierdzenia lub nie wymaga on akcji.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(`Error approving stage (id: ${id}):`, err.stack);
+        res.status(500).send('A server error occurred while approving stage.');
     }
 });
 
@@ -1042,6 +1101,95 @@ app.delete('/api/admin/discounts/:id', authenticateAdminToken, async (req, res) 
     } catch (err) {
         console.error(`Error deleting discount code (id: ${id}):`, err.stack);
         res.status(500).send('A server error occurred while deleting code.');
+    }
+});
+
+// --- ADMIN PRODUCTION STAGES ENDPOINTS ---
+app.get('/api/admin/stages', authenticateAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM production_stages ORDER BY sort_order ASC, name ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching stages:', err.stack);
+        res.status(500).send('A server error occurred while fetching stages.');
+    }
+});
+
+app.post('/api/admin/stages', authenticateAdminToken, async (req, res) => {
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ message: 'Nazwa etapu jest wymagana.' });
+    try {
+        const result = await pool.query('INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *', [name, description]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Error creating stage:', err.stack);
+        res.status(500).send('A server error occurred while creating stage.');
+    }
+});
+
+app.delete('/api/admin/stages/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM production_stages WHERE id = $1', [id]);
+        res.status(204).send();
+    } catch (err) {
+        console.error('Error deleting stage:', err.stack);
+        res.status(500).send('A server error occurred while deleting stage.');
+    }
+});
+
+app.get('/api/admin/booking-stages/:bookingId', authenticateAdminToken, async (req, res) => {
+    const { bookingId } = req.params;
+    try {
+        const result = await pool.query(`
+            SELECT bs.id, bs.status, ps.name, ps.description
+            FROM booking_stages bs
+            JOIN production_stages ps ON bs.stage_id = ps.id
+            WHERE bs.booking_id = $1
+            ORDER BY bs.sort_order ASC, ps.sort_order ASC
+        `, [bookingId]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching booking stages for admin:', err.stack);
+        res.status(500).send('A server error occurred while fetching stages.');
+    }
+});
+
+app.post('/api/admin/booking-stages/:bookingId', authenticateAdminToken, async (req, res) => {
+    const { bookingId } = req.params;
+    const { stage_id } = req.body;
+    try {
+        const result = await pool.query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2) RETURNING *', [bookingId, stage_id]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Error adding stage to booking:', err.stack);
+        if (err.code === '23505') {
+            return res.status(409).json({ message: 'Ten etap jest już dodany do projektu.' });
+        }
+        res.status(500).send('A server error occurred while adding stage.');
+    }
+});
+
+app.patch('/api/admin/booking-stages/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+        const result = await pool.query('UPDATE booking_stages SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Error updating booking stage status:', err.stack);
+        res.status(500).send('A server error occurred while updating stage status.');
+    }
+});
+
+app.delete('/api/admin/booking-stages/:id', authenticateAdminToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM booking_stages WHERE id = $1', [id]);
+        res.status(204).send();
+    } catch (err) {
+        console.error('Error removing stage from booking:', err.stack);
+        res.status(500).send('A server error occurred while removing stage.');
     }
 });
 
