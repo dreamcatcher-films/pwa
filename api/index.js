@@ -385,27 +385,28 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             );
         `);
 
-        // --- MIGRATION: Add is_read_by_admin column to messages if it doesn't exist ---
-        // This is necessary to update existing installations that were created before this feature.
-        const columnCheck = await client.query(`
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_schema = 'public' 
-            AND table_name = 'messages' 
-            AND column_name = 'is_read_by_admin'
-        `);
-
-        if (columnCheck.rows.length === 0) {
+        // --- MIGRATION: Add columns if they don't exist ---
+        const messagesColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_read_by_admin'`);
+        if (messagesColumnCheck.rows.length === 0) {
             await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
             console.log("MIGRATION APPLIED: Added 'is_read_by_admin' column to 'messages' table.");
         }
 
-
+        const adminsColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'admins' AND column_name = 'notification_email'`);
+        if (adminsColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE admins ADD COLUMN notification_email VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
+        }
+        
         // Seed default admin
         const adminRes = await client.query('SELECT * FROM admins');
         if (adminRes.rows.length === 0) {
             const adminPassword = 'adminpassword';
             const hashedPassword = await bcrypt.hash(adminPassword, 10);
-            await client.query('INSERT INTO admins (email, password_hash) VALUES ($1, $2)', ['admin@dreamcatcher.com', hashedPassword]);
+            await client.query('INSERT INTO admins (email, password_hash, notification_email) VALUES ($1, $2, $3)', ['admin@dreamcatcher.com', hashedPassword, 'admin@dreamcatcher.com']);
+        } else {
+            // Ensure existing admin has a default notification email if it's NULL
+            await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
         }
         
         // Seed test booking
@@ -880,12 +881,15 @@ app.post('/api/messages', verifyToken, async (req, res) => {
         );
 
         // --- Email Notification Simulation ---
+        const adminRes = await pool.query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+        const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : 'admin@dreamcatcher.com';
+
         const bookingRes = await pool.query('SELECT bride_name FROM bookings WHERE id = $1', [req.user.bookingId]);
         const clientName = bookingRes.rows.length > 0 ? bookingRes.rows[0].bride_name : 'Klient';
         console.log(`
             ==============================================
             SIMULATING EMAIL NOTIFICATION TO ADMIN
-            To: admin@dreamcatcher.com
+            To: ${adminEmail}
             From: system@dreamcatcher.com
             Subject: Nowa wiadomość od ${clientName}
             ---
@@ -943,6 +947,27 @@ app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminTok
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Error marking messages as read: ${err.message}`);
+    }
+});
+
+app.get('/api/admin/settings', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT notification_email FROM admins WHERE id = $1', [req.user.adminId]);
+        if (result.rows.length === 0) return res.status(404).send('Admin not found.');
+        res.json({ email: result.rows[0].notification_email });
+    } catch (err) {
+        res.status(500).send(`Error fetching admin settings: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).send('Email is required.');
+        await pool.query('UPDATE admins SET notification_email = $1 WHERE id = $2', [email, req.user.adminId]);
+        res.status(200).json({ message: 'Notification email updated successfully.' });
+    } catch (err) {
+        res.status(500).send(`Error updating admin settings: ${err.message}`);
     }
 });
 
