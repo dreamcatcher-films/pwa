@@ -451,6 +451,19 @@ app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     }
 });
 
+app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query('DELETE FROM bookings WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Rezerwacja nie znaleziona.' });
+        }
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Błąd podczas usuwania rezerwacji: ${err.message}`);
+    }
+});
+
 app.patch('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     try {
         const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, locations, schedule, additional_info } = req.body;
