@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
@@ -29,6 +29,8 @@ interface BookingData {
     discount_code: string | null;
     access_key: string;
     created_at: string;
+    payment_status: 'pending' | 'partial' | 'paid';
+    amount_paid: string;
 }
 
 interface ProductionStageTemplate {
@@ -42,6 +44,11 @@ interface BookingStage {
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed';
 }
 
+interface PaymentData {
+    payment_status: 'pending' | 'partial' | 'paid';
+    amount_paid: string;
+}
+
 const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navigateTo, bookingId }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +58,10 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const [formData, setFormData] = useState<BookingData | null>(null);
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [updateError, setUpdateError] = useState('');
+    
+    // Payment state
+    const [paymentData, setPaymentData] = useState<PaymentData>({ payment_status: 'pending', amount_paid: '0' });
+    const [paymentUpdateStatus, setPaymentUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     
     // Production stages state
     const [bookingStages, setBookingStages] = useState<BookingStage[]>([]);
@@ -89,6 +100,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
                 setBookingData(bookingData);
                 setFormData(bookingData);
+                setPaymentData({ payment_status: bookingData.payment_status, amount_paid: bookingData.amount_paid });
                 setBookingStages(bookingStagesData);
                 setAllStageTemplates(allStagesData);
 
@@ -154,6 +166,30 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             setUpdateStatus('error');
         }
     };
+
+    const handlePaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setPaymentData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSavePayment = async () => {
+        setPaymentUpdateStatus('loading');
+        try {
+            const response = await fetch(`/api/admin/bookings/${bookingId}/payment`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(paymentData),
+            });
+            if (!response.ok) throw new Error(await response.text() || 'Błąd zapisu płatności.');
+            const result = await response.json();
+            setBookingData(prev => prev ? { ...prev, ...result.payment_details } : null);
+            setPaymentData(result.payment_details);
+            setPaymentUpdateStatus('success');
+            setTimeout(() => setPaymentUpdateStatus('idle'), 2000);
+        } catch (err) {
+            setPaymentUpdateStatus('error');
+        }
+    };
     
     // Stage Management Handlers
     const handleAddStageToBooking = async () => {
@@ -165,8 +201,6 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                 body: JSON.stringify({ stage_id: selectedStageToAdd })
             });
             if (!response.ok) throw new Error(await response.text() || 'Błąd dodawania etapu.');
-            const newStage = await response.json();
-            // Refetch to get correct name
             const allStagesRes = await fetch(`/api/admin/booking-stages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } });
             const bookingStagesData = await allStagesRes.json();
             setBookingStages(bookingStagesData);
@@ -265,7 +299,6 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    {/* INFO CARDS - UNCHANGED */}
                     <InfoCard title="Dane Klienta" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         {isEditing ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -365,6 +398,47 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 <div className="flex justify-between items-baseline">
                                     <p className="text-lg font-bold text-slate-900">Suma</p>
                                     <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(bookingData.total_price))}</p>
+                                </div>
+                            </div>
+                         </InfoCard>
+
+                         <InfoCard title="Zarządzanie Płatnościami" icon={<CurrencyDollarIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="payment_status" className="block text-sm font-medium text-slate-700">Status płatności</label>
+                                    <select
+                                        id="payment_status"
+                                        name="payment_status"
+                                        value={paymentData.payment_status}
+                                        onChange={handlePaymentChange}
+                                        className="mt-1 block w-full rounded-md border-slate-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                        <option value="pending">Oczekuje na płatność</option>
+                                        <option value="partial">Częściowo opłacone</option>
+                                        <option value="paid">Opłacono w całości</option>
+                                    </select>
+                                </div>
+                                <div>
+                                     <label htmlFor="amount_paid" className="block text-sm font-medium text-slate-700">Wpłacona kwota (PLN)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        id="amount_paid"
+                                        name="amount_paid"
+                                        value={paymentData.amount_paid}
+                                        onChange={handlePaymentChange}
+                                        className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    />
+                                </div>
+                                 <div className="border-t pt-4">
+                                    <InfoItem label="Pozostało do zapłaty" value={formatCurrency(Number(bookingData.total_price) - Number(paymentData.amount_paid))} />
+                                </div>
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                     {paymentUpdateStatus === 'success' && <div className="flex items-center gap-2 text-green-600 mr-auto text-sm"><CheckCircleIcon className="w-5 h-5"/> Zapisano!</div>}
+                                     {paymentUpdateStatus === 'error' && <div className="flex items-center gap-2 text-red-600 mr-auto text-sm">Błąd zapisu</div>}
+                                    <button onClick={handleSavePayment} disabled={paymentUpdateStatus === 'loading'} className="bg-indigo-600 w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex justify-center items-center">
+                                         {paymentUpdateStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz płatność'}
+                                    </button>
                                 </div>
                             </div>
                          </InfoCard>
