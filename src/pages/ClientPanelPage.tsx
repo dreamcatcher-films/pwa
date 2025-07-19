@@ -1,6 +1,6 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -36,8 +36,17 @@ interface EditableBookingData {
     additional_info: string;
 }
 
+interface ProductionStage {
+    id: number;
+    name: string;
+    description: string;
+    status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed';
+    completed_at: string | null;
+}
+
 const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
+    const [stages, setStages] = useState<ProductionStage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -46,47 +55,52 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [updateError, setUpdateError] = useState('');
 
+    const token = localStorage.getItem('authToken');
+
+    const fetchAllData = async () => {
+        if (!token) {
+            navigateTo('login');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const [bookingRes, stagesRes] = await Promise.all([
+                fetch('/api/my-booking', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/booking-stages', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+
+            if (bookingRes.status === 401 || bookingRes.status === 403) {
+                 localStorage.removeItem('authToken');
+                 navigateTo('login');
+                 return;
+            }
+
+            if (!bookingRes.ok) throw new Error(await bookingRes.text() || 'Błąd pobierania rezerwacji.');
+            if (!stagesRes.ok) throw new Error(await stagesRes.text() || 'Błąd pobierania etapów.');
+            
+            const bookingData = await bookingRes.json();
+            const stagesData = await stagesRes.json();
+            
+            setBookingData(bookingData);
+            setStages(stagesData);
+            setFormData({
+                bride_address: bookingData.bride_address || '',
+                groom_address: bookingData.groom_address || '',
+                locations: bookingData.locations || '',
+                schedule: bookingData.schedule || '',
+                additional_info: bookingData.additional_info || '',
+            });
+
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
     useEffect(() => {
-        const fetchBookingData = async () => {
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                navigateTo('login');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/my-booking', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                if (response.status === 401 || response.status === 403) {
-                     localStorage.removeItem('authToken');
-                     navigateTo('login');
-                     return;
-                }
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || 'Nie udało się pobrać danych rezerwacji.');
-                }
-                const data = await response.json();
-                setBookingData(data);
-                setFormData({
-                    bride_address: data.bride_address || '',
-                    groom_address: data.groom_address || '',
-                    locations: data.locations || '',
-                    schedule: data.schedule || '',
-                    additional_info: data.additional_info || '',
-                });
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchBookingData();
-    }, [navigateTo]);
+        fetchAllData();
+    }, [navigateTo, token]);
     
     const handleLogout = () => {
         localStorage.removeItem('authToken');
@@ -115,7 +129,6 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const handleSave = async () => {
         setUpdateStatus('loading');
         setUpdateError('');
-        const token = localStorage.getItem('authToken');
 
         try {
             const response = await fetch('/api/my-booking', {
@@ -141,6 +154,22 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         } catch(err) {
             setUpdateError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
             setUpdateStatus('error');
+        }
+    };
+    
+    const handleApproveStage = async (stageId: number) => {
+        try {
+            const response = await fetch(`/api/booking-stages/${stageId}/approve`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || 'Błąd zatwierdzania etapu.');
+            }
+            await fetchAllData(); // Refresh all data
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
         }
     };
 
@@ -174,6 +203,14 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         </button>
     );
 
+    const getStatusIcon = (status: ProductionStage['status']) => {
+        switch (status) {
+            case 'completed': return <CheckBadgeIcon className="w-6 h-6 text-green-500" />;
+            case 'awaiting_approval': return <CheckCircleIcon className="w-6 h-6 text-yellow-500" />;
+            default: return <ClockIcon className="w-6 h-6 text-slate-400" />;
+        }
+    };
+
     return (
         <div>
              <header className="flex flex-col sm:flex-row justify-between items-center mb-10">
@@ -188,6 +225,32 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                     Wyloguj się
                 </button>
             </header>
+
+            {stages.length > 0 && (
+                 <section className="mb-8">
+                     <h2 className="text-2xl font-bold text-slate-800 mb-4">Postęp Produkcji</h2>
+                    <div className="bg-white p-6 rounded-2xl shadow-md">
+                        <ol className="relative border-l border-slate-200">
+                            {stages.map((stage, index) => (
+                                <li key={stage.id} className="mb-10 ml-8">
+                                    <span className="absolute flex items-center justify-center w-8 h-8 bg-slate-100 rounded-full -left-4 ring-8 ring-white">
+                                        {getStatusIcon(stage.status)}
+                                    </span>
+                                    <h3 className="flex items-center mb-1 text-lg font-semibold text-slate-900">{stage.name}</h3>
+                                    {stage.completed_at && <time className="block mb-2 text-sm font-normal leading-none text-slate-400">Zakończono: {formatDate(stage.completed_at)}</time>}
+                                    <p className="mb-4 text-base font-normal text-slate-500">{stage.description}</p>
+                                     {stage.status === 'awaiting_approval' && (
+                                        <button onClick={() => handleApproveStage(stage.id)} className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-lg hover:bg-green-700 focus:z-10 focus:ring-4 focus:outline-none focus:ring-green-200">
+                                            <CheckCircleIcon className="w-4 h-4 mr-2" />
+                                            Zatwierdź etap
+                                        </button>
+                                    )}
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
+                </section>
+            )}
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
