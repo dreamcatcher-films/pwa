@@ -10,6 +10,7 @@ import AdminLoginPage from './pages/AdminLoginPage.tsx';
 import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
 import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 import GalleryPage from './pages/GalleryPage.tsx';
+import InstallPrompt from './components/InstallPrompt.tsx';
 
 export type Page = 
   'home' | 'calculator' | 'gallery' | 
@@ -86,6 +87,7 @@ const App = () => {
                     {renderCurrentPage()}
                 </div>
             </main>
+            <InstallPrompt />
         </div>
     );
 };
