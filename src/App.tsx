@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -11,9 +12,10 @@ import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
 import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 import GalleryPage from './pages/GalleryPage.tsx';
 import InstallPrompt from './components/InstallPrompt.tsx';
+import ContactPage from './pages/ContactPage.tsx';
 
 export type Page = 
-  'home' | 'calculator' | 'gallery' | 
+  'home' | 'calculator' | 'gallery' | 'contact' |
   'login' | 'clientPanel' | 
   'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
   'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings';
@@ -44,6 +46,8 @@ const App = () => {
                 return <CalculatorPage navigateTo={navigateTo} />;
             case 'gallery':
                 return <GalleryPage />;
+            case 'contact':
+                return <ContactPage />;
             case 'login':
                 return <LoginPage navigateTo={navigateTo} />;
             case 'clientPanel':
