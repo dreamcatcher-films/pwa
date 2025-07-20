@@ -265,6 +265,22 @@ app.get('/api/gallery', async (req, res) => {
     }
 });
 
+app.get('/api/contact-details', async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT key, value FROM app_settings WHERE key IN ($1, $2, $3, $4)', [
+            'contact_email', 'contact_phone', 'contact_address', 'google_maps_api_key'
+        ]);
+        const settings = result.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (err) {
+        res.status(500).send(`Error fetching contact details: ${err.message}`);
+    }
+});
+
+
 // Client Login & Panel
 app.post('/api/login', async (req, res) => {
     try {
@@ -360,7 +376,8 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 discount_code VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 payment_status VARCHAR(50) DEFAULT 'pending',
-                amount_paid NUMERIC(10, 2) DEFAULT 0.00
+                amount_paid NUMERIC(10, 2) DEFAULT 0.00,
+                payment_intent_id VARCHAR(255)
             );
 
             CREATE TABLE IF NOT EXISTS admins (
@@ -444,6 +461,11 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 is_read_by_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key VARCHAR(255) PRIMARY KEY,
+                value TEXT
+            );
         `);
 
         // --- MIGRATION: Add columns if they don't exist ---
@@ -457,6 +479,12 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
         if (adminsColumnCheck.rows.length === 0) {
             await client.query(`ALTER TABLE admins ADD COLUMN notification_email VARCHAR(255);`);
             console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
+        }
+        
+         const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
+        if (bookingsPaymentIntentColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE bookings ADD COLUMN payment_intent_id VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Added 'payment_intent_id' column to 'bookings' table.");
         }
         
         // Seed default admin
@@ -479,6 +507,13 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
               ['CONTACTFORM', fakePassword]
             );
         }
+
+        // Seed app_settings
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
+
 
         await client.query('COMMIT');
         res.status(200).json({ message: 'Database schema initialized and migrated successfully.' });
@@ -1058,6 +1093,43 @@ app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
         res.status(500).send(`Error updating admin settings: ${err.message}`);
     }
 });
+
+app.get('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT key, value FROM app_settings');
+        const settings = result.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (err) {
+        res.status(500).send(`Error fetching contact settings: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const settingsToUpdate = req.body;
+        for (const key in settingsToUpdate) {
+            if (Object.prototype.hasOwnProperty.call(settingsToUpdate, key)) {
+                await client.query(
+                    'UPDATE app_settings SET value = $1 WHERE key = $2',
+                    [settingsToUpdate[key], key]
+                );
+            }
+        }
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Contact settings updated successfully.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).send(`Error updating contact settings: ${err.message}`);
+    } finally {
+        client.release();
+    }
+});
+
 
 
 // Export the app for Vercel
