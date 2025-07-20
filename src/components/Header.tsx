@@ -86,8 +86,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, onViewDetails }) => {
                             <MenuIcon className="h-6 w-6" />
                         </button>
                     </div>
-                    <div className="text-xl font-bold text-slate-800">
-                        Dreamcatcher Films
+                    <div className="font-cinzel text-2xl font-semibold text-slate-800 tracking-wider">
+                        DreamCatcher Film
                     </div>
                     <div className="w-8 flex items-center justify-end">
                         {isAdmin && (
