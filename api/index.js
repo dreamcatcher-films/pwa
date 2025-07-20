@@ -468,15 +468,8 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             );
         `);
 
-        // --- MIGRATION: Add columns if they don't exist ---
-        const bookingsClientIdColumnCheck = await client.query(`
-            SELECT character_maximum_length 
-            FROM information_schema.columns 
-            WHERE table_schema = 'public' 
-            AND table_name = 'bookings' 
-            AND column_name = 'client_id'
-        `);
-
+        // --- MIGRATIONS ---
+        const bookingsClientIdColumnCheck = await client.query(`SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'client_id'`);
         if (bookingsClientIdColumnCheck.rows.length > 0 && bookingsClientIdColumnCheck.rows[0].character_maximum_length < 255) {
             await client.query(`ALTER TABLE bookings ALTER COLUMN client_id TYPE VARCHAR(255);`);
             console.log("MIGRATION APPLIED: Expanded 'client_id' column in 'bookings' table to VARCHAR(255).");
@@ -494,24 +487,28 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
         }
         
-         const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
+        const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
         if (bookingsPaymentIntentColumnCheck.rows.length === 0) {
             await client.query(`ALTER TABLE bookings ADD COLUMN payment_intent_id VARCHAR(255);`);
             console.log("MIGRATION APPLIED: Added 'payment_intent_id' column to 'bookings' table.");
         }
+
+        const accessKeyConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'access_key'`);
+        if (accessKeyConstraintCheck.rows.length > 0 && accessKeyConstraintCheck.rows[0].is_nullable === 'NO') {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN access_key DROP NOT NULL;`);
+            console.log("MIGRATION APPLIED: Made 'access_key' column in 'bookings' table nullable.");
+        }
         
-        // Seed default admin
+        // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
         if (adminRes.rows.length === 0) {
             const adminPassword = 'adminpassword';
             const hashedPassword = await bcrypt.hash(adminPassword, 10);
             await client.query('INSERT INTO admins (email, password_hash, notification_email) VALUES ($1, $2, $3)', ['admin@dreamcatcher.com', hashedPassword, 'admin@dreamcatcher.com']);
         } else {
-            // Ensure existing admin has a default notification email if it's NULL
             await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
         }
         
-        // Seed contact form inbox
         const contactFormRes = await client.query("SELECT * FROM bookings WHERE client_id = 'CONTACTFORM'");
         if (contactFormRes.rows.length === 0) {
             const fakePassword = await bcrypt.hash('system_internal_use_only_password_that_is_long_enough', 10);
@@ -521,12 +518,10 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             );
         }
 
-        // Seed app_settings
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
-
 
         await client.query('COMMIT');
         res.status(200).json({ message: 'Database schema initialized and migrated successfully.' });
