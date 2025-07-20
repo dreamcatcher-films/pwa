@@ -5,6 +5,7 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { put, del } from '@vercel/blob';
+import { Resend } from 'resend';
 
 const { Pool } = pg;
 const app = express();
@@ -13,6 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 // --- Database Configuration & Initialization ---
 let pool;
@@ -892,27 +894,41 @@ app.post('/api/messages', verifyToken, async (req, res) => {
             'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
             [req.user.bookingId, 'client', content]
         );
+        
+        // --- Real Email Notification ---
+        if (resend) {
+            try {
+                const adminRes = await pool.query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+                const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
+                
+                const bookingRes = await pool.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
+                const clientName = bookingRes.rows.length > 0 ? `${bookingRes.rows[0].bride_name} & ${bookingRes.rows[0].groom_name}` : 'Klient';
 
-        // --- Email Notification Simulation ---
-        const adminRes = await pool.query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
-        const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : 'admin@dreamcatcher.com';
-
-        const bookingRes = await pool.query('SELECT bride_name FROM bookings WHERE id = $1', [req.user.bookingId]);
-        const clientName = bookingRes.rows.length > 0 ? bookingRes.rows[0].bride_name : 'Klient';
-        console.log(`
-            ==============================================
-            SIMULATING EMAIL NOTIFICATION TO ADMIN
-            To: ${adminEmail}
-            From: system@dreamcatcher.com
-            Subject: Nowa wiadomość od ${clientName}
-            ---
-            Otrzymałeś nową wiadomość w rezerwacji #${req.user.bookingId}.
-            
-            Wiadomość:
-            "${content}"
-            ==============================================
-        `);
-        // --- End Simulation ---
+                if (adminEmail) {
+                    await resend.emails.send({
+                        from: 'Powiadomienia <powiadomienia@dreamcatcherfilm.co.uk>',
+                        to: adminEmail,
+                        subject: `Nowa wiadomość od ${clientName} (Rezerwacja #${req.user.bookingId})`,
+                        html: `
+                            <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                                <h2 style="color: #1e293b;">Otrzymano nową wiadomość!</h2>
+                                <p><strong>Klient:</strong> ${clientName}</p>
+                                <p><strong>Numer rezerwacji:</strong> #${req.user.bookingId}</p>
+                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                                <p style="font-weight: bold;">Wiadomość:</p>
+                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${content}</div>
+                                <p style="margin-top: 20px;">Możesz odpowiedzieć klientowi w panelu administratora.</p>
+                            </div>
+                        `,
+                    });
+                     console.log(`Email notification sent successfully to ${adminEmail}`);
+                }
+            } catch (emailError) {
+                console.error("Failed to send email notification:", emailError);
+            }
+        } else {
+             console.warn("RESEND_API_KEY is not configured. Skipping email notification.");
+        }
         
         res.status(201).json(result.rows[0]);
     } catch (err) {
