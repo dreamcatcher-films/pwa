@@ -8,6 +8,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        'cinzel': ['Cinzel', 'serif'],
+      },
       keyframes: {
         'modal-in': {
           '0%': { transform: 'scale(0.9)', opacity: '0' },
