@@ -176,19 +176,19 @@ const AdminSettingsPage: React.FC = () => {
                     <form onSubmit={handleSaveContactSettings} className="mt-6 space-y-4">
                         <div>
                              <label htmlFor="contact_email" className="block text-sm font-medium text-slate-700">Kontaktowy adres e-mail</label>
-                             <input type="email" id="contact_email" name="contact_email" value={contactSettings.contact_email} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                             <input type="email" id="contact_email" name="contact_email" value={contactSettings.contact_email} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
                         </div>
                         <div>
                              <label htmlFor="contact_phone" className="block text-sm font-medium text-slate-700">Kontaktowy numer telefonu</label>
-                             <input type="tel" id="contact_phone" name="contact_phone" value={contactSettings.contact_phone} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                             <input type="text" id="contact_phone" name="contact_phone" value={contactSettings.contact_phone} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
                         </div>
                         <div>
                              <label htmlFor="contact_address" className="block text-sm font-medium text-slate-700">Adres firmy</label>
-                             <input type="text" id="contact_address" name="contact_address" value={contactSettings.contact_address} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                             <input type="text" id="contact_address" name="contact_address" value={contactSettings.contact_address} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
                         </div>
                          <div>
                              <label htmlFor="google_maps_api_key" className="block text-sm font-medium text-slate-700">Klucz API Google Maps (do statycznej mapy)</label>
-                             <input type="text" id="google_maps_api_key" name="google_maps_api_key" value={contactSettings.google_maps_api_key} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                             <input type="text" id="google_maps_api_key" name="google_maps_api_key" value={contactSettings.google_maps_api_key} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
                         </div>
 
                          <div className="mt-4 flex items-center justify-between">
