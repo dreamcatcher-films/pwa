@@ -18,7 +18,7 @@ export type Page =
   'home' | 'calculator' | 'gallery' | 'contact' |
   'login' | 'clientPanel' | 
   'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings';
+  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -41,7 +41,7 @@ const App = () => {
     const renderCurrentPage = () => {
         switch (currentPage) {
             case 'home':
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
+                return <HomePage navigateTo={navigateTo} />;
             case 'calculator':
                 return <CalculatorPage navigateTo={navigateTo} />;
             case 'gallery':
@@ -70,12 +70,14 @@ const App = () => {
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='stages' />;
             case 'adminSettings':
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='settings' />;
+            case 'adminHomepage':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='homepage' />;
             case 'adminBookingDetails':
                  return viewingBookingId 
                     ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
                     : <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='bookings' />;
             default:
-                return <HomePage onNavigateToCalculator={() => navigateTo('calculator')} />;
+                return <HomePage navigateTo={navigateTo} />;
         }
     };
 
@@ -86,8 +88,8 @@ const App = () => {
                 onViewDetails={handleViewBookingDetails}
             />
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-            <main className="p-4 sm:p-6 lg:p-8">
-                <div className="max-w-7xl mx-auto">
+            <main>
+                <div className={`${currentPage.startsWith('admin') || currentPage === 'clientPanel' ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}`}>
                     {renderCurrentPage()}
                 </div>
             </main>
