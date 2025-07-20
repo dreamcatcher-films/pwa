@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -122,6 +123,67 @@ app.post('/api/validate-key', async (req, res) => {
             res.status(404).json({ message: 'Nieprawidłowy klucz dostępu.' });
         }
     } catch (err) {
+        res.status(500).send(`Server error: ${err.message}`);
+    }
+});
+
+app.post('/api/contact', async (req, res) => {
+    try {
+        const { firstName, lastName, email, phone, subject, message } = req.body;
+
+        if (!firstName || !lastName || !email || !message || !subject) {
+            return res.status(400).json({ message: 'Proszę wypełnić wszystkie wymagane pola.' });
+        }
+
+        // 1. Send email notification via Resend
+        if (resend) {
+            try {
+                const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+                const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
+                
+                if (adminEmail) {
+                    await resend.emails.send({
+                        from: 'Formularz Kontaktowy <powiadomienia@dreamcatcherfilm.co.uk>',
+                        to: adminEmail,
+                        reply_to: email,
+                        subject: `Nowe zapytanie z formularza: ${subject}`,
+                        html: `
+                            <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                                <h2 style="color: #1e293b;">Otrzymano nowe zapytanie ze strony!</h2>
+                                <p><strong>Od:</strong> ${firstName} ${lastName}</p>
+                                <p><strong>E-mail:</strong> ${email}</p>
+                                <p><strong>Telefon:</strong> ${phone || 'Nie podano'}</p>
+                                <p><strong>Temat:</strong> ${subject}</p>
+                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                                <p style="font-weight: bold;">Treść wiadomości:</p>
+                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${message}</div>
+                            </div>
+                        `,
+                    });
+                }
+            } catch (emailError) {
+                console.error("Contact form - failed to send email notification:", emailError);
+                // We don't stop execution, the in-app notification is more critical.
+            }
+        } else {
+             console.warn("RESEND_API_KEY is not configured. Skipping email notification for contact form.");
+        }
+
+        // 2. Save message to trigger in-app notification
+        const contactInboxRes = await getPool().query("SELECT id FROM bookings WHERE client_id = 'CONTACTFORM' LIMIT 1");
+        if (contactInboxRes.rows.length > 0) {
+            const inboxBookingId = contactInboxRes.rows[0].id;
+            const formattedMessage = `Nowe zapytanie od: ${firstName} ${lastName}\nEmail: ${email}\nTelefon: ${phone || 'Nie podano'}\n\nTemat: ${subject}\n\nWiadomość:\n${message}`;
+            await getPool().query(
+                'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3)',
+                [inboxBookingId, 'client', formattedMessage]
+            );
+        }
+
+        res.status(200).json({ message: 'Wiadomość została wysłana pomyślnie.' });
+
+    } catch (err) {
+        console.error('Contact form error:', err);
         res.status(500).send(`Server error: ${err.message}`);
     }
 });
@@ -279,7 +341,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             
             CREATE TABLE IF NOT EXISTS bookings (
                 id SERIAL PRIMARY KEY,
-                client_id VARCHAR(4) UNIQUE,
+                client_id VARCHAR(255) UNIQUE,
                 access_key VARCHAR(4),
                 package_name VARCHAR(255) NOT NULL,
                 total_price NUMERIC(10, 2) NOT NULL,
@@ -408,13 +470,13 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
         }
         
-        // Seed test booking
-        const testBookingRes = await client.query("SELECT * FROM bookings WHERE client_id = '9999'");
-        if (testBookingRes.rows.length === 0) {
-            const testPassword = await bcrypt.hash('password123', 10);
+        // Seed contact form inbox
+        const contactFormRes = await client.query("SELECT * FROM bookings WHERE client_id = 'CONTACTFORM'");
+        if (contactFormRes.rows.length === 0) {
+            const fakePassword = await bcrypt.hash('system_internal_use_only_password_that_is_long_enough', 10);
             await client.query(
-              `INSERT INTO bookings (client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, email, password_hash, payment_status, amount_paid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-              ['9999', 'Test Package', 5000.00, '{"Test Item 1", "Test Item 2"}', 'Janina', 'Krzysztof', '2025-10-10', 'test@example.com', testPassword, 'partial', 1000.00]
+              `INSERT INTO bookings (client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, email, password_hash) VALUES ($1, 'System', 0, '{}', 'Skrzynka', 'Odbiorcza', '2000-01-01', 'system@internal.local', $2)`,
+              ['CONTACTFORM', fakePassword]
             );
         }
 
