@@ -215,3 +215,9 @@ export const MapIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" 
       <path fillRule="evenodd" d="M3 10.5a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75zM4.505 15.075A.75.75 0 015.25 15h13.5a.75.75 0 01.745.836l-.75 6a.75.75 0 01-.738.664H5.993a.75.75 0 01-.738-.664l-.75-6a.75.75 0 01.001-.161z" clipRule="evenodd" />
     </svg>
 );
+
+export const IdentificationIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path d="M3.75 4.5a3 3 0 00-3 3v10.5a3 3 0 003 3h16.5a3 3 0 003-3V7.5a3 3 0 00-3-3H3.75zM16.5 7.5a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zM12.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zM6.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25z" />
+    </svg>
+);
