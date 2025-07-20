@@ -325,23 +325,6 @@ app.patch('/api/my-booking', verifyToken, async (req, res) => {
 });
 
 // Admin Login & Setup
-app.post('/api/admin/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const result = await getPool().query('SELECT * FROM admins WHERE email = $1', [email]);
-        if (result.rows.length === 0) return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        
-        const admin = result.rows[0];
-        const isMatch = await bcrypt.compare(password, admin.password_hash);
-        if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        
-        const token = jwt.sign({ adminId: admin.id, email: admin.email }, process.env.ADMIN_JWT_SECRET, { expiresIn: '8h' });
-        res.json({ token });
-    } catch (err) {
-        res.status(500).send(`Server error: ${err.message}`);
-    }
-});
-
 app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
     const client = await getPool().connect();
     try {
@@ -497,6 +480,12 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
         if (accessKeyConstraintCheck.rows.length > 0 && accessKeyConstraintCheck.rows[0].is_nullable === 'NO') {
             await client.query(`ALTER TABLE bookings ALTER COLUMN access_key DROP NOT NULL;`);
             console.log("MIGRATION APPLIED: Made 'access_key' column in 'bookings' table nullable.");
+        }
+
+        const phoneNumberConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'phone_number'`);
+        if (phoneNumberConstraintCheck.rows.length > 0 && phoneNumberConstraintCheck.rows[0].is_nullable === 'NO') {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN phone_number DROP NOT NULL;`);
+            console.log("MIGRATION APPLIED: Made 'phone_number' column in 'bookings' table nullable.");
         }
         
         // --- SEEDING ---
