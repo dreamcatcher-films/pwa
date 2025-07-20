@@ -325,6 +325,26 @@ app.patch('/api/my-booking', verifyToken, async (req, res) => {
 });
 
 // Admin Login & Setup
+app.post('/api/admin/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) return res.status(400).json({ message: 'Email i hasło są wymagane.' });
+        
+        const result = await getPool().query('SELECT * FROM admins WHERE email = $1', [email]);
+        if (result.rows.length === 0) return res.status(401).json({ message: 'Nieprawidłowy email lub hasło.' });
+        
+        const admin = result.rows[0];
+        const isMatch = await bcrypt.compare(password, admin.password_hash);
+        if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowy email lub hasło.' });
+        
+        const token = jwt.sign({ adminId: admin.id }, process.env.ADMIN_JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token });
+    } catch (err) {
+        res.status(500).send(`Server error: ${err.message}`);
+    }
+});
+
+
 app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
     const client = await getPool().connect();
     try {
@@ -1072,13 +1092,17 @@ app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminTok
 
 app.get('/api/admin/settings', verifyAdminToken, async (req, res) => {
     try {
-        const result = await getPool().query('SELECT notification_email FROM admins WHERE id = $1', [req.user.adminId]);
+        const result = await getPool().query('SELECT email, notification_email FROM admins WHERE id = $1', [req.user.adminId]);
         if (result.rows.length === 0) return res.status(404).send('Admin not found.');
-        res.json({ email: result.rows[0].notification_email });
+        res.json({ 
+            loginEmail: result.rows[0].email,
+            notificationEmail: result.rows[0].notification_email 
+        });
     } catch (err) {
         res.status(500).send(`Error fetching admin settings: ${err.message}`);
     }
 });
+
 
 app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
     try {
@@ -1090,6 +1114,48 @@ app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
         res.status(500).send(`Error updating admin settings: ${err.message}`);
     }
 });
+
+app.patch('/api/admin/credentials', verifyAdminToken, async (req, res) => {
+    const { currentPassword, newEmail, newPassword } = req.body;
+    const { adminId } = req.user;
+
+    if (!currentPassword || !newEmail) {
+        return res.status(400).send('Bieżące hasło i nowy e-mail są wymagane.');
+    }
+
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const adminRes = await client.query('SELECT * FROM admins WHERE id = $1', [adminId]);
+        if (adminRes.rows.length === 0) {
+            return res.status(404).send('Administrator nie znaleziony.');
+        }
+        const admin = adminRes.rows[0];
+
+        const isMatch = await bcrypt.compare(currentPassword, admin.password_hash);
+        if (!isMatch) {
+            return res.status(401).send('Nieprawidłowe bieżące hasło.');
+        }
+
+        await client.query('UPDATE admins SET email = $1 WHERE id = $2', [newEmail, adminId]);
+
+        if (newPassword) {
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            await client.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [hashedPassword, adminId]);
+        }
+        
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Dane logowania zostały pomyślnie zaktualizowane.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error updating credentials:', err);
+        res.status(500).send(`Błąd podczas aktualizacji danych logowania: ${err.message}`);
+    } finally {
+        client.release();
+    }
+});
+
 
 app.get('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
     try {
