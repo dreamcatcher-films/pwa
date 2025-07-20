@@ -33,7 +33,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
 
     return (
         <div className="w-full h-[70vh] max-h-[700px] overflow-hidden relative group cursor-grab active:cursor-grabbing">
-             <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-slate-50/50 to-slate-50 z-10"></div>
+            {/* Gradient overlays removed to display posters with full, original contrast */}
             <div
                 className="flex items-center h-full animate-scroll-filmstrip group-hover:[animation-play-state:paused]"
             >
@@ -55,7 +55,6 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
                     </a>
                 ))}
             </div>
-             <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-slate-50/50 to-slate-50 z-10"></div>
         </div>
     );
 };
