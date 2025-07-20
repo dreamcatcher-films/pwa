@@ -7,7 +7,6 @@ import jwt from 'jsonwebtoken';
 import { put, del } from '@vercel/blob';
 import { Resend } from 'resend';
 
-const { Pool } = pg;
 const app = express();
 
 // --- Middleware ---
@@ -19,36 +18,34 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 // --- Database Configuration & Initialization ---
 let pool;
 
-const initializeDatabase = async () => {
-    if (!process.env.DATABASE_URL) {
-        console.error("FATAL ERROR: DATABASE_URL is not set.");
-        return;
-    }
-    
-    try {
-        pool = new Pool({
+const getPool = () => {
+    if (!pool) {
+        if (!process.env.DATABASE_URL) {
+            throw new Error("FATAL ERROR: DATABASE_URL is not set.");
+        }
+        console.log("Initializing new database connection pool...");
+        pool = new pg.Pool({
             connectionString: process.env.DATABASE_URL,
-            ssl: { rejectUnauthorized: false }, // Required for Supabase on Vercel
+            ssl: { rejectUnauthorized: false },
         });
 
-        // Test the connection
-        const client = await pool.connect();
-        console.log('Successfully connected to the database pool!');
-        client.release();
-
-    } catch (err) {
-        console.error('Database connection pool initialization error:', err.stack);
-        pool = null; // Set pool to null on failure
+        // The 'error' event on a pool is for errors that happen on idle clients
+        pool.on('error', (err, client) => {
+            console.error('Unexpected error on idle client in pool', err);
+            // For serverless, it's often best to tear down the pool and recreate it.
+            pool = null; 
+        });
     }
+    return pool;
 };
-
-initializeDatabase();
 
 
 // --- JWT & Config Middleware ---
 const checkConfig = (req, res, next) => {
-    if (!pool) {
-        return res.status(500).send('FATAL ERROR: Database is not connected.');
+    try {
+        getPool(); // This will throw if DATABASE_URL is not set
+    } catch(err) {
+         return res.status(500).send(err.message);
     }
     if (!process.env.JWT_SECRET || !process.env.ADMIN_JWT_SECRET) {
         return res.status(500).send('FATAL ERROR: JWT secrets are not configured in environment variables.');
@@ -91,7 +88,7 @@ const generateUniqueKey = async (length) => {
     let isUnique = false;
     while (!isUnique) {
         key = Math.floor(Math.random() * (10 ** length)).toString().padStart(length, '0');
-        const res = await pool.query('SELECT * FROM access_keys WHERE key = $1', [key]);
+        const res = await getPool().query('SELECT * FROM access_keys WHERE key = $1', [key]);
         if (res.rows.length === 0) {
             isUnique = true;
         }
@@ -104,7 +101,7 @@ const generateUniqueClientId = async (length) => {
     let isUnique = false;
     while (!isUnique) {
         clientId = Math.floor(Math.random() * (10 ** length)).toString().padStart(length, '0');
-        const res = await pool.query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
+        const res = await getPool().query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
         if (res.rows.length === 0) {
             isUnique = true;
         }
@@ -118,7 +115,7 @@ app.get('/api/health', (req, res) => res.status(200).send('API is healthy.'));
 app.post('/api/validate-key', async (req, res) => {
     try {
         const { key } = req.body;
-        const result = await pool.query('SELECT * FROM access_keys WHERE key = $1', [key]);
+        const result = await getPool().query('SELECT * FROM access_keys WHERE key = $1', [key]);
         if (result.rows.length > 0) {
             res.json({ valid: true });
         } else {
@@ -132,7 +129,7 @@ app.post('/api/validate-key', async (req, res) => {
 app.post('/api/bookings', async (req, res) => {
     try {
         const { accessKey, password, ...bookingData } = req.body;
-        const keyCheck = await pool.query('SELECT * FROM access_keys WHERE key = $1', [accessKey]);
+        const keyCheck = await getPool().query('SELECT * FROM access_keys WHERE key = $1', [accessKey]);
         if (keyCheck.rows.length === 0) {
             return res.status(400).json({ message: 'Nieprawidłowy klucz dostępu.' });
         }
@@ -140,17 +137,17 @@ app.post('/api/bookings', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const clientId = await generateUniqueClientId(4);
 
-        const result = await pool.query(
+        const result = await getPool().query(
             `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, locations, schedule, email, phone_number, additional_info, discount_code) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
             [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, bookingData.selectedItems, bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.locations, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
         );
         
         if (bookingData.discountCode) {
-            await pool.query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [bookingData.discountCode]);
+            await getPool().query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [bookingData.discountCode]);
         }
         
-        await pool.query('DELETE FROM access_keys WHERE key = $1', [accessKey]);
+        await getPool().query('DELETE FROM access_keys WHERE key = $1', [accessKey]);
 
         res.status(201).json({ bookingId: result.rows[0].id, clientId });
     } catch (err) {
@@ -160,9 +157,9 @@ app.post('/api/bookings', async (req, res) => {
 
 app.get('/api/packages', async (req, res) => {
     try {
-        const packagesRes = await pool.query('SELECT * FROM packages ORDER BY price DESC');
-        const addonsRes = await pool.query('SELECT * FROM addons ORDER BY name');
-        const relationsRes = await pool.query('SELECT * FROM package_addons');
+        const packagesRes = await getPool().query('SELECT * FROM packages ORDER BY price DESC');
+        const addonsRes = await getPool().query('SELECT * FROM addons ORDER BY name');
+        const relationsRes = await getPool().query('SELECT * FROM package_addons');
         
         const addonsMap = new Map(addonsRes.rows.map(a => [a.id, a]));
         const packages = packagesRes.rows.map(p => {
@@ -181,7 +178,7 @@ app.get('/api/packages', async (req, res) => {
 app.post('/api/validate-discount', async (req, res) => {
     try {
         const { code } = req.body;
-        const result = await pool.query('SELECT * FROM discount_codes WHERE code = $1', [code]);
+        const result = await getPool().query('SELECT * FROM discount_codes WHERE code = $1', [code]);
         if (result.rows.length === 0) return res.status(404).json({ message: 'Kod nie istnieje.' });
         
         const discount = result.rows[0];
@@ -199,7 +196,7 @@ app.post('/api/validate-discount', async (req, res) => {
 
 app.get('/api/gallery', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM galleries ORDER BY created_at DESC');
+        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching public gallery: ${err.message}`);
@@ -212,7 +209,7 @@ app.post('/api/login', async (req, res) => {
         const { clientId, password } = req.body;
         if (!clientId || !password) return res.status(400).json({ message: 'Numer klienta i hasło są wymagane.' });
         
-        const result = await pool.query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
+        const result = await getPool().query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
         
         const booking = result.rows[0];
@@ -228,7 +225,7 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/my-booking', verifyToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]);
+        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]);
         if (result.rows.length === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -239,7 +236,7 @@ app.get('/api/my-booking', verifyToken, async (req, res) => {
 app.patch('/api/my-booking', verifyToken, async (req, res) => {
     try {
         const { bride_address, groom_address, locations, schedule, additional_info } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             `UPDATE bookings SET bride_address = $1, groom_address = $2, locations = $3, schedule = $4, additional_info = $5 WHERE id = $6 RETURNING *`,
             [bride_address, groom_address, locations, schedule, additional_info, req.user.bookingId]
         );
@@ -253,7 +250,7 @@ app.patch('/api/my-booking', verifyToken, async (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const result = await pool.query('SELECT * FROM admins WHERE email = $1', [email]);
+        const result = await getPool().query('SELECT * FROM admins WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
         
         const admin = result.rows[0];
@@ -268,7 +265,7 @@ app.post('/api/admin/login', async (req, res) => {
 });
 
 app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
-    const client = await pool.connect();
+    const client = await getPool().connect();
     try {
         await client.query('BEGIN');
 
@@ -436,7 +433,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
 // Admin Endpoints - All protected
 app.get('/api/admin/bookings', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
+        const result = await getPool().query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching bookings for admin: ${err.message}`);
@@ -445,7 +442,7 @@ app.get('/api/admin/bookings', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
+        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -456,7 +453,7 @@ app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
 app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await pool.query('DELETE FROM bookings WHERE id = $1', [id]);
+        const result = await getPool().query('DELETE FROM bookings WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Rezerwacja nie znaleziona.' });
         }
@@ -469,7 +466,7 @@ app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
 app.patch('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     try {
         const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, locations, schedule, additional_info } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             `UPDATE bookings SET bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, bride_address = $6, groom_address = $7, locations = $8, schedule = $9, additional_info = $10 WHERE id = $11 RETURNING *`,
             [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, locations, schedule, additional_info, req.params.id]
         );
@@ -481,7 +478,7 @@ app.patch('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/access-keys', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM access_keys ORDER BY created_at DESC');
+        const result = await getPool().query('SELECT * FROM access_keys ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching access keys for admin: ${err.message}`);
@@ -492,7 +489,7 @@ app.post('/api/admin/access-keys', verifyAdminToken, async (req, res) => {
     try {
         const { client_name } = req.body;
         const key = await generateUniqueKey(4);
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO access_keys (key, client_name) VALUES ($1, $2) RETURNING *',
             [key, client_name]
         );
@@ -504,7 +501,7 @@ app.post('/api/admin/access-keys', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/access-keys/:id', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM access_keys WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM access_keys WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd podczas usuwania klucza: ${err.message}`);
@@ -513,8 +510,8 @@ app.delete('/api/admin/access-keys/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/availability', verifyAdminToken, async (req, res) => {
     try {
-        const eventsRes = await pool.query('SELECT * FROM availability');
-        const bookingsRes = await pool.query('SELECT id, wedding_date, bride_name, groom_name FROM bookings');
+        const eventsRes = await getPool().query('SELECT * FROM availability');
+        const bookingsRes = await getPool().query('SELECT id, wedding_date, bride_name, groom_name FROM bookings');
         
         const calendarEvents = eventsRes.rows.map(e => ({
             id: e.id,
@@ -544,7 +541,7 @@ app.get('/api/admin/availability', verifyAdminToken, async (req, res) => {
 app.post('/api/admin/availability', verifyAdminToken, async (req, res) => {
     try {
         const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             `INSERT INTO availability (title, description, start_time, end_time, is_all_day) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
             [title, description, start_time, end_time, is_all_day]
         );
@@ -557,7 +554,7 @@ app.post('/api/admin/availability', verifyAdminToken, async (req, res) => {
 app.patch('/api/admin/availability/:id', verifyAdminToken, async (req, res) => {
     try {
         const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             `UPDATE availability SET title = $1, description = $2, start_time = $3, end_time = $4, is_all_day = $5 WHERE id = $6 RETURNING *`,
             [title, description, start_time, end_time, is_all_day, req.params.id]
         );
@@ -569,7 +566,7 @@ app.patch('/api/admin/availability/:id', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/availability/:id', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM availability WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM availability WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania wydarzenia: ${err.message}`);
@@ -578,7 +575,7 @@ app.delete('/api/admin/availability/:id', verifyAdminToken, async (req, res) => 
 
 app.get('/api/admin/galleries', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM galleries ORDER BY created_at DESC');
+        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Błąd pobierania galerii: ${err.message}`);
@@ -598,7 +595,7 @@ app.post('/api/admin/galleries/upload', verifyAdminToken, async (req, res) => {
 app.post('/api/admin/galleries', verifyAdminToken, async (req, res) => {
     try {
         const { title, description, image_url } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO galleries (title, description, image_url) VALUES ($1, $2, $3) RETURNING *',
             [title, description, image_url]
         );
@@ -610,11 +607,11 @@ app.post('/api/admin/galleries', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/galleries/:id', verifyAdminToken, async (req, res) => {
     try {
-        const itemRes = await pool.query('SELECT image_url FROM galleries WHERE id = $1', [req.params.id]);
+        const itemRes = await getPool().query('SELECT image_url FROM galleries WHERE id = $1', [req.params.id]);
         if (itemRes.rows.length > 0) {
             await del(itemRes.rows[0].image_url);
         }
-        await pool.query('DELETE FROM galleries WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM galleries WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania elementu galerii: ${err.message}`);
@@ -623,8 +620,8 @@ app.delete('/api/admin/galleries/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/packages', verifyAdminToken, async (req, res) => {
      try {
-        const packagesRes = await pool.query('SELECT * FROM packages ORDER BY price DESC');
-        const relationsRes = await pool.query('SELECT pa.*, a.name, a.price FROM package_addons pa JOIN addons a ON pa.addon_id = a.id');
+        const packagesRes = await getPool().query('SELECT * FROM packages ORDER BY price DESC');
+        const relationsRes = await getPool().query('SELECT pa.*, a.name, a.price FROM package_addons pa JOIN addons a ON pa.addon_id = a.id');
         const packages = packagesRes.rows.map(p => ({
             ...p,
             addons: relationsRes.rows.filter(r => r.package_id === p.id)
@@ -637,7 +634,7 @@ app.get('/api/admin/packages', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/addons', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM addons ORDER BY name');
+        const result = await getPool().query('SELECT * FROM addons ORDER BY name');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Błąd pobierania dodatków: ${err.message}`);
@@ -646,7 +643,7 @@ app.get('/api/admin/addons', verifyAdminToken, async (req, res) => {
 
 app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
     const { name, description, price, addons } = req.body;
-    const client = await pool.connect();
+    const client = await getPool().connect();
     try {
         await client.query('BEGIN');
         const pkgRes = await client.query('INSERT INTO packages (name, description, price) VALUES ($1, $2, $3) RETURNING id', [name, description, price]);
@@ -670,7 +667,7 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
 app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     const packageId = req.params.id;
     const { name, description, price, addons } = req.body;
-    const client = await pool.connect();
+    const client = await getPool().connect();
     try {
         await client.query('BEGIN');
         await client.query('UPDATE packages SET name = $1, description = $2, price = $3 WHERE id = $4', [name, description, price, packageId]);
@@ -693,7 +690,7 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM packages WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM packages WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania pakietu: ${err.message}`);
@@ -702,7 +699,7 @@ app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/discounts', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM discount_codes ORDER BY created_at DESC');
+        const result = await getPool().query('SELECT * FROM discount_codes ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Błąd pobierania kodów: ${err.message}`);
@@ -712,7 +709,7 @@ app.get('/api/admin/discounts', verifyAdminToken, async (req, res) => {
 app.post('/api/admin/discounts', verifyAdminToken, async (req, res) => {
     try {
         const { code, type, value, usage_limit, expires_at } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
             [code, type, value, usage_limit, expires_at]
         );
@@ -724,7 +721,7 @@ app.post('/api/admin/discounts', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/discounts/:id', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania kodu: ${err.message}`);
@@ -733,7 +730,7 @@ app.delete('/api/admin/discounts/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/stages', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM production_stages ORDER BY id');
+        const result = await getPool().query('SELECT * FROM production_stages ORDER BY id');
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Błąd pobierania szablonów etapów: ${err.message}`);
@@ -743,7 +740,7 @@ app.get('/api/admin/stages', verifyAdminToken, async (req, res) => {
 app.post('/api/admin/stages', verifyAdminToken, async (req, res) => {
     try {
         const { name, description } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *',
             [name, description]
         );
@@ -755,7 +752,7 @@ app.post('/api/admin/stages', verifyAdminToken, async (req, res) => {
 
 app.delete('/api/admin/stages/:id', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
+        await getPool().query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania szablonu etapu: ${err.message}`);
@@ -764,7 +761,7 @@ app.delete('/api/admin/stages/:id', verifyAdminToken, async (req, res) => {
 
 app.get('/api/admin/booking-stages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query(
+        const result = await getPool().query(
             `SELECT bs.id, ps.name, ps.description, bs.status, bs.completed_at 
              FROM booking_stages bs 
              JOIN production_stages ps ON bs.stage_id = ps.id 
@@ -780,7 +777,7 @@ app.get('/api/admin/booking-stages/:bookingId', verifyAdminToken, async (req, re
 app.post('/api/admin/booking-stages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
         const { stage_id } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2) RETURNING *',
             [req.params.bookingId, stage_id]
         );
@@ -794,7 +791,7 @@ app.patch('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, re
     try {
         const { status } = req.body;
         const completed_at = status === 'completed' ? new Date() : null;
-        const result = await pool.query(
+        const result = await getPool().query(
             'UPDATE booking_stages SET status = $1, completed_at = $2 WHERE id = $3 RETURNING *',
             [status, completed_at, req.params.stageId]
         );
@@ -806,7 +803,7 @@ app.patch('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, re
 
 app.delete('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
+        await getPool().query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Błąd usuwania etapu z projektu: ${err.message}`);
@@ -816,7 +813,7 @@ app.delete('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, r
 
 app.get('/api/booking-stages', verifyToken, async (req, res) => {
     try {
-        const result = await pool.query(
+        const result = await getPool().query(
             `SELECT bs.id, ps.name, ps.description, bs.status, bs.completed_at 
              FROM booking_stages bs 
              JOIN production_stages ps ON bs.stage_id = ps.id 
@@ -831,7 +828,7 @@ app.get('/api/booking-stages', verifyToken, async (req, res) => {
 
 app.patch('/api/booking-stages/:stageId/approve', verifyToken, async (req, res) => {
     try {
-        const result = await pool.query(
+        const result = await getPool().query(
             'UPDATE booking_stages SET status = $1, completed_at = $2 WHERE id = $3 AND booking_id = $4 AND status = $5 RETURNING *',
             ['completed', new Date(), req.params.stageId, req.user.bookingId, 'awaiting_approval']
         );
@@ -845,7 +842,7 @@ app.patch('/api/booking-stages/:stageId/approve', verifyToken, async (req, res) 
 app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) => {
     try {
         const { payment_status, amount_paid } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'UPDATE bookings SET payment_status = $1, amount_paid = $2 WHERE id = $3 RETURNING payment_status, amount_paid',
             [payment_status, amount_paid, req.params.id]
         );
@@ -858,7 +855,7 @@ app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) 
 // Communication & Notification Endpoints
 app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
+        const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching messages: ${err.message}`);
@@ -868,7 +865,7 @@ app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => 
 app.post('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
         const { content } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
             [req.params.bookingId, 'admin', content]
         );
@@ -880,7 +877,7 @@ app.post('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) =>
 
 app.get('/api/messages', verifyToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
+        const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching messages: ${err.message}`);
@@ -890,7 +887,7 @@ app.get('/api/messages', verifyToken, async (req, res) => {
 app.post('/api/messages', verifyToken, async (req, res) => {
     try {
         const { content } = req.body;
-        const result = await pool.query(
+        const result = await getPool().query(
             'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
             [req.user.bookingId, 'client', content]
         );
@@ -898,10 +895,10 @@ app.post('/api/messages', verifyToken, async (req, res) => {
         // --- Real Email Notification ---
         if (resend) {
             try {
-                const adminRes = await pool.query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+                const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
                 const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
                 
-                const bookingRes = await pool.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
+                const bookingRes = await getPool().query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
                 const clientName = bookingRes.rows.length > 0 ? `${bookingRes.rows[0].bride_name} & ${bookingRes.rows[0].groom_name}` : 'Klient';
 
                 if (adminEmail) {
@@ -938,7 +935,7 @@ app.post('/api/messages', verifyToken, async (req, res) => {
 
 app.get('/api/admin/notifications/count', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query("SELECT COUNT(*) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
+        const result = await getPool().query("SELECT COUNT(*) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
         res.json({ count: parseInt(result.rows[0].count, 10) });
     } catch (err) {
         res.status(500).send(`Error fetching notification count: ${err.message}`);
@@ -960,7 +957,7 @@ app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
             GROUP BY b.id, b.bride_name, b.groom_name
             ORDER BY MAX(m.created_at) DESC;
         `;
-        const result = await pool.query(query);
+        const result = await getPool().query(query);
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching notifications: ${err.message}`);
@@ -969,7 +966,7 @@ app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
 
 app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminToken, async (req, res) => {
     try {
-        await pool.query(
+        await getPool().query(
             "UPDATE messages SET is_read_by_admin = TRUE WHERE booking_id = $1 AND sender = 'client'",
             [req.params.bookingId]
         );
@@ -981,7 +978,7 @@ app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminTok
 
 app.get('/api/admin/settings', verifyAdminToken, async (req, res) => {
     try {
-        const result = await pool.query('SELECT notification_email FROM admins WHERE id = $1', [req.user.adminId]);
+        const result = await getPool().query('SELECT notification_email FROM admins WHERE id = $1', [req.user.adminId]);
         if (result.rows.length === 0) return res.status(404).send('Admin not found.');
         res.json({ email: result.rows[0].notification_email });
     } catch (err) {
@@ -993,7 +990,7 @@ app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) return res.status(400).send('Email is required.');
-        await pool.query('UPDATE admins SET notification_email = $1 WHERE id = $2', [email, req.user.adminId]);
+        await getPool().query('UPDATE admins SET notification_email = $1 WHERE id = $2', [email, req.user.adminId]);
         res.status(200).json({ message: 'Notification email updated successfully.' });
     } catch (err) {
         res.status(500).send(`Error updating admin settings: ${err.message}`);
