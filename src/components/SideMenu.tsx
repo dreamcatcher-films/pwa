@@ -25,9 +25,9 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                 role="dialog"
                 aria-modal="true"
             >
-                <div className="p-4 flex justify-between items-center border-b border-white/20">
-                    <h2 className="text-lg font-bold text-white">Menu</h2>
-                    <button onClick={onClose} className="p-2 rounded-md text-slate-300 hover:bg-white/10" aria-label="Zamknij menu">
+                <div className="p-4 flex justify-between items-center border-b border-[#E6C8A4]/20">
+                    <h2 className="text-lg font-bold text-[#E6C8A4]">Menu</h2>
+                    <button onClick={onClose} className="p-2 rounded-md text-[#E6C8A4]/80 hover:bg-white/10 hover:text-[#E6C8A4]" aria-label="Zamknij menu">
                         <XMarkIcon className="w-6 h-6" />
                     </button>
                 </div>
@@ -37,7 +37,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                             <a 
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); onNavigate('home'); }}
-                                className="block py-3 px-4 rounded-lg text-slate-100 font-semibold hover:bg-white/10 transition-colors"
+                                className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
                                 Strona Główna
                             </a>
@@ -46,7 +46,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                             <a 
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); onNavigate('calculator'); }}
-                                className="block py-3 px-4 rounded-lg text-slate-100 font-semibold hover:bg-white/10 transition-colors"
+                                className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
                                 Kalkulator Usług
                             </a>
@@ -55,7 +55,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                             <a 
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); onNavigate('gallery'); }}
-                                className="flex items-center py-3 px-4 rounded-lg text-slate-100 font-semibold hover:bg-white/10 transition-colors"
+                                className="flex items-center py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
                                 <PhotoIcon className="w-5 h-5 mr-3" />
                                 Galeria
@@ -65,7 +65,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                             <a 
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); onNavigate('contact'); }}
-                                className="flex items-center py-3 px-4 rounded-lg text-slate-100 font-semibold hover:bg-white/10 transition-colors"
+                                className="flex items-center py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
                                 <EnvelopeIcon className="w-5 h-5 mr-3" />
                                 Kontakt
@@ -75,14 +75,14 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                             <a 
                                 href="#"
                                 onClick={(e) => { e.preventDefault(); onNavigate('login'); }}
-                                className="block py-3 px-4 rounded-lg text-slate-100 font-semibold hover:bg-white/10 transition-colors"
+                                className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
                                 Panel Klienta
                             </a>
                         </li>
                     </ul>
                 </nav>
-                <div className="p-4 border-t border-white/20">
+                <div className="p-4 border-t border-[#E6C8A4]/20">
                     <a
                         href="#"
                         onClick={(e) => { 
@@ -94,7 +94,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                                 onNavigate('adminLogin');
                             }
                         }}
-                        className="flex items-center py-2 px-3 rounded-lg text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                        className="flex items-center py-2 px-3 rounded-lg text-sm text-[#E6C8A4]/80 hover:bg-white/10 hover:text-[#E6C8A4] transition-colors"
                     >
                        <Cog6ToothIcon className="w-5 h-5 mr-3" />
                        Panel Administratora
