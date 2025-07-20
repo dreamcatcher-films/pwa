@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon } from '../components/Icons';
+import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon } from '../components/Icons';
 
 const AdminSettingsPage: React.FC = () => {
     const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -10,19 +11,38 @@ const AdminSettingsPage: React.FC = () => {
     const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [emailMessage, setEmailMessage] = useState('');
     
+    const [contactSettings, setContactSettings] = useState({
+        contact_email: '',
+        contact_phone: '',
+        contact_address: '',
+        google_maps_api_key: ''
+    });
+    const [contactStatus, setContactStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [contactMessage, setContactMessage] = useState('');
+
     const token = localStorage.getItem('adminAuthToken');
     
     useEffect(() => {
         const fetchSettings = async () => {
             if (!token) return;
             try {
-                const response = await fetch('/api/admin/settings', { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!response.ok) throw new Error('Nie udało się pobrać ustawień.');
-                const data = await response.json();
-                setNotificationEmail(data.email || '');
+                const [adminRes, contactRes] = await Promise.all([
+                    fetch('/api/admin/settings', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/admin/contact-settings', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
+                if (!adminRes.ok) throw new Error('Nie udało się pobrać ustawień powiadomień.');
+                const adminData = await adminRes.json();
+                setNotificationEmail(adminData.email || '');
+
+                if (!contactRes.ok) throw new Error('Nie udało się pobrać ustawień kontaktowych.');
+                const contactData = await contactRes.json();
+                setContactSettings(contactData);
+
             } catch (err) {
-                setEmailStatus('error');
-                setEmailMessage(err instanceof Error ? err.message : 'Błąd ładowania e-maila.');
+                // Set a general error message
+                setContactStatus('error');
+                setContactMessage(err instanceof Error ? err.message : 'Błąd ładowania ustawień.');
             }
         };
         fetchSettings();
@@ -76,6 +96,33 @@ const AdminSettingsPage: React.FC = () => {
             setEmailMessage(err instanceof Error ? err.message : 'Błąd zapisu.');
         }
     };
+    
+    const handleContactSettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setContactSettings(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
+
+    const handleSaveContactSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setContactStatus('loading');
+        setContactMessage('');
+        try {
+            const response = await fetch('/api/admin/contact-settings', {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(contactSettings),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać ustawień kontaktowych.');
+
+            setContactStatus('success');
+            setContactMessage('Ustawienia strony kontaktowej zostały zaktualizowane.');
+            setTimeout(() => setContactStatus('idle'), 3000);
+        } catch (err) {
+            setContactStatus('error');
+            setContactMessage(err instanceof Error ? err.message : 'Błąd zapisu.');
+        }
+    };
+
 
     return (
         <div>
@@ -121,6 +168,43 @@ const AdminSettingsPage: React.FC = () => {
                     </form>
                 </div>
                 
+                <div className="bg-white rounded-2xl shadow p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><IdentificationIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Strony Kontaktowej</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                        Zarządzaj informacjami wyświetlanymi na publicznej stronie kontaktowej.
+                    </p>
+                    <form onSubmit={handleSaveContactSettings} className="mt-6 space-y-4">
+                        <div>
+                             <label htmlFor="contact_email" className="block text-sm font-medium text-slate-700">Kontaktowy adres e-mail</label>
+                             <input type="email" id="contact_email" name="contact_email" value={contactSettings.contact_email} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                        </div>
+                        <div>
+                             <label htmlFor="contact_phone" className="block text-sm font-medium text-slate-700">Kontaktowy numer telefonu</label>
+                             <input type="tel" id="contact_phone" name="contact_phone" value={contactSettings.contact_phone} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                        </div>
+                        <div>
+                             <label htmlFor="contact_address" className="block text-sm font-medium text-slate-700">Adres firmy</label>
+                             <input type="text" id="contact_address" name="contact_address" value={contactSettings.contact_address} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                        </div>
+                         <div>
+                             <label htmlFor="google_maps_api_key" className="block text-sm font-medium text-slate-700">Klucz API Google Maps (do statycznej mapy)</label>
+                             <input type="text" id="google_maps_api_key" name="google_maps_api_key" value={contactSettings.google_maps_api_key} onChange={handleContactSettingsChange} className="mt-1 block w-full input-field" />
+                        </div>
+
+                         <div className="mt-4 flex items-center justify-between">
+                             <button type="submit" disabled={contactStatus === 'loading'} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
+                                {contactStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
+                            </button>
+                             {contactMessage && (
+                                <div className="text-sm">
+                                    {contactStatus === 'success' && <p className="flex items-center gap-2 text-green-600"><CheckCircleIcon className="w-5 h-5"/> {contactMessage}</p>}
+                                    {contactStatus === 'error' && <p className="text-red-600">{contactMessage}</p>}
+                                </div>
+                            )}
+                         </div>
+                    </form>
+                </div>
+
                 <div className="bg-white rounded-2xl shadow p-6">
                     <h3 className="text-lg font-semibold text-slate-900">Zarządzanie Bazą Danych</h3>
                     <p className="mt-1 text-sm text-slate-600">
