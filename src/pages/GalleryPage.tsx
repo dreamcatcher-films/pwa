@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner } from '../components/Icons';
+import { LoadingSpinner } from '../components/Icons.tsx';
 
 interface GalleryItem {
     id: number;
