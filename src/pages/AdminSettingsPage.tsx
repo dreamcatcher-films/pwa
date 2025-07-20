@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon } from '../components/Icons';
+import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon } from '../components/Icons.tsx';
 
 const AdminSettingsPage: React.FC = () => {
     const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
