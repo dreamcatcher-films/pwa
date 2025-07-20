@@ -469,6 +469,19 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
         `);
 
         // --- MIGRATION: Add columns if they don't exist ---
+        const bookingsClientIdColumnCheck = await client.query(`
+            SELECT character_maximum_length 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'bookings' 
+            AND column_name = 'client_id'
+        `);
+
+        if (bookingsClientIdColumnCheck.rows.length > 0 && bookingsClientIdColumnCheck.rows[0].character_maximum_length < 255) {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN client_id TYPE VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Expanded 'client_id' column in 'bookings' table to VARCHAR(255).");
+        }
+        
         const messagesColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_read_by_admin'`);
         if (messagesColumnCheck.rows.length === 0) {
             await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
