@@ -221,3 +221,9 @@ export const IdentificationIcon: React.FC<{className?: string}> = ({ className =
         <path d="M3.75 4.5a3 3 0 00-3 3v10.5a3 3 0 003 3h16.5a3 3 0 003-3V7.5a3 3 0 00-3-3H3.75zM16.5 7.5a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zM12.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zM6.75 16.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25z" />
     </svg>
 );
+
+export const UserCircleIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path fillRule="evenodd" d="M18.685 19.097A9.723 9.723 0 0021.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 003.065 7.097A9.716 9.716 0 0012 21.75a9.716 9.716 0 006.685-2.653zM12 6a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5z" clipRule="evenodd" />
+    </svg>
+);
