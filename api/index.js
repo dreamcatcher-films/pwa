@@ -1,5 +1,4 @@
 
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -469,6 +468,24 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 key VARCHAR(255) PRIMARY KEY,
                 value TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS homepage_carousel_slides (
+                id SERIAL PRIMARY KEY,
+                image_url TEXT NOT NULL,
+                title TEXT,
+                subtitle TEXT,
+                button_text TEXT,
+                button_link TEXT,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS homepage_testimonials (
+                id SERIAL PRIMARY KEY,
+                author VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
         `);
 
         // --- MIGRATIONS ---
@@ -531,6 +548,10 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Kilka słów o nas') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy pasjonatami opowiadania historii. Każdy ślub to dla nas unikalna opowieść, którą staramy się uchwycić w najbardziej autentyczny i emocjonalny sposób. Naszym celem jest stworzenie pamiątki, która przetrwa próbę czasu i będziecie do niej wracać z uśmiechem przez lata.') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', '') ON CONFLICT (key) DO NOTHING;`);
+
 
         await client.query('COMMIT');
         res.status(200).json({ message: 'Database schema initialized and migrated successfully.' });
@@ -1193,6 +1214,185 @@ app.patch('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
     }
 });
 
+// --- DYNAMIC HOMEPAGE ENDPOINTS ---
+
+// Public endpoint to fetch all content for the homepage
+app.get('/api/homepage-content', async (req, res) => {
+    try {
+        const slidesRes = await getPool().query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC');
+        const testimonialsRes = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC');
+        const aboutRes = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'about_us_%'");
+        
+        const aboutSection = aboutRes.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+
+        res.json({
+            slides: slidesRes.rows,
+            testimonials: testimonialsRes.rows,
+            aboutSection,
+        });
+    } catch (err) {
+        res.status(500).send(`Error fetching homepage content: ${err.message}`);
+    }
+});
+
+// Admin endpoints for managing homepage content
+app.get('/api/admin/homepage/slides', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching slides: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/slides/upload', verifyAdminToken, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'slide.jpg';
+        const blob = await put(`homepage/${filename}`, req, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (err) {
+        res.status(500).send(`Błąd wysyłania pliku slajdu: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/slides', verifyAdminToken, async (req, res) => {
+    try {
+        const { image_url, title, subtitle, button_text, button_link } = req.body;
+        const result = await getPool().query(
+            'INSERT INTO homepage_carousel_slides (image_url, title, subtitle, button_text, button_link) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [image_url, title, subtitle, button_text, button_link]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error creating slide: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/homepage/slides/:id', verifyAdminToken, async (req, res) => {
+    try {
+        const { title, subtitle, button_text, button_link } = req.body;
+        const result = await getPool().query(
+            'UPDATE homepage_carousel_slides SET title=$1, subtitle=$2, button_text=$3, button_link=$4 WHERE id=$5 RETURNING *',
+            [title, subtitle, button_text, button_link, req.params.id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error updating slide: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/slides/order', verifyAdminToken, async (req, res) => {
+    const { orderedIds } = req.body; // array of slide IDs in the new order
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (let i = 0; i < orderedIds.length; i++) {
+            await client.query('UPDATE homepage_carousel_slides SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+        }
+        await client.query('COMMIT');
+        res.status(200).send('Order updated successfully.');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).send(`Error updating slide order: ${err.message}`);
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/homepage/slides/:id', verifyAdminToken, async (req, res) => {
+    try {
+        const slideRes = await getPool().query('SELECT image_url FROM homepage_carousel_slides WHERE id = $1', [req.params.id]);
+        if (slideRes.rows.length > 0) {
+            await del(slideRes.rows[0].image_url);
+        }
+        await getPool().query('DELETE FROM homepage_carousel_slides WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error deleting slide: ${err.message}`);
+    }
+});
+
+app.get('/api/admin/homepage/about', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'about_us_%'");
+        const aboutSection = result.rows.reduce((acc, row) => {
+            acc[row.key.replace('about_us_', '')] = row.value;
+            return acc;
+        }, {});
+        res.json(aboutSection);
+    } catch (err) {
+        res.status(500).send(`Error fetching about section: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/about/upload', verifyAdminToken, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'about.jpg';
+        const blob = await put(`about/${filename}`, req, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (err) {
+        res.status(500).send(`Błąd wysyłania pliku: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/homepage/about', verifyAdminToken, async (req, res) => {
+    const { title, text, image_url } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_title'", [title]);
+        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_text'", [text]);
+        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_image_url'", [image_url]);
+        await client.query('COMMIT');
+        res.status(200).send('About section updated successfully.');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).send(`Error updating about section: ${err.message}`);
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/homepage/testimonials', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching testimonials: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/testimonials', verifyAdminToken, async (req, res) => {
+    try {
+        const { author, content } = req.body;
+        const result = await getPool().query('INSERT INTO homepage_testimonials (author, content) VALUES ($1, $2) RETURNING *', [author, content]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error creating testimonial: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/homepage/testimonials/:id', verifyAdminToken, async (req, res) => {
+    try {
+        const { author, content } = req.body;
+        const result = await getPool().query('UPDATE homepage_testimonials SET author=$1, content=$2 WHERE id=$3 RETURNING *', [author, content, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error updating testimonial: ${err.message}`);
+    }
+});
+
+app.delete('/api/admin/homepage/testimonials/:id', verifyAdminToken, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM homepage_testimonials WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error deleting testimonial: ${err.message}`);
+    }
+});
 
 
 // Export the app for Vercel
