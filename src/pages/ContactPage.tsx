@@ -1,7 +1,15 @@
 
-import React from 'react';
+
+import React, { useState, useEffect } from 'react';
 import ContactForm from '../components/ContactForm.tsx';
-import { BuildingOffice2Icon, EnvelopeIcon, PhoneIcon, MapIcon } from '../components/Icons.tsx';
+import { BuildingOffice2Icon, EnvelopeIcon, PhoneIcon, MapIcon, LoadingSpinner } from '../components/Icons.tsx';
+
+interface ContactDetails {
+    contact_email: string;
+    contact_phone: string;
+    contact_address: string;
+    google_maps_api_key: string;
+}
 
 const ContactInfoItem: React.FC<{ icon: React.ReactNode, label: string, value: string, href?: string }> = ({ icon, label, value, href }) => (
     <a 
@@ -13,19 +21,36 @@ const ContactInfoItem: React.FC<{ icon: React.ReactNode, label: string, value: s
         <div className="flex-shrink-0 text-indigo-600 mt-1">{icon}</div>
         <div>
             <p className="font-semibold text-slate-800">{label}</p>
-            <p className="text-slate-600">{value}</p>
+            <p className="text-slate-600">{value || <span className="italic text-slate-400">Brak danych</span>}</p>
         </div>
     </a>
 );
 
 const ContactPage: React.FC = () => {
-    // Placeholder data - replace with your actual information
-    const contactEmail = "info@dreamcatcherfilm.co.uk";
-    const contactPhone = "+48 123 456 789";
-    const contactAddress = "ul. Filmowa 123, 00-001 Warszawa, Polska";
-    const googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contactAddress)}`;
-    const googleMapsStaticImage = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(contactAddress)}&zoom=14&size=600x400&maptype=roadmap&markers=color:blue%7Clabel:D%7C${encodeURIComponent(contactAddress)}&key=${process.env.GOOGLE_MAPS_API_KEY || ''}`;
+    const [details, setDetails] = useState<ContactDetails | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
 
+    useEffect(() => {
+        const fetchContactDetails = async () => {
+            try {
+                const response = await fetch('/api/contact-details');
+                if (!response.ok) {
+                    throw new Error('Nie udało się załadować danych kontaktowych.');
+                }
+                const data = await response.json();
+                setDetails(data);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchContactDetails();
+    }, []);
+
+    const googleMapsLink = details ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(details.contact_address)}` : '#';
+    const googleMapsStaticImage = details ? `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(details.contact_address)}&zoom=14&size=600x400&maptype=roadmap&markers=color:blue%7Clabel:D%7C${encodeURIComponent(details.contact_address)}&key=${details.google_maps_api_key || ''}` : '';
 
     return (
         <div className="max-w-6xl mx-auto py-8">
@@ -44,11 +69,13 @@ const ContactPage: React.FC = () => {
                     <div className="space-y-8">
                         <div className="bg-white rounded-2xl shadow-lg p-6">
                             <h3 className="text-xl font-bold text-slate-800 mb-4">Dane kontaktowe</h3>
-                            <div className="space-y-2">
-                               <ContactInfoItem icon={<PhoneIcon className="w-6 h-6"/>} label="Telefon" value={contactPhone} href={`tel:${contactPhone.replace(/\s/g, '')}`} />
-                               <ContactInfoItem icon={<EnvelopeIcon className="w-6 h-6"/>} label="E-mail" value={contactEmail} href={`mailto:${contactEmail}`} />
-                               <ContactInfoItem icon={<BuildingOffice2Icon className="w-6 h-6"/>} label="Adres" value={contactAddress} href={googleMapsLink} />
-                            </div>
+                            {isLoading ? <LoadingSpinner /> : error ? <p className="text-red-500">{error}</p> : (
+                                <div className="space-y-2">
+                                   <ContactInfoItem icon={<PhoneIcon className="w-6 h-6"/>} label="Telefon" value={details?.contact_phone} href={`tel:${details?.contact_phone.replace(/\s/g, '')}`} />
+                                   <ContactInfoItem icon={<EnvelopeIcon className="w-6 h-6"/>} label="E-mail" value={details?.contact_email} href={`mailto:${details?.contact_email}`} />
+                                   <ContactInfoItem icon={<BuildingOffice2Icon className="w-6 h-6"/>} label="Adres" value={details?.contact_address} href={googleMapsLink} />
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -56,13 +83,15 @@ const ContactPage: React.FC = () => {
                                 <MapIcon className="w-6 h-6 text-indigo-600"/>
                                 Znajdź nas na mapie
                             </h3>
-                            <a href={googleMapsLink} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden group">
-                                <img 
-                                    src={googleMapsStaticImage} 
-                                    alt={`Mapa pokazująca lokalizację ${contactAddress}`}
-                                    className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
-                                />
-                            </a>
+                            {isLoading ? <LoadingSpinner /> : error || !details?.google_maps_api_key ? <p className="text-sm text-slate-500">Mapa jest chwilowo niedostępna.</p> : (
+                                <a href={googleMapsLink} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden group">
+                                    <img 
+                                        src={googleMapsStaticImage} 
+                                        alt={`Mapa pokazująca lokalizację ${details?.contact_address}`}
+                                        className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
+                                    />
+                                </a>
+                            )}
                         </div>
                     </div>
                 </div>
