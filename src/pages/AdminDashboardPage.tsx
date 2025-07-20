@@ -1,6 +1,7 @@
+
 import React, { useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon } from '../components/Icons.tsx';
 import AdminBookingsPage from './AdminBookingsPage.tsx';
 import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
@@ -9,9 +10,10 @@ import AdminPackagesPage from './AdminPackagesPage.tsx';
 import AdminDiscountsPage from './AdminDiscountsPage.tsx';
 import AdminStagesPage from './AdminStagesPage.tsx';
 import AdminSettingsPage from './AdminSettingsPage.tsx';
+import AdminHomepagePage from './AdminHomepagePage.tsx';
 
 // --- SHARED TYPES ---
-export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages' | 'settings';
+export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages' | 'settings' | 'homepage';
 
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
@@ -59,6 +61,8 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                 return <AdminStagesPage />;
             case 'settings':
                 return <AdminSettingsPage />;
+            case 'homepage':
+                return <AdminHomepagePage />;
             default:
                 return <AdminBookingsPage onViewDetails={onViewDetails} />;
         }
@@ -81,6 +85,9 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
 
             <div className="border-b border-slate-200 mb-8">
                 <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
+                    <TabButton isActive={currentPage === 'homepage'} onClick={() => navigateTo('adminHomepage')}>
+                        <HomeModernIcon className="w-5 h-5" /> Strona Główna
+                    </TabButton>
                     <TabButton isActive={currentPage === 'bookings'} onClick={() => navigateTo('adminDashboard')}>
                         <InboxStackIcon className="w-5 h-5" /> Rezerwacje
                     </TabButton>
