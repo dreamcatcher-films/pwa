@@ -26,6 +26,9 @@ interface AboutSection {
     image_url: string;
 }
 
+const inputClasses = "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+
+
 // --- MAIN COMPONENT ---
 const AdminHomepagePage: FC = () => {
     const [isLoading, setIsLoading] = useState(true);
@@ -266,8 +269,9 @@ const AboutUsManager: FC<{ aboutSection: AboutSection, onDataChange: () => void,
         <div className="bg-white p-6 rounded-2xl shadow">
             <h2 className="text-2xl font-bold text-slate-800 mb-4">Sekcja "O nas"</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-                 <input name="title" value={formData.title} onChange={handleChange} placeholder="Nagłówek sekcji" className="block w-full input" />
-                 <textarea name="text" value={formData.text} onChange={handleChange} placeholder="Tekst o Was" className="block w-full input" rows={5}></textarea>
+                 <input name="title" value={formData.title} onChange={handleChange} placeholder="Nagłówek sekcji" className={inputClasses} />
+                 <textarea name="text" value={formData.text} onChange={handleChange} placeholder="Tekst o Was" className={inputClasses} rows={5}></textarea>
+                 <p className="text-xs text-slate-500 -mt-2 pl-1">Możesz używać formatowania Markdown, np. `**pogrubienie**`, `*kursywa*` lub listy.</p>
                  
                  <div className="flex items-center gap-4">
                     {formData.image_url && <img src={formData.image_url} alt="Podgląd" className="w-24 h-24 object-cover rounded-md" />}
@@ -366,10 +370,10 @@ const SlideEditor: FC<{ slide: Partial<Slide>, onClose: () => void, onSave: (dat
         <Modal onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <h3 className="text-xl font-bold text-slate-800">{slide.id ? 'Edytuj Slajd' : 'Nowy Slajd'}</h3>
-                <input name="title" value={formData.title || ''} onChange={handleChange} placeholder="Tytuł" className="input w-full" />
-                <input name="subtitle" value={formData.subtitle || ''} onChange={handleChange} placeholder="Podtytuł" className="input w-full" />
-                <input name="button_text" value={formData.button_text || ''} onChange={handleChange} placeholder="Tekst na przycisku" className="input w-full" />
-                <input name="button_link" value={formData.button_link || ''} onChange={handleChange} placeholder="Link przycisku (np. /calculator)" className="input w-full" />
+                <input name="title" value={formData.title || ''} onChange={handleChange} placeholder="Tytuł" className={inputClasses} />
+                <input name="subtitle" value={formData.subtitle || ''} onChange={handleChange} placeholder="Podtytuł" className={inputClasses} />
+                <input name="button_text" value={formData.button_text || ''} onChange={handleChange} placeholder="Tekst na przycisku" className={inputClasses} />
+                <input name="button_link" value={formData.button_link || ''} onChange={handleChange} placeholder="Link przycisku (np. /calculator)" className={inputClasses} />
                 <div className="flex items-center gap-4">
                     {formData.image_url && !file && <img src={formData.image_url} alt="Podgląd" className="w-16 h-16 object-cover rounded-md" />}
                     <input type="file" onChange={handleFileChange} accept="image/*" className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
@@ -394,8 +398,8 @@ const TestimonialEditor: FC<{ testimonial: Partial<Testimonial>, onClose: () => 
         <Modal onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <h3 className="text-xl font-bold text-slate-800">{testimonial.id ? 'Edytuj Opinię' : 'Nowa Opinia'}</h3>
-                <input name="author" value={formData.author || ''} onChange={handleChange} placeholder="Autor (np. Anna i Piotr)" className="input w-full" required />
-                <textarea name="content" value={formData.content || ''} onChange={handleChange} placeholder="Treść opinii" className="input w-full" rows={4} required></textarea>
+                <input name="author" value={formData.author || ''} onChange={handleChange} placeholder="Autor (np. Anna i Piotr)" className={inputClasses} required />
+                <textarea name="content" value={formData.content || ''} onChange={handleChange} placeholder="Treść opinii" className={inputClasses} rows={4} required></textarea>
                  <div className="flex justify-end gap-3 pt-4 border-t">
                     <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
                     <button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center w-28">
