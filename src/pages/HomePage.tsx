@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, ChatBubbleBottomCenterTextIcon } from '../components/Icons.tsx';
 import HeroCarousel from '../components/HeroCarousel.tsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface HomePageProps {
     navigateTo: (page: Page) => void;
@@ -85,7 +87,9 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                     )}
                     <div className="order-2 md:order-1">
                         <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{aboutSection.about_us_title}</h2>
-                        <p className="mt-4 text-lg text-slate-600 whitespace-pre-wrap">{aboutSection.about_us_text}</p>
+                        <div className="mt-4 text-lg text-slate-600 [&_p]:mb-4 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:list-inside [&_ol]:list-decimal [&_ol]:list-inside">
+                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{aboutSection.about_us_text}</ReactMarkdown>
+                        </div>
                     </div>
                 </div>
             </section>
