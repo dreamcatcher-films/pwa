@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { Page } from '../App.tsx';
 
 interface Slide {
@@ -17,69 +16,46 @@ interface HeroCarouselProps {
 }
 
 const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-
-    const goToNext = useCallback(() => {
-        const isLastSlide = currentIndex === slides.length - 1;
-        const newIndex = isLastSlide ? 0 : currentIndex + 1;
-        setCurrentIndex(newIndex);
-    }, [currentIndex, slides.length]);
-
-    useEffect(() => {
-        const timer = setTimeout(goToNext, 5000);
-        return () => clearTimeout(timer);
-    }, [goToNext]);
-
-    const goToSlide = (slideIndex: number) => {
-        setCurrentIndex(slideIndex);
-    };
-
-    const handleButtonClick = (link: string) => {
-        if (link.startsWith('/')) {
-            const page = link.substring(1) as Page;
-            navigateTo(page);
-        } else {
-            window.open(link, '_blank');
-        }
-    }
-
+    
     if (!slides || slides.length === 0) {
         return null;
     }
 
-    return (
-        <div className="h-[60vh] md:h-[80vh] w-full m-auto relative group">
-            <div
-                style={{ backgroundImage: `url(${slides[currentIndex].image_url})` }}
-                className="w-full h-full bg-center bg-cover duration-500"
-            >
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <div className="text-center text-white p-4 max-w-3xl">
-                        <h1 className="text-4xl md:text-6xl font-bold font-cinzel tracking-wider">{slides[currentIndex].title}</h1>
-                        <p className="mt-4 text-lg md:text-2xl">{slides[currentIndex].subtitle}</p>
-                        {slides[currentIndex].button_text && slides[currentIndex].button_link && (
-                             <button
-                                onClick={() => handleButtonClick(slides[currentIndex].button_link)}
-                                className="mt-8 bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105 shadow-lg"
-                            >
-                                {slides[currentIndex].button_text}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
+    const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
+        if (link.startsWith('/')) {
+            e.preventDefault();
+            const page = link.substring(1) as Page;
+            navigateTo(page);
+        }
+    };
 
-            <div className="flex top-4 justify-center py-2 absolute bottom-5 left-1/2 -translate-x-1/2">
-                {slides.map((slide, slideIndex) => (
-                    <div
-                        key={slide.id}
-                        onClick={() => goToSlide(slideIndex)}
-                        className={`text-2xl cursor-pointer p-1 mx-1 ${currentIndex === slideIndex ? 'text-white' : 'text-white/50'}`}
+    const duplicatedSlides = [...slides, ...slides];
+
+    return (
+        <div className="w-full h-[70vh] max-h-[700px] overflow-hidden relative group cursor-grab active:cursor-grabbing">
+             <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-slate-50/50 to-slate-50 z-10"></div>
+            <div
+                className="flex items-center h-full animate-scroll-filmstrip group-hover:[animation-play-state:paused]"
+            >
+                {duplicatedSlides.map((slide, index) => (
+                    <a
+                        key={`${slide.id}-${index}`}
+                        href={slide.button_link || '#'}
+                        onClick={(e) => slide.button_link && handleLinkClick(e, slide.button_link)}
+                        target={slide.button_link && !slide.button_link.startsWith('/') ? '_blank' : '_self'}
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 h-full w-auto mx-2 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl"
+                        aria-label={`Zobacz realizację: ${slide.title}`}
                     >
-                        ●
-                    </div>
+                        <img
+                            src={slide.image_url}
+                            alt={slide.title}
+                            className="h-full w-auto object-contain rounded-2xl shadow-xl transition-transform duration-300 group-hover:scale-95 hover:!scale-100"
+                        />
+                    </a>
                 ))}
             </div>
+             <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-slate-50/50 to-slate-50 z-10"></div>
         </div>
     );
 };
