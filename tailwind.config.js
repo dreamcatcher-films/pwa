@@ -9,6 +9,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        'sans': ['Rubik', 'sans-serif'],
         'cinzel': ['Cinzel', 'serif'],
       },
       keyframes: {
