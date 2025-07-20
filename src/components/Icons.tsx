@@ -240,3 +240,15 @@ export const ChatBubbleBottomCenterTextIcon: React.FC<{className?: string}> = ({
     <path fillRule="evenodd" d="M4.804 21.644A6.707 6.707 0 006 21.75a6.721 6.721 0 003.583-1.029c.774.182 1.584.279 2.417.279 5.352 0 9.75-3.62 9.75-8.065 0-4.444-4.398-8.064-9.75-8.064-5.352 0-9.75 3.62-9.75 8.064 0 3.828 3.18 6.973 7.5 7.818a6.73 6.73 0 00-3.321 2.824zM11.25 12.75a.75.75 0 01.75-.75h4.5a.75.75 0 010 1.5h-4.5a.75.75 0 01-.75-.75zm0 3a.75.75 0 01.75-.75h4.5a.75.75 0 010 1.5h-4.5a.75.75 0 01-.75-.75z" clipRule="evenodd" />
   </svg>
 );
+
+export const ArrowUpIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+    </svg>
+);
+
+export const ArrowDownIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+    </svg>
+);
