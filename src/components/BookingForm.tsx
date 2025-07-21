@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
+import { EngagementRingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from './FormControls.tsx';
 
@@ -182,7 +182,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                             className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                         />
                         <button type="button" onClick={handleApplyDiscount} disabled={discountStatus === 'loading' || !discountCode} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 w-32 flex justify-center items-center">
-                            {discountStatus === 'loading' ? <LoadingSpinner className="w-5 h-5"/> : 'Zastosuj'}
+                            {discountStatus === 'loading' ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zastosuj'}
                         </button>
                     </div>
                     {discountStatus === 'success' && <p className="mt-2 text-sm text-green-600 flex items-center gap-2"><CheckCircleIcon className="w-5 h-5"/>Rabat został pomyślnie naliczony!</p>}
@@ -190,8 +190,8 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                 </section>
 
                 <div className="pt-6 border-t">
-                     <button type="submit" disabled={status === 'loading'} className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed">
-                        {status === 'loading' ? <LoadingSpinner /> : 'Zarezerwuj i utwórz konto'}
+                     <button type="submit" disabled={status === 'loading'} className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed">
+                        {status === 'loading' ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zarezerwuj i utwórz konto'}
                     </button>
                 </div>
             </form>
