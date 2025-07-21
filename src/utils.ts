@@ -1,8 +1,10 @@
-export const formatCurrency = (value: number): string => {
-    if (isNaN(value)) {
+
+export const formatCurrency = (value: number | string): string => {
+    const numericValue = Number(value);
+    if (isNaN(numericValue)) {
         return '';
     }
-    return value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+    return numericValue.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
 };
 
 export const copyToClipboard = (text: string) => {
