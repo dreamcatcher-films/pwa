@@ -7,6 +7,19 @@ import jwt from 'jsonwebtoken';
 import { put, del } from '@vercel/blob';
 import { Resend } from 'resend';
 
+// --- Environment Variable Validation ---
+// Ensure all critical environment variables are set before proceeding.
+const requiredEnvVars = ['DATABASE_URL', 'JWT_ADMIN_SECRET', 'JWT_CLIENT_SECRET', 'RESEND_API_KEY'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+    const errorMessage = `FATAL ERROR: Missing required environment variables: ${missingEnvVars.join(', ')}. Please set these in your Vercel project settings.`;
+    console.error(errorMessage);
+    // This will cause the serverless function to fail with a clear error in the logs.
+    throw new Error(errorMessage);
+}
+
+
 const app = express();
 
 // --- Middleware ---
@@ -15,7 +28,7 @@ app.use(express.json({ limit: '6mb' })); // Increase limit for file uploads
 app.use(express.urlencoded({ extended: true, limit: '6mb' }));
 
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // --- Database Configuration & Initialization ---
 let pool;
@@ -23,9 +36,6 @@ let initializationPromise = null;
 
 const getPool = () => {
     if (!pool) {
-        if (!process.env.DATABASE_URL) {
-            throw new Error("FATAL ERROR: DATABASE_URL is not set.");
-        }
         console.log("Initializing new database connection pool...");
         pool = new pg.Pool({
             connectionString: process.env.DATABASE_URL,
@@ -246,11 +256,18 @@ const runDbSetup = async () => {
         // --- MIGRATIONS ---
         
         const correctFkCheck = await client.query(`
-            SELECT 1 FROM pg_constraint 
-            WHERE conname = 'package_addons_package_id_fkey' AND conrelid = 'package_addons'::regclass
+            SELECT 1 
+            FROM pg_constraint 
+            JOIN pg_class AS t_from ON t_from.oid = conrelid
+            JOIN pg_class AS t_to ON t_to.oid = confrelid
+            WHERE conname = 'package_addons_package_id_fkey' 
+            AND t_from.relname = 'package_addons'
+            AND t_to.relname = 'packages'
         `);
+
         if (correctFkCheck.rows.length === 0) {
-             console.log("MIGRATION: Adding missing foreign key to 'package_addons'.");
+             console.log("MIGRATION: Correcting foreign key on 'package_addons'.");
+             await client.query(`ALTER TABLE package_addons DROP CONSTRAINT IF EXISTS package_addons_package_id_fkey;`);
              await client.query(`
                 ALTER TABLE package_addons 
                 ADD CONSTRAINT package_addons_package_id_fkey 
@@ -662,8 +679,7 @@ app.get('/api/homepage-content', async (req, res) => {
         ]);
 
         const aboutSection = aboutRes.rows.reduce((acc, row) => {
-            const key = row.key.replace('about_us_', '');
-            acc[key] = row.value;
+             acc[row.key.replace('about_us_', '')] = row.value;
             return acc;
         }, {});
 
@@ -1039,10 +1055,6 @@ app.post('/api/admin/bookings/:id/resend-credentials', authenticateAdmin, async 
     const { id } = req.params;
     const client = await getPool().connect();
     try {
-        if (!resend) {
-            return res.status(500).json({ message: 'Usługa e-mail nie jest skonfigurowana.' });
-        }
-        
         const bookingRes = await client.query('SELECT email, client_id, bride_name, groom_name FROM bookings WHERE id = $1', [id]);
         if (bookingRes.rows.length === 0) {
             return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
@@ -1411,7 +1423,6 @@ app.post('/api/admin/packages/upload-image', authenticateAdmin, async (req, res)
 app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
     const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
     const client = await getPool().connect();
-    let newPackageId;
     try {
         await client.query('BEGIN');
         
@@ -1420,7 +1431,7 @@ app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
             [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
         );
-        newPackageId = packageRes.rows[0].id;
+        const newPackageId = packageRes.rows[0].id;
 
         if (addons && addons.length > 0) {
             const addonValues = addons.map(a => `(${newPackageId}, ${a.id})`).join(',');
@@ -1428,13 +1439,11 @@ app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
         }
         
         await client.query('COMMIT');
-        res.status(201).json({ id: newPackageId });
+        res.status(201).json({ id: newPackageId, message: "Package created successfully" });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error("Error creating package:", error);
-        const detail = error.detail || 'Brak szczegółów.';
-        const hint = error.hint || 'Sprawdź, czy wszystkie dane są poprawne.';
-        res.status(500).send(`Błąd tworzenia pakietu: ${error.message}. Szczegóły: ${detail} Wskazówka: ${hint}`);
+        res.status(500).send(`Błąd tworzenia pakietu: ${error.message}`);
     } finally {
         client.release();
     }
@@ -1893,8 +1902,7 @@ app.get('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
     try {
         const result = await client.query("SELECT key, value FROM app_settings WHERE key LIKE 'about_us_%'");
         const settings = result.rows.reduce((acc, row) => {
-            const key = row.key.replace('about_us_', '');
-            acc[key] = row.value;
+            acc[row.key.replace('about_us_', '')] = row.value;
             return acc;
         }, {});
         res.json(settings);
