@@ -12,6 +12,7 @@ import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 import GalleryPage from './pages/GalleryPage.tsx';
 import InstallPrompt from './components/InstallPrompt.tsx';
 import ContactPage from './pages/ContactPage.tsx';
+import Footer from './components/Footer.tsx';
 
 export type Page = 
   'home' | 'calculator' | 'gallery' | 'contact' |
@@ -82,24 +83,23 @@ const App = () => {
         }
     };
     
-    // Apply the main container with padding and max-width to specific pages.
-    // The new admin dashboard has its own full-width layout, and public pages
-    // manage their own containers for sections that need to be full-width (like the hero carousel).
     const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin' || currentPage === 'login';
+    const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans">
+        <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
             <Header
                 onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                 onViewDetails={handleViewBookingDetails}
                 navigateTo={navigateTo}
             />
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-            <main>
+            <main className="flex-grow">
                 <div className={hasAppContainer ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}>
                     {renderCurrentPage()}
                 </div>
             </main>
+            {isPublicPage && <Footer />}
             <InstallPrompt />
         </div>
     );
