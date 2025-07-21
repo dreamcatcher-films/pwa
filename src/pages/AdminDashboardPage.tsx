@@ -142,22 +142,24 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-6 sm:p-8 lg:p-10 bg-slate-50 overflow-y-auto">
-                <header className="flex flex-col sm:flex-row justify-between items-start mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
-                        <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
-                    </div>
-                    <button 
-                        onClick={handleLogout}
-                        className="mt-4 sm:mt-0 bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition flex-shrink-0"
-                    >
-                        Wyloguj się
-                    </button>
-                </header>
+            <main className="flex-1 bg-slate-50 overflow-y-auto">
+                <div className="max-w-7xl mx-auto p-6 sm:p-8 lg:p-10">
+                    <header className="flex flex-col sm:flex-row justify-between items-start mb-8">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
+                            <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
+                        </div>
+                        <button 
+                            onClick={handleLogout}
+                            className="mt-4 sm:mt-0 bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 transition flex-shrink-0"
+                        >
+                            Wyloguj się
+                        </button>
+                    </header>
 
-                <div>
-                    {renderContent()}
+                    <div>
+                        {renderContent()}
+                    </div>
                 </div>
             </main>
         </div>
