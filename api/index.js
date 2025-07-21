@@ -1,6 +1,4 @@
 
-
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -53,31 +51,6 @@ const runDbSetup = async () => {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             
-            CREATE TABLE IF NOT EXISTS bookings (
-                id SERIAL PRIMARY KEY,
-                client_id VARCHAR(255) UNIQUE,
-                access_key VARCHAR(4),
-                package_name VARCHAR(255) NOT NULL,
-                total_price NUMERIC(10, 2) NOT NULL,
-                selected_items TEXT[] NOT NULL,
-                bride_name VARCHAR(255) NOT NULL,
-                groom_name VARCHAR(255) NOT NULL,
-                wedding_date DATE NOT NULL,
-                bride_address TEXT,
-                groom_address TEXT,
-                locations TEXT,
-                schedule TEXT,
-                email VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(255),
-                additional_info TEXT,
-                password_hash VARCHAR(255) NOT NULL,
-                discount_code VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                payment_status VARCHAR(50) DEFAULT 'pending',
-                amount_paid NUMERIC(10, 2) DEFAULT 0.00,
-                payment_intent_id VARCHAR(255)
-            );
-
             CREATE TABLE IF NOT EXISTS admins (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -102,28 +75,12 @@ const runDbSetup = async () => {
                 image_url TEXT NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-
-            CREATE TABLE IF NOT EXISTS packages (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) NOT NULL,
-              description TEXT,
-              price NUMERIC(10, 2) NOT NULL,
-              type VARCHAR(50) NOT NULL DEFAULT 'combo', -- 'film', 'photo', 'combo'
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
             
             CREATE TABLE IF NOT EXISTS addons (
               id SERIAL PRIMARY KEY,
               name VARCHAR(255) NOT NULL,
               price NUMERIC(10, 2) NOT NULL,
               created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS package_addons (
-              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
-              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
-              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-              PRIMARY KEY (package_id, addon_id)
             );
 
             CREATE TABLE IF NOT EXISTS discount_codes (
@@ -141,24 +98,6 @@ const runDbSetup = async () => {
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS booking_stages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                stage_id INTEGER REFERENCES production_stages(id),
-                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
-                completed_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
-                content TEXT NOT NULL,
-                is_read_by_admin BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -205,49 +144,120 @@ const runDbSetup = async () => {
                 sort_order INTEGER DEFAULT 0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS package_categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                description TEXT,
+                icon_name VARCHAR(255)
+            );
+
+            CREATE TABLE IF NOT EXISTS packages (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) NOT NULL,
+              description TEXT,
+              price NUMERIC(10, 2) NOT NULL,
+              category_id INTEGER REFERENCES package_categories(id) ON DELETE SET NULL,
+              is_published BOOLEAN DEFAULT FALSE,
+              rich_description TEXT,
+              rich_description_image_url TEXT,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS package_addons (
+              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
+              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+              PRIMARY KEY (package_id, addon_id)
+            );
+            
+             CREATE TABLE IF NOT EXISTS bookings (
+                id SERIAL PRIMARY KEY,
+                client_id VARCHAR(255) UNIQUE,
+                access_key VARCHAR(4),
+                package_name VARCHAR(255) NOT NULL,
+                total_price NUMERIC(10, 2) NOT NULL,
+                selected_items TEXT[] NOT NULL,
+                bride_name VARCHAR(255) NOT NULL,
+                groom_name VARCHAR(255) NOT NULL,
+                wedding_date DATE NOT NULL,
+                bride_address TEXT,
+                groom_address TEXT,
+                locations TEXT,
+                schedule TEXT,
+                email VARCHAR(255) NOT NULL,
+                phone_number VARCHAR(255),
+                additional_info TEXT,
+                password_hash VARCHAR(255) NOT NULL,
+                discount_code VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                payment_status VARCHAR(50) DEFAULT 'pending',
+                amount_paid NUMERIC(10, 2) DEFAULT 0.00,
+                payment_intent_id VARCHAR(255)
+            );
+            
+            CREATE TABLE IF NOT EXISTS booking_stages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                stage_id INTEGER REFERENCES production_stages(id),
+                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
+                content TEXT NOT NULL,
+                is_read_by_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
         `);
-
+        
         // --- MIGRATIONS ---
-        const packagesTypeColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'packages' AND column_name = 'type'`);
-        if (packagesTypeColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE packages ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT 'combo';`);
-            console.log("MIGRATION APPLIED: Added 'type' column to 'packages' table.");
-        }
+        const typeColCheck = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages_old'`);
+        if (typeColCheck.rows.length === 0) {
+            const oldPackagesExist = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages'`);
+            const oldTypeColExist = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='packages' AND column_name='type'`);
 
-        const bookingsClientIdColumnCheck = await client.query(`SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'client_id'`);
-        if (bookingsClientIdColumnCheck.rows.length > 0 && bookingsClientIdColumnCheck.rows[0].character_maximum_length < 255) {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN client_id TYPE VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Expanded 'client_id' column in 'bookings' table to VARCHAR(255).");
-        }
-        
-        const messagesColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_read_by_admin'`);
-        if (messagesColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
-            console.log("MIGRATION APPLIED: Added 'is_read_by_admin' column to 'messages' table.");
-        }
+            if (oldPackagesExist.rows.length > 0 && oldTypeColExist.rows.length > 0) {
+                console.log("MIGRATION: Starting package structure migration...");
+                await client.query(`ALTER TABLE packages RENAME TO packages_old;`);
+                await client.query(`
+                    CREATE TABLE packages (
+                      id SERIAL PRIMARY KEY,
+                      name VARCHAR(255) NOT NULL,
+                      description TEXT,
+                      price NUMERIC(10, 2) NOT NULL,
+                      category_id INTEGER REFERENCES package_categories(id) ON DELETE SET NULL,
+                      is_published BOOLEAN DEFAULT FALSE,
+                      rich_description TEXT,
+                      rich_description_image_url TEXT,
+                      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                `);
+                
+                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film', 'FilmIcon') ON CONFLICT (name) DO NOTHING;`);
+                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Fotografia', 'CameraIcon') ON CONFLICT (name) DO NOTHING;`);
+                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
 
-        const adminsColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'admins' AND column_name = 'notification_email'`);
-        if (adminsColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE admins ADD COLUMN notification_email VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
-        }
-        
-        const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
-        if (bookingsPaymentIntentColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE bookings ADD COLUMN payment_intent_id VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Added 'payment_intent_id' column to 'bookings' table.");
-        }
+                await client.query(`
+                    INSERT INTO packages (id, name, description, price, created_at, category_id, is_published)
+                    SELECT 
+                        id, name, description, price, created_at,
+                        CASE 
+                            WHEN type = 'film' THEN (SELECT id FROM package_categories WHERE name = 'Film')
+                            WHEN type = 'photo' THEN (SELECT id FROM package_categories WHERE name = 'Fotografia')
+                            ELSE (SELECT id FROM package_categories WHERE name = 'Film + Fotografia')
+                        END as category_id,
+                        TRUE as is_published
+                    FROM packages_old;
+                `);
 
-        const accessKeyConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'access_key'`);
-        if (accessKeyConstraintCheck.rows.length > 0 && accessKeyConstraintCheck.rows[0].is_nullable === 'NO') {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN access_key DROP NOT NULL;`);
-            console.log("MIGRATION APPLIED: Made 'access_key' column in 'bookings' table nullable.");
-        }
-
-        const phoneNumberConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'phone_number'`);
-        if (phoneNumberConstraintCheck.rows.length > 0 && phoneNumberConstraintCheck.rows[0].is_nullable === 'NO') {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN phone_number DROP NOT NULL;`);
-            console.log("MIGRATION APPLIED: Made 'phone_number' column in 'bookings' table nullable.");
+                await client.query(`SELECT setval('packages_id_seq', (SELECT MAX(id) FROM packages));`);
+                console.log("MIGRATION: Package structure migration completed.");
+            }
         }
         
         // --- SEEDING ---
@@ -260,7 +270,6 @@ const runDbSetup = async () => {
             await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
         }
         
-        // Remove old CONTACTFORM booking if it exists
         await client.query("DELETE FROM bookings WHERE client_id = 'CONTACTFORM'");
 
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
@@ -270,7 +279,6 @@ const runDbSetup = async () => {
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Kilka słów o nas') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy pasjonatami opowiadania historii. Każdy ślub to dla nas unikalna opowieść, którą staramy się uchwycić w najbardziej autentyczny i emocjonalny sposób. Naszym celem jest stworzenie pamiątki, która przetrwa próbę czasu i będziecie do niej wracać z uśmiechem przez lata.') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', '') ON CONFLICT (key) DO NOTHING;`);
-
 
         await client.query('COMMIT');
         return { success: true, message: 'Database schema initialized and migrated successfully.' };
@@ -489,7 +497,8 @@ app.post('/api/bookings', async (req, res) => {
 
 app.get('/api/packages', async (req, res) => {
     try {
-        const packagesRes = await getPool().query('SELECT * FROM packages ORDER BY price DESC');
+        const categoriesRes = await getPool().query('SELECT * FROM package_categories ORDER BY id');
+        const packagesRes = await getPool().query('SELECT * FROM packages WHERE is_published = TRUE ORDER BY price DESC');
         const addonsRes = await getPool().query('SELECT * FROM addons ORDER BY name');
         const relationsRes = await getPool().query('SELECT * FROM package_addons');
         
@@ -501,11 +510,12 @@ app.get('/api/packages', async (req, res) => {
             return { ...p, included };
         });
 
-        res.json({ packages, allAddons: addonsRes.rows });
+        res.json({ categories: categoriesRes.rows, packages, allAddons: addonsRes.rows });
     } catch (err) {
-        res.status(500).send(`Error fetching packages and addons: ${err.message}`);
+        res.status(500).send(`Error fetching offer for calculator: ${err.message}`);
     }
 });
+
 
 app.post('/api/validate-discount', async (req, res) => {
     try {
@@ -814,44 +824,100 @@ app.delete('/api/admin/galleries/:id', verifyAdminToken, async (req, res) => {
     }
 });
 
-app.get('/api/admin/packages', verifyAdminToken, async (req, res) => {
+// Admin Offer Management
+app.get('/api/admin/offer-data', verifyAdminToken, async (req, res) => {
      try {
-        const packagesRes = await getPool().query('SELECT * FROM packages ORDER BY price DESC');
-        const relationsRes = await getPool().query('SELECT pa.*, a.name, a.price FROM package_addons pa JOIN addons a ON pa.addon_id = a.id');
+        const packagesRes = await getPool().query('SELECT p.*, c.name as category_name FROM packages p LEFT JOIN package_categories c ON p.category_id = c.id ORDER BY p.id ASC');
+        const addonsRes = await getPool().query('SELECT * FROM addons ORDER BY name');
+        const categoriesRes = await getPool().query('SELECT * FROM package_categories ORDER BY id ASC');
+        const relationsRes = await getPool().query('SELECT * FROM package_addons');
+
         const packages = packagesRes.rows.map(p => ({
             ...p,
-            addons: relationsRes.rows.filter(r => r.package_id === p.id)
+            addons: relationsRes.rows.filter(r => r.package_id === p.id).map(r => ({id: r.addon_id, is_locked: r.is_locked}))
         }));
-        res.json(packages);
+        
+        res.json({ packages, addons: addonsRes.rows, categories: categoriesRes.rows });
     } catch (err) {
-        res.status(500).send(`Błąd pobierania pakietów: ${err.message}`);
+        res.status(500).send(`Błąd pobierania danych oferty: ${err.message}`);
     }
 });
 
-app.get('/api/admin/addons', verifyAdminToken, async (req, res) => {
+// Categories CRUD
+app.post('/api/admin/categories', verifyAdminToken, async (req, res) => {
+    const { name, description, icon_name } = req.body;
     try {
-        const result = await getPool().query('SELECT * FROM addons ORDER BY name');
-        res.json(result.rows);
+        const result = await getPool().query('INSERT INTO package_categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *', [name, description, icon_name]);
+        res.status(201).json(result.rows[0]);
     } catch (err) {
-        res.status(500).send(`Błąd pobierania dodatków: ${err.message}`);
+        res.status(500).send(`Błąd tworzenia kategorii: ${err.message}`);
+    }
+});
+app.patch('/api/admin/categories/:id', verifyAdminToken, async (req, res) => {
+    const { name, description, icon_name } = req.body;
+    try {
+        const result = await getPool().query('UPDATE package_categories SET name=$1, description=$2, icon_name=$3 WHERE id=$4 RETURNING *', [name, description, icon_name, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Błąd aktualizacji kategorii: ${err.message}`);
+    }
+});
+app.delete('/api/admin/categories/:id', verifyAdminToken, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM package_categories WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Błąd usuwania kategorii: ${err.message}`);
     }
 });
 
+// Addons CRUD
+app.post('/api/admin/addons', verifyAdminToken, async (req, res) => {
+    const { name, price } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Błąd tworzenia dodatku: ${err.message}`);
+    }
+});
+app.patch('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
+    const { name, price } = req.body;
+    try {
+        const result = await getPool().query('UPDATE addons SET name=$1, price=$2 WHERE id=$3 RETURNING *', [name, price, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Błąd aktualizacji dodatku: ${err.message}`);
+    }
+});
+app.delete('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM addons WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Błąd usuwania dodatku: ${err.message}`);
+    }
+});
+
+// Packages CRUD
 app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
-    const { name, description, price, addons, type } = req.body;
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const pkgRes = await client.query('INSERT INTO packages (name, description, price, type) VALUES ($1, $2, $3, $4) RETURNING id', [name, description, price, type]);
-        const packageId = pkgRes.rows[0].id;
+        const pkgRes = await client.query(
+            'INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
+        );
+        const newPackage = pkgRes.rows[0];
 
         if (addons && addons.length > 0) {
             for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [packageId, addon.id, addon.is_locked]);
+                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [newPackage.id, addon.id, addon.is_locked]);
             }
         }
         await client.query('COMMIT');
-        res.status(201).json({ id: packageId, ...req.body });
+        res.status(201).json(newPackage);
     } catch (err) {
         await client.query('ROLLBACK');
         res.status(500).send(`Błąd tworzenia pakietu: ${err.message}`);
@@ -862,20 +928,23 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
 
 app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     const packageId = req.params.id;
-    const { name, description, price, addons, type } = req.body;
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        await client.query('UPDATE packages SET name = $1, description = $2, price = $3, type = $4 WHERE id = $5', [name, description, price, type, packageId]);
+        const pkgRes = await client.query(
+            'UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8 RETURNING *',
+            [name, description, price, category_id, is_published, rich_description, rich_description_image_url, packageId]
+        );
+        
         await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
-
         if (addons && addons.length > 0) {
             for (const addon of addons) {
                 await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [packageId, addon.id, addon.is_locked]);
             }
         }
         await client.query('COMMIT');
-        res.status(200).json({ id: packageId, ...req.body });
+        res.status(200).json(pkgRes.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
         res.status(500).send(`Błąd aktualizacji pakietu: ${err.message}`);
@@ -883,7 +952,6 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         client.release();
     }
 });
-
 
 app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     try {
@@ -893,6 +961,19 @@ app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         res.status(500).send(`Błąd usuwania pakietu: ${err.message}`);
     }
 });
+
+app.post('/api/admin/packages/upload-image', verifyAdminToken, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'package-image.jpg';
+        const blob = await put(`packages/${filename}`, req, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (err) {
+        res.status(500).send(`Błąd wysyłania zdjęcia pakietu: ${err.message}`);
+    }
+});
+
+// -- END -- Admin Offer Management
+
 
 app.get('/api/admin/discounts', verifyAdminToken, async (req, res) => {
     try {
