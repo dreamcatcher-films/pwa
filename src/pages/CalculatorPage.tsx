@@ -370,7 +370,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             return;
         }
 
-        let finalPrice = selectedPackage.price;
+        let finalPrice = Number(selectedPackage.price);
 
         const addonMap = new Map(allAddons.map(a => [a.id, { ...a, locked: false }]));
         selectedPackage.included.forEach(i => addonMap.set(i.id, i));
@@ -378,7 +378,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         customizedItems.forEach(itemId => {
             const item = addonMap.get(itemId);
             if (item && !item.locked) {
-                finalPrice += item.price;
+                finalPrice += Number(item.price);
             }
         });
 
