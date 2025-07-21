@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -484,6 +485,15 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 id SERIAL PRIMARY KEY,
                 author VARCHAR(255) NOT NULL,
                 content TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS homepage_instagram_posts (
+                id SERIAL PRIMARY KEY,
+                post_url TEXT NOT NULL,
+                image_url TEXT NOT NULL,
+                caption TEXT,
+                sort_order INTEGER DEFAULT 0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -1222,6 +1232,7 @@ app.get('/api/homepage-content', async (req, res) => {
         const slidesRes = await getPool().query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC');
         const testimonialsRes = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC');
         const aboutRes = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'about_us_%'");
+        const instagramRes = await getPool().query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC');
         
         const aboutSection = aboutRes.rows.reduce((acc, row) => {
             acc[row.key] = row.value;
@@ -1231,6 +1242,7 @@ app.get('/api/homepage-content', async (req, res) => {
         res.json({
             slides: slidesRes.rows,
             testimonials: testimonialsRes.rows,
+            instagramPosts: instagramRes.rows,
             aboutSection,
         });
     } catch (err) {
@@ -1391,6 +1403,69 @@ app.delete('/api/admin/homepage/testimonials/:id', verifyAdminToken, async (req,
         res.status(204).send();
     } catch (err) {
         res.status(500).send(`Error deleting testimonial: ${err.message}`);
+    }
+});
+
+app.get('/api/admin/homepage/instagram', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching instagram posts: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/instagram/upload', verifyAdminToken, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'instagram.jpg';
+        const blob = await put(`instagram/${filename}`, req, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (err) {
+        res.status(500).send(`Błąd wysyłania pliku do feedu: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/instagram', verifyAdminToken, async (req, res) => {
+    try {
+        const { image_url, post_url, caption } = req.body;
+        const result = await getPool().query(
+            'INSERT INTO homepage_instagram_posts (image_url, post_url, caption) VALUES ($1, $2, $3) RETURNING *',
+            [image_url, post_url, caption]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).send(`Error creating instagram post entry: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/homepage/instagram/order', verifyAdminToken, async (req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (let i = 0; i < orderedIds.length; i++) {
+            await client.query('UPDATE homepage_instagram_posts SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+        }
+        await client.query('COMMIT');
+        res.status(200).send('Instagram posts order updated successfully.');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).send(`Error updating instagram posts order: ${err.message}`);
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/homepage/instagram/:id', verifyAdminToken, async (req, res) => {
+    try {
+        const postRes = await getPool().query('SELECT image_url FROM homepage_instagram_posts WHERE id = $1', [req.params.id]);
+        if (postRes.rows.length > 0) {
+            await del(postRes.rows[0].image_url);
+        }
+        await getPool().query('DELETE FROM homepage_instagram_posts WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error deleting instagram post: ${err.message}`);
     }
 });
 
