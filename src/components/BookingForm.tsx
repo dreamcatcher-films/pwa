@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, ArrowLeftIcon, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
+import { LoadingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from './FormControls.tsx';
 
@@ -13,7 +13,6 @@ interface BookingDetails {
 interface BookingFormProps {
     bookingDetails: BookingDetails;
     onBookingComplete: (data: {bookingId: number, clientId: string}) => void;
-    onBack: () => void;
 }
 
 type Discount = {
@@ -22,7 +21,7 @@ type Discount = {
     value: number;
 } | null;
 
-const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComplete, onBack }) => {
+const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComplete }) => {
     const [formData, setFormData] = useState({
         brideName: '', groomName: '', weddingDate: '', brideAddress: '',
         groomAddress: '', locations: '', schedule: '', email: '',
@@ -127,15 +126,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
     };
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <header className="relative text-center mb-10">
-                 <button onClick={onBack} className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                     <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do kalkulatora
-                 </button>
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły Rezerwacji</h1>
-                <p className="mt-2 text-lg text-slate-600">Uzupełnij poniższe informacje, aby dokończyć rezerwację.</p>
-            </header>
-            
+        <>
             <div className="bg-slate-100 p-6 rounded-2xl mb-8 border border-slate-200">
                 <h2 className="text-xl font-bold text-slate-800 mb-4">Podsumowanie Twojego wyboru</h2>
                 <div className="space-y-3">
@@ -193,7 +184,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                     </button>
                 </div>
             </form>
-        </div>
+        </>
     );
 };
 
