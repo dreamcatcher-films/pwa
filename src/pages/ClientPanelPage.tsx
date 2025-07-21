@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, FC, ReactNode, useRef } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, ChevronDownIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, ChevronDownIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -286,7 +286,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     };
 
     if (isLoading || !bookingData) {
-        return <div className="flex justify-center items-center h-screen"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+        return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     }
     
     if (showWelcome) {
@@ -303,7 +303,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
         return (
              <div className="text-center py-20">
                 <p className="text-red-500">{error}</p>
-                <button onClick={() => navigateTo('login')} className="mt-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button>
+                <button onClick={() => navigateTo('login')} className="mt-4 bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button>
             </div>
         );
     }
@@ -369,7 +369,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                                 </div>
                                 <p className="text-sm text-slate-600 mt-3 flex-grow">{stage.description}</p>
                                 {stage.status === 'awaiting_approval' && (
-                                    <button onClick={() => handleApproveStage(stage.id)} className="mt-4 w-full inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-lg hover:bg-green-700">
+                                    <button onClick={() => handleApproveStage(stage.id)} className="mt-4 w-full inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-brand-dark-green rounded-lg hover:bg-brand-dark-green/90">
                                         <CheckCircleIcon className="w-4 h-4 mr-2" /> Zatwierdź etap
                                     </button>
                                 )}
@@ -421,8 +421,8 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                                     {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
                                     <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz wiadomość..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
                                     <div className="text-right mt-2">
-                                        <button type="submit" disabled={isSendingMessage || !newMessage.trim()} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
-                                            {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
+                                        <button type="submit" disabled={isSendingMessage || !newMessage.trim()} className="bg-brand-dark-green text-white font-bold py-2 px-5 rounded-lg hover:bg-brand-dark-green/90 disabled:opacity-50 transition-colors flex items-center justify-center w-28 ml-auto">
+                                            {isSendingMessage ? <EngagementRingSpinner className="w-5 h-5" /> : 'Wyślij'}
                                         </button>
                                     </div>
                                 </form>
@@ -462,8 +462,8 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
                                 <div className="flex items-center justify-end gap-3 pt-4 border-t">
                                     {updateStatus === 'success' && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano pomyślnie!</div>}
                                     <button onClick={handleCancelEdit} disabled={updateStatus==='loading'} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-200 transition">Anuluj</button>
-                                    <button onClick={handleSave} disabled={updateStatus==='loading'} className="bg-indigo-600 w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex justify-center items-center">
-                                        {updateStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz zmiany'}
+                                    <button onClick={handleSave} disabled={updateStatus==='loading'} className="bg-brand-dark-green w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-dark-green/90 transition flex justify-center items-center">
+                                        {updateStatus === 'loading' ? <EngagementRingSpinner className="w-5 h-5" /> : 'Zapisz zmiany'}
                                     </button>
                                 </div>
                             </div>
