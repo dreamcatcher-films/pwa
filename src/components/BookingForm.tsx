@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LoadingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
@@ -24,7 +25,7 @@ type Discount = {
 const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComplete }) => {
     const [formData, setFormData] = useState({
         brideName: '', groomName: '', weddingDate: '', brideAddress: '',
-        groomAddress: '', locations: '', schedule: '', email: '',
+        groomAddress: '', churchLocation: '', venueLocation: '', schedule: '', email: '',
         phoneNumber: '', additionalInfo: '', password: '', confirmPassword: ''
     });
     const [discountCode, setDiscountCode] = useState('');
@@ -152,11 +153,21 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
             <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
                 {error && <div className="p-4 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg"><p className="font-bold">Wystąpił błąd</p><p>{error}</p></div>}
                 
-                {/* Sections for personal data, wedding details, etc. remain the same */}
-                 <section className="pb-6 border-b"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane Pary Młodej</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideName" label="Imię i nazwisko Panny Młodej" placeholder="Anna Nowak" value={formData.brideName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /><InputField id="groomName" label="Imię i nazwisko Pana Młodego" placeholder="Piotr Kowalski" value={formData.groomName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /></div></section>
+                <section className="pb-6 border-b"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane Pary Młodej</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideName" label="Imię i nazwisko Panny Młodej" placeholder="Anna Nowak" value={formData.brideName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /><InputField id="groomName" label="Imię i nazwisko Pana Młodego" placeholder="Piotr Kowalski" value={formData.groomName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /></div></section>
                 <InputField id="weddingDate" label="Data ślubu" type="date" value={formData.weddingDate} onChange={handleChange} placeholder="" />
                 <section className="pt-6 mt-6 border-t"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane kontaktowe i logowania</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="email" label="Adres e-mail" type="email" placeholder="anna.nowak@example.com" value={formData.email} onChange={handleChange} /><InputField id="phoneNumber" label="Numer telefonu" type="tel" placeholder="123-456-789" value={formData.phoneNumber} onChange={handleChange} /><InputField id="password" label="Ustaw hasło do panelu klienta" type="password" placeholder="Minimum 8 znaków" value={formData.password} onChange={handleChange} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} error={validationErrors.password} /><InputField id="confirmPassword" label="Potwierdź hasło" type="password" placeholder="Powtórz hasło" value={formData.confirmPassword} onChange={handleChange} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} error={validationErrors.confirmPassword} /></div></section>
-                <section className="pt-6 mt-6 border-t"><h3 className="text-lg font-semibold text-slate-800 mb-4">Szczegóły wydarzenia</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideAddress" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.brideAddress} onChange={handleChange} /><InputField id="groomAddress" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groomAddress} onChange={handleChange} /></div><div className="mt-6"><TextAreaField id="locations" label="Lokalizacje" placeholder="Kościół: Parafia Św. Anny, Warszawa&#10;Sala: Hotel Bristol, Warszawa" value={formData.locations} onChange={handleChange} /></div><div className="mt-6"><TextAreaField id="schedule" label="Przybliżony harmonogram dnia ślubu" placeholder="12:00 - Przygotowania Panny Młodej&#10;14:00 - Ceremonia&#10;16:00 - Wesele" value={formData.schedule} onChange={handleChange} /></div></section>
+                <section className="pt-6 mt-6 border-t">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Szczegóły wydarzenia</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <InputField id="brideAddress" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.brideAddress} onChange={handleChange} />
+                        <InputField id="groomAddress" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groomAddress} onChange={handleChange} />
+                        <InputField id="churchLocation" label="Adres ceremonii (np. kościół)" placeholder="Parafia Św. Anny, Warszawa" value={formData.churchLocation} onChange={handleChange} />
+                        <InputField id="venueLocation" label="Adres przyjęcia (np. sala weselna)" placeholder="Hotel Bristol, Warszawa" value={formData.venueLocation} onChange={handleChange} />
+                    </div>
+                    <div className="mt-6">
+                        <TextAreaField id="schedule" label="Przybliżony harmonogram dnia ślubu" placeholder="12:00 - Przygotowania Panny Młodej&#10;14:00 - Ceremonia&#10;16:00 - Wesele" value={formData.schedule} onChange={handleChange} />
+                    </div>
+                </section>
                 <section className="pt-6 mt-6 border-t"><TextAreaField id="additionalInfo" label="Dodatkowe informacje (opcjonalnie)" rows={4} placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" value={formData.additionalInfo} onChange={handleChange} required={false} /></section>
                 
                 <section className="pt-6 mt-6 border-t">
