@@ -9,7 +9,7 @@ import { Resend } from 'resend';
 
 // --- Environment Variable Validation ---
 // Ensure all critical environment variables are set before proceeding.
-const requiredEnvVars = ['DATABASE_URL', 'JWT_ADMIN_SECRET', 'JWT_CLIENT_SECRET', 'RESEND_API_KEY'];
+const requiredEnvVars = ['DATABASE_URL', 'ADMIN_JWT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingEnvVars.length > 0) {
@@ -353,7 +353,7 @@ const authenticateAdmin = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, process.env.JWT_ADMIN_SECRET, (err, user) => {
+    jwt.verify(token, process.env.ADMIN_JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
         next();
@@ -365,7 +365,7 @@ const authenticateClient = (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, process.env.JWT_CLIENT_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) return res.sendStatus(403);
         req.user = user;
         next();
@@ -679,23 +679,23 @@ app.get('/api/homepage-content', async (req, res) => {
         ]);
 
         const aboutSection = aboutRes.rows.reduce((acc, row) => {
-             acc[row.key.replace('about_us_', '')] = row.value;
+             acc[row.key] = row.value;
             return acc;
         }, {});
 
         res.json({
             slides: slidesRes.rows,
             aboutSection: {
-                about_us_title: aboutSection.title,
-                about_us_text: aboutSection.text,
-                about_us_image_url: aboutSection.image_url
+                about_us_title: aboutSection.about_us_title,
+                about_us_text: aboutSection.about_us_text,
+                about_us_image_url: aboutSection.about_us_image_url
             },
             testimonials: testimonialsRes.rows,
             instagramPosts: instagramRes.rows
         });
 
     } catch (error) {
-        console.error('Error fetching homepage content:', error);
+        console.error('Error fetching homepage content:', error.message, error.stack);
         res.status(500).send('Błąd pobierania zawartości strony głównej.');
     } finally {
         client.release();
@@ -723,7 +723,7 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
         }
 
-        const token = jwt.sign({ bookingId: user.id }, process.env.JWT_CLIENT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ bookingId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({ token });
     } catch (error) {
         console.error('Login error:', error);
@@ -937,7 +937,7 @@ app.post('/api/admin/login', async (req, res) => {
         if (!isPasswordValid) {
             return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
         }
-        const token = jwt.sign({ adminId: admin.id }, process.env.JWT_ADMIN_SECRET, { expiresIn: '8h' });
+        const token = jwt.sign({ adminId: admin.id }, process.env.ADMIN_JWT_SECRET, { expiresIn: '8h' });
         res.json({ token });
     } catch (error) {
         console.error('Admin login error:', error);
@@ -1405,7 +1405,9 @@ app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
         res.sendStatus(204);
     } catch (error) {
         res.status(500).send(error.message);
-    } finally { client.release(); }
+    } finally {
+        client.release();
+    }
 });
 
 // Packages
@@ -2101,4 +2103,154 @@ app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
-export default app;
+export default app;--- START OF FILE src/components/HeroCarousel.tsx ---
+
+import React, { useRef, MouseEvent, TouchEvent, useEffect } from 'react';
+import { Page } from '../App.tsx';
+
+interface Slide {
+    id: number;
+    image_url: string;
+    title: string;
+    subtitle: string;
+    button_text: string;
+    button_link: string;
+}
+
+interface HeroCarouselProps {
+    slides: Slide[];
+    navigateTo: (page: Page) => void;
+}
+
+const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const isDragging = useRef(false);
+    const isHovering = useRef(false);
+    const startX = useRef(0);
+    const scrollLeft = useRef(0);
+    const hasDragged = useRef(false);
+    const animationFrameId = useRef<number | null>(null);
+
+    if (!slides || slides.length === 0) {
+        return null;
+    }
+
+    const startDragging = (pageX: number) => {
+        if (!carouselRef.current) return;
+        isDragging.current = true;
+        startX.current = pageX - carouselRef.current.offsetLeft;
+        scrollLeft.current = carouselRef.current.scrollLeft;
+        hasDragged.current = false;
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+            animationFrameId.current = null;
+        }
+    };
+
+    const stopDragging = () => {
+        if (!isDragging.current) return;
+        isDragging.current = false;
+    };
+
+    const onDrag = (pageX: number) => {
+        if (!isDragging.current || !carouselRef.current) return;
+        const x = pageX - carouselRef.current.offsetLeft;
+        const walk = (x - startX.current) * 1.5;
+        carouselRef.current.scrollLeft = scrollLeft.current - walk;
+
+        if (Math.abs(walk) > 5) {
+            hasDragged.current = true;
+        }
+    };
+
+    useEffect(() => {
+        const carousel = carouselRef.current;
+        if (!carousel) return;
+
+        const animateScroll = () => {
+            if (!isDragging.current && !isHovering.current) {
+                carousel.scrollLeft += 0.5; // Scroll speed
+                if (carousel.scrollLeft >= carousel.scrollWidth / 2) {
+                    carousel.scrollLeft = 0;
+                }
+            }
+            animationFrameId.current = requestAnimationFrame(animateScroll);
+        };
+
+        animateScroll();
+
+        return () => {
+            if (animationFrameId.current) {
+                cancelAnimationFrame(animationFrameId.current);
+            }
+        };
+    }, []);
+
+    const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+        if (!isDragging.current) return;
+        e.preventDefault();
+        onDrag(e.pageX);
+    };
+    
+    const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+        if (!isDragging.current) return;
+        onDrag(e.touches[0].pageX);
+    };
+
+    const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
+        if (hasDragged.current) {
+            e.preventDefault();
+            return;
+        }
+        if (link.startsWith('/')) {
+            e.preventDefault();
+            const page = link.substring(1) as Page;
+            navigateTo(page);
+        }
+    };
+
+    // Duplicating slides to create an infinite loop effect
+    const duplicatedSlides = slides.length > 0 ? [...slides, ...slides, ...slides] : [];
+
+    return (
+        <div className="w-full h-[550px] relative py-8">
+            <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
+
+            <div
+                ref={carouselRef}
+                className="flex items-center h-full cursor-grab will-change-transform overflow-x-auto scrollbar-hide"
+                onMouseEnter={() => (isHovering.current = true)}
+                onMouseLeave={() => { isHovering.current = false; stopDragging(); }}
+                onMouseDown={(e) => startDragging(e.pageX)}
+                onMouseUp={stopDragging}
+                onMouseMove={handleMouseMove}
+                onTouchStart={(e) => startDragging(e.touches[0].pageX)}
+                onTouchEnd={stopDragging}
+                onTouchMove={handleTouchMove}
+            >
+                {duplicatedSlides.map((slide, index) => (
+                    <a
+                        key={`${slide.id}-${index}`}
+                        href={slide.button_link || '#'}
+                        onClick={(e) => slide.button_link && handleLinkClick(e, slide.button_link)}
+                        target={slide.button_link && !slide.button_link.startsWith('/') ? '_blank' : '_self'}
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 h-full w-auto mx-4 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl transition-transform duration-300 ease-in-out hover:scale-105 hover:z-20"
+                        aria-label={`Zobacz realizację: ${slide.title}`}
+                        draggable="false"
+                    >
+                        <img
+                            src={slide.image_url}
+                            alt={slide.title}
+                            className="h-full w-auto object-contain rounded-2xl drop-shadow-lg pointer-events-none"
+                            draggable="false"
+                        />
+                    </a>
+                ))}
+            </div>
+            <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
+        </div>
+    );
+};
+
+export default HeroCarousel;
