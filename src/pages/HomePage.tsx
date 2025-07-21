@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
 import HeroCarousel from '../components/HeroCarousel.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -69,7 +69,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
     }, []);
 
     if (isLoading) {
-        return <div className="flex justify-center items-center h-screen"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+        return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     }
 
     if (error) {
@@ -94,7 +94,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                 <div className="mt-10 flex justify-center gap-4 flex-wrap">
                      <button
                         onClick={() => navigateTo('calculator')}
-                        className="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105 shadow-lg"
+                        className="bg-brand-dark-green text-white font-bold py-4 px-8 rounded-lg hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-transform hover:scale-105 shadow-lg"
                     >
                         Stwórz Swój Pakiet
                     </button>
@@ -148,7 +148,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
             )}
 
             {instagramPosts && instagramPosts.length > 0 && (
-                 <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                 <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16 md:mb-24">
                     <div className="text-center">
                         <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl flex items-center justify-center gap-3">
                             <InstagramIcon className="w-8 h-8"/>
