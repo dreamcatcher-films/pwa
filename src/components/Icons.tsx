@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -156,7 +157,7 @@ export const CurrencyDollarIcon: React.FC<{className?: string}> = ({ className =
 
 export const ChatBubbleLeftRightIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.722.537a59.015 59.015 0 01-3.58.003l-3.722-.537a2.121 2.121 0 01-1.98-2.192V10.608c0-.97.616-1.813 1.5-2.097L8.6 8.084a59.23 59.23 0 013.421 0l2.23 1.423a1.947 1.947 0 001.031 0l2.23-1.423a59.23 59.23 0 013.421 0l-.213.344zM3 11.25a2.25 2.25 0 012.25-2.25h13.5a2.25 2.25 0 012.25 2.25v4.5a2.25 2.25 0 01-2.25 2.25H5.25a2.25 2.25 0 01-2.25-2.25v-4.5z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.722.537a59.015 59.015 0 01-3.58.003l-3.722-.537a2.121 2.121 0 01-1.98-2.192V10.608c0-.97.616-1.813 1.5-2.097L8.6 8.084a59.23 59.23 0 013.421 0l2.23 1.423a1.947 1.947 0 001.031 0l2.23-1.423a59.23 59.23 0 013.421 0l-.213.344zM3 11.25a2.25 2.25 0 012.25-2.25h13.5a2.25 2.25 0 012.25 2.25v4.5a2.25 2.25 0 01-2.25-2.25H5.25a2.25 2.25 0 01-2.25-2.25v-4.5z" />
     </svg>
 );
 
@@ -243,5 +244,13 @@ export const MapIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' 
 export const IdentificationIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632zM15 15.75a3 3 0 01-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
+export const InstagramIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className={className}>
+        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.85s-.011 3.584-.069 4.85c-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.85-.07c-3.252-.148-4.771-1.691-4.919-4.919-.058-1.265-.069-1.645-.069-4.85s.011-3.584.069-4.85c.149-3.225 1.664-4.771 4.919-4.919C8.416 2.175 8.796 2.163 12 2.163zm0 1.441c-3.18 0-3.55.01-4.784.068-2.693.123-3.997 1.428-4.12 4.12C3.028 8.84 3.018 9.22 3.018 12s.01 3.16.068 4.784c.123 2.692 1.427 3.996 4.12 4.119 1.233.058 1.604.068 4.784.068s3.55-.01 4.784-.068c2.693-.123 3.997-1.427 4.12-4.119.058-1.624.068-2.004.068-4.784s-.01-3.16-.068-4.784c-.123-2.692-1.427-3.996-4.12-4.12C15.55 3.613 15.18 3.604 12 3.604z"></path>
+        <path d="M12 6.865A5.135 5.135 0 1012 17.135 5.135 5.135 0 0012 6.865zm0 8.712A3.577 3.577 0 1112 8.423a3.577 3.577 0 010 7.154z"></path>
+        <path d="M16.949 6.153a1.203 1.203 0 100 2.406 1.203 1.203 0 000-2.406z"></path>
     </svg>
 );
