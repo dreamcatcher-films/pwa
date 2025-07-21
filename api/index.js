@@ -597,7 +597,7 @@ app.post('/api/validate-discount', async (req, res) => {
             return res.status(400).json({ message: 'Limit użycia kodu został wyczerpany.' });
         }
         res.json(discount);
-    } catch (err) {
+    } catch (err) => {
         res.status(500).send(`Server error: ${err.message}`);
     }
 });
@@ -1061,21 +1061,38 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
+        
+        // Step 1: Insert the package and get its ID.
         const pkgRes = await client.query(
-            'INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            'INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
             [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
         );
-        const newPackage = pkgRes.rows[0];
+        
+        const newPackageId = pkgRes.rows[0]?.id;
+        if (!newPackageId) {
+            throw new Error("Package creation failed, no ID returned.");
+        }
 
+        // Step 2: Insert addon relations.
         if (addons && addons.length > 0) {
             for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [newPackage.id, addon.id]);
+                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [newPackageId, addon.id]);
             }
         }
+        
         await client.query('COMMIT');
-        res.status(201).json(newPackage);
+        
+        // Step 3: Fetch the newly created package with all its details to return to the client.
+        const finalPackageRes = await getPool().query(
+            'SELECT p.*, c.name as category_name FROM packages p LEFT JOIN package_categories c ON p.category_id = c.id WHERE p.id = $1', 
+            [newPackageId]
+        );
+
+        res.status(201).json(finalPackageRes.rows[0]);
+
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error('Error creating package:', err);
         res.status(500).send(`Błąd tworzenia pakietu: ${err.message}`);
     } finally {
         client.release();
@@ -1088,26 +1105,44 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
+
+        // Step 1: Update the package details.
         const pkgRes = await client.query(
-            'UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8 RETURNING *',
+            'UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8 RETURNING id',
             [name, description, price, category_id, is_published, rich_description, rich_description_image_url, packageId]
         );
+
+        if (pkgRes.rows.length === 0) {
+             throw new Error(`Package with ID ${packageId} not found.`);
+        }
         
+        // Step 2: Clear old addon relations.
         await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
+
+        // Step 3: Insert new addon relations.
         if (addons && addons.length > 0) {
             for (const addon of addons) {
                 await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
             }
         }
+
         await client.query('COMMIT');
-        res.status(200).json(pkgRes.rows[0]);
+        
+        const finalPackageRes = await getPool().query(
+             'SELECT p.*, c.name as category_name FROM packages p LEFT JOIN package_categories c ON p.category_id = c.id WHERE p.id = $1', 
+            [packageId]
+        );
+        
+        res.status(200).json(finalPackageRes.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error(`Error updating package #${packageId}:`, err);
         res.status(500).send(`Błąd aktualizacji pakietu: ${err.message}`);
     } finally {
         client.release();
     }
 });
+
 
 app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     try {
