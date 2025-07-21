@@ -19,7 +19,7 @@ export type Page =
   'home' | 'calculator' | 'gallery' | 'contact' |
   'login' | 'clientPanel' | 
   'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage' | 'adminInstagram';
+  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage' | 'adminInstagram' | 'adminInbox';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -73,6 +73,8 @@ const App = () => {
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='settings' />;
             case 'adminHomepage':
                 return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='homepage' />;
+            case 'adminInbox':
+                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='inbox' />;
             case 'adminBookingDetails':
                  return viewingBookingId 
                     ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
@@ -87,6 +89,7 @@ const App = () => {
             <Header
                 onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                 onViewDetails={handleViewBookingDetails}
+                navigateTo={navigateTo}
             />
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
             <main>
