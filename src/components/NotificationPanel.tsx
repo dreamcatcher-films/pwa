@@ -1,21 +1,34 @@
 
-import React, { useState, useEffect, FC } from 'react';
-import { LoadingSpinner, BellIcon } from './Icons.tsx';
 
-interface Notification {
+import React, { useState, useEffect, FC } from 'react';
+import { LoadingSpinner, BellIcon, EnvelopeIcon } from './Icons.tsx';
+import { Page } from '../App.tsx';
+
+interface ClientMessageNotification {
+    type: 'client_message';
     booking_id: number;
-    bride_name: string;
-    groom_name: string;
-    unread_count: string; // Comes as string from DB aggregation
-    latest_message_preview: string;
+    sender_name: string;
+    unread_count: string;
+    preview: string;
 }
+
+interface InboxNotification {
+    type: 'inbox_message';
+    message_id: number;
+    sender_name: string;
+    preview: string;
+}
+
+type Notification = ClientMessageNotification | InboxNotification;
 
 interface NotificationPanelProps {
-    onNavigateToBooking: (bookingId: number) => void;
+    navigateTo: (page: Page) => void;
+    onViewDetails: (bookingId: number) => void;
     onClose: () => void;
+    onActionTaken: () => void;
 }
 
-const NotificationPanel: FC<NotificationPanelProps> = ({ onNavigateToBooking, onClose }) => {
+const NotificationPanel: FC<NotificationPanelProps> = ({ navigateTo, onViewDetails, onClose, onActionTaken }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -43,10 +56,33 @@ const NotificationPanel: FC<NotificationPanelProps> = ({ onNavigateToBooking, on
         fetchNotifications();
     }, []);
 
-    const handleNotificationClick = (bookingId: number) => {
-        onNavigateToBooking(bookingId);
+    const handleNotificationClick = (notification: Notification) => {
+        if (notification.type === 'client_message') {
+            onViewDetails(notification.booking_id);
+        } else {
+            navigateTo('adminInbox');
+        }
         onClose();
+        setTimeout(onActionTaken, 1200); // Give time for the read status to update on backend
     };
+
+    const getIcon = (type: Notification['type']) => {
+        switch(type) {
+            case 'client_message':
+                return <BellIcon className="w-5 h-5 text-indigo-600" />;
+            case 'inbox_message':
+                return <EnvelopeIcon className="w-5 h-5 text-sky-600" />;
+            default:
+                return <BellIcon className="w-5 h-5 text-slate-500" />;
+        }
+    }
+
+    const getTitle = (notification: Notification) => {
+        if (notification.type === 'client_message') {
+            return `${notification.unread_count} nowa wiadomość od ${notification.sender_name}`;
+        }
+        return `Nowe zapytanie od ${notification.sender_name}`;
+    }
 
     return (
         <div className="absolute right-0 mt-2 w-80 max-w-sm bg-white rounded-lg shadow-xl z-50 overflow-hidden ring-1 ring-black ring-opacity-5">
@@ -62,20 +98,20 @@ const NotificationPanel: FC<NotificationPanelProps> = ({ onNavigateToBooking, on
             ) : (
                 <ul className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
                     {notifications.map(n => (
-                        <li key={n.booking_id} onClick={() => handleNotificationClick(n.booking_id)} className="p-4 hover:bg-slate-50 cursor-pointer transition-colors">
+                        <li key={`${n.type}-${n.type === 'client_message' ? n.booking_id : n.message_id}`} onClick={() => handleNotificationClick(n)} className="p-4 hover:bg-slate-50 cursor-pointer transition-colors">
                             <div className="flex items-start">
                                 <div className="flex-shrink-0 pt-1">
                                     <span className="relative flex h-5 w-5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                        <BellIcon className="w-5 h-5 text-indigo-600" />
+                                        {getIcon(n.type)}
                                     </span>
                                 </div>
                                 <div className="ml-3 w-0 flex-1">
                                     <p className="text-sm font-medium text-slate-900">
-                                        {n.unread_count} nowa wiadomość od {n.bride_name}
+                                        {getTitle(n)}
                                     </p>
                                     <p className="mt-1 text-sm text-slate-500 truncate italic">
-                                        "{n.latest_message_preview}"
+                                        "{n.preview}"
                                     </p>
                                 </div>
                             </div>
