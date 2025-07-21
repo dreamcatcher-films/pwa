@@ -11,7 +11,9 @@ const app = express();
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '6mb' })); // Increase limit for file uploads
+app.use(express.urlencoded({ extended: true, limit: '6mb' }));
+
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -213,6 +215,8 @@ const runDbSetup = async () => {
                 content TEXT NOT NULL,
                 is_read_by_admin BOOLEAN DEFAULT FALSE,
                 is_read_by_client BOOLEAN DEFAULT FALSE,
+                attachment_url TEXT,
+                attachment_type VARCHAR(50),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -271,6 +275,8 @@ const runDbSetup = async () => {
             console.log("MIGRATION: Locations column split complete.");
         }
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read_by_client BOOLEAN DEFAULT FALSE;`);
+        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url TEXT;`);
+        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);`);
         
         // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
@@ -1180,12 +1186,35 @@ app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => 
     }
 });
 
+app.post('/api/admin/messages/upload', verifyAdminToken, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'attachment';
+        const contentType = req.headers['content-type'] || 'application/octet-stream';
+        const fileSize = parseInt(req.headers['content-length'] || '0');
+
+        if (fileSize > 5 * 1024 * 1024) { // 5MB limit
+            return res.status(413).send('Plik przekracza limit 5MB.');
+        }
+
+        const blob = await put(`attachments/${filename}`, req, { 
+            access: 'public', 
+            addRandomSuffix: true,
+            contentType
+        });
+        res.status(200).json(blob);
+    } catch (err) {
+        res.status(500).send(`Błąd wysyłania pliku: ${err.message}`);
+    }
+});
+
+
 app.post('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
-        const { content } = req.body;
+        const { content, attachment_url, attachment_type } = req.body;
+        if(!content && !attachment_url) return res.status(400).send('Wiadomość musi zawierać treść lub załącznik.');
         const result = await getPool().query(
-            'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3) RETURNING *',
-            [req.params.bookingId, 'admin', content]
+            'INSERT INTO messages (booking_id, sender, content, attachment_url, attachment_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [req.params.bookingId, 'admin', content || '', attachment_url, attachment_type]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
