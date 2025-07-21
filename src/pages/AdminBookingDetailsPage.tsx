@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, FC } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
@@ -76,6 +76,8 @@ interface Message {
     content: string;
     created_at: string;
     status?: 'sending' | 'error';
+    attachment_url?: string;
+    attachment_type?: string;
 }
 
 
@@ -98,9 +100,12 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
+    const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+    const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [messageError, setMessageError] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const token = localStorage.getItem('adminAuthToken');
 
@@ -237,25 +242,63 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                setMessageError('Plik jest za duży. Maksymalny rozmiar to 5MB.');
+                return;
+            }
+            setAttachmentFile(file);
+            setAttachmentPreview(URL.createObjectURL(file));
+            setMessageError('');
+        }
+    };
+
+    const removeAttachment = () => {
+        setAttachmentFile(null);
+        setAttachmentPreview(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+    };
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const content = newMessage.trim();
-        if (!content || isSendingMessage) return;
+        if ((!content && !attachmentFile) || isSendingMessage) return;
 
         const tempId = `temp-${Date.now()}`;
-        const optimisticMessage: Message = { id: tempId, sender: 'admin', content, created_at: new Date().toISOString(), status: 'sending' };
+        const optimisticMessage: Message = { id: tempId, sender: 'admin', content, created_at: new Date().toISOString(), status: 'sending', attachment_url: attachmentPreview || undefined };
 
         setMessages(prev => [...prev, optimisticMessage]);
         setNewMessage('');
+        removeAttachment();
         setMessageError('');
         setIsSendingMessage(true);
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
 
         try {
+            let attachmentData = null;
+            if (attachmentFile) {
+                const uploadResponse = await fetch('/api/admin/messages/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'x-vercel-filename': attachmentFile.name,
+                        'Content-Type': attachmentFile.type,
+                    },
+                    body: attachmentFile,
+                });
+                if (!uploadResponse.ok) throw new Error(await uploadResponse.text() || 'Błąd wysyłania załącznika.');
+                const blob = await uploadResponse.json();
+                attachmentData = { attachment_url: blob.url, attachment_type: blob.contentType };
+            }
+
             const response = await fetch(`/api/admin/messages/${bookingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({ content, ...attachmentData }),
             });
              if (!response.ok) throw new Error(await response.text() || 'Błąd wysyłania wiadomości.');
             const savedMessage = await response.json();
@@ -359,6 +402,35 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
+                    <InfoCard title="Postęp Produkcji">
+                        <div className="space-y-4">
+                            {bookingStages.map(stage => (
+                                <div key={stage.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                    <span className="font-medium text-slate-800">{stage.name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <select value={stage.status} onChange={(e) => handleUpdateStageStatus(stage.id, e.target.value)} className="block w-48 rounded-md border-slate-300 py-1.5 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
+                                            <option value="pending">Oczekuje</option>
+                                            <option value="in_progress">W toku</option>
+                                            <option value="awaiting_approval">Oczekuje na akceptację</option>
+                                            <option value="completed">Zakończony</option>
+                                        </select>
+                                        <button onClick={() => handleRemoveStageFromBooking(stage.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50"><TrashIcon className="w-5 h-5"/></button>
+                                    </div>
+                                </div>
+                            ))}
+                             {bookingStages.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Brak etapów w tym projekcie.</p>}
+                        </div>
+                        <div className="flex items-center gap-2 pt-4 mt-4 border-t">
+                            <select value={selectedStageToAdd} onChange={e => setSelectedStageToAdd(e.target.value)} className="block w-full rounded-md border-slate-300 py-2 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
+                                <option value="">-- Wybierz etap do dodania --</option>
+                                {availableStagesToAdd.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
+                            </select>
+                            <button onClick={handleAddStageToBooking} disabled={!selectedStageToAdd} className="flex-shrink-0 flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300">
+                                <PlusCircleIcon className="w-5 h-5"/> Dodaj
+                            </button>
+                        </div>
+                    </InfoCard>
+
                     <InfoCard title="Dane Klienta" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         {isEditing ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -413,7 +485,12 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                             {messages.map(msg => (
                                 <div key={msg.id} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'admin' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
-                                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                        {msg.attachment_url && msg.attachment_type?.startsWith('image/') && (
+                                            <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer">
+                                                <img src={msg.attachment_url} alt="Załącznik" className="rounded-lg max-w-xs mb-2" />
+                                            </a>
+                                        )}
+                                        {msg.content && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
                                         <p className={`text-xs mt-1 ${msg.sender === 'admin' ? 'text-indigo-200' : 'text-slate-400'}`}>
                                             {msg.status === 'sending' && 'Wysyłanie...'}
                                             {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
@@ -427,41 +504,22 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                          <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
                             {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
                             <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz odpowiedź do klienta..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
-                            <div className="text-right mt-2">
-                                <button type="submit" disabled={isSendingMessage || !newMessage.trim()} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
+                            {attachmentPreview && (
+                                <div className="mt-2 relative w-24 h-24">
+                                    <img src={attachmentPreview} alt="Podgląd załącznika" className="w-full h-full object-cover rounded-lg" />
+                                    <button onClick={removeAttachment} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"><XMarkIcon className="w-4 h-4" /></button>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center mt-2">
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full" aria-label="Dodaj załącznik">
+                                    <PaperClipIcon className="w-6 h-6" />
+                                </button>
+                                <button type="submit" disabled={isSendingMessage || (!newMessage.trim() && !attachmentFile)} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
                                     {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
                                 </button>
                             </div>
                         </form>
-                    </InfoCard>
-
-                    <InfoCard title="Postęp Produkcji">
-                        <div className="space-y-4">
-                            {bookingStages.map(stage => (
-                                <div key={stage.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="font-medium text-slate-800">{stage.name}</span>
-                                    <div className="flex items-center gap-2">
-                                        <select value={stage.status} onChange={(e) => handleUpdateStageStatus(stage.id, e.target.value)} className="block w-48 rounded-md border-slate-300 py-1.5 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
-                                            <option value="pending">Oczekuje</option>
-                                            <option value="in_progress">W toku</option>
-                                            <option value="awaiting_approval">Oczekuje na akceptację</option>
-                                            <option value="completed">Zakończony</option>
-                                        </select>
-                                        <button onClick={() => handleRemoveStageFromBooking(stage.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50"><TrashIcon className="w-5 h-5"/></button>
-                                    </div>
-                                </div>
-                            ))}
-                             {bookingStages.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Brak etapów w tym projekcie.</p>}
-                        </div>
-                        <div className="flex items-center gap-2 pt-4 mt-4 border-t">
-                            <select value={selectedStageToAdd} onChange={e => setSelectedStageToAdd(e.target.value)} className="block w-full rounded-md border-slate-300 py-2 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
-                                <option value="">-- Wybierz etap do dodania --</option>
-                                {availableStagesToAdd.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
-                            </select>
-                            <button onClick={handleAddStageToBooking} disabled={!selectedStageToAdd} className="flex-shrink-0 flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300">
-                                <PlusCircleIcon className="w-5 h-5"/> Dodaj
-                            </button>
-                        </div>
                     </InfoCard>
                 </div>
 
