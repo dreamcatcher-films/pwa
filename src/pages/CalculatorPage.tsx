@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, FC, ReactNode } from 'react';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, EngagementRingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import { Page } from '../App.tsx';
@@ -57,7 +57,7 @@ const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentSt
                             <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600">
                                 <CheckCircleIcon className="h-5 w-5 text-white" />
                             </div>
-                            <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-indigo-600">{step}</span>
+                            <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
                         </>
                     ) : stepIdx === currentStep ? (
                         <>
@@ -67,7 +67,7 @@ const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentSt
                             <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-indigo-600 bg-white">
                                 <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />
                             </div>
-                             <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-indigo-600">{step}</span>
+                             <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
                         </>
                     ) : (
                         <>
@@ -77,7 +77,7 @@ const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentSt
                             <div className="group relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
                                 <span className="h-2.5 w-2.5 rounded-full bg-transparent" />
                             </div>
-                             <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-slate-500">{step}</span>
+                             <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-slate-500">{step}</span>
                         </>
                     )}
                 </li>
@@ -257,8 +257,8 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
                     <button 
                         onClick={handleConfirm}
                         disabled={status === 'loading'}
-                        className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed">
-                        {status === 'loading' ? <LoadingSpinner /> : 'Weryfikuj klucz'}
+                        className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed">
+                        {status === 'loading' ? <EngagementRingSpinner className="w-6 h-6" /> : 'Weryfikuj klucz'}
                     </button>
                 </div>
                 <p className="text-xs text-slate-500 text-center mt-4">
@@ -288,12 +288,14 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
                 <img src={pkg.rich_description_image_url} alt={pkg.name} className="rounded-lg object-cover w-full h-96" />
                 <div className="flex flex-col h-full">
                     <h2 className="text-3xl font-bold text-slate-900">{pkg.name}</h2>
-                    <div className="mt-4 text-slate-600 flex-grow overflow-y-auto max-h-60 pr-2 prose prose-sm">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{pkg.rich_description}</ReactMarkdown>
+                    <div className="mt-4 text-slate-600 flex-grow overflow-y-auto max-h-60 pr-2">
+                        <div className="prose prose-sm">
+                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{pkg.rich_description}</ReactMarkdown>
+                        </div>
                     </div>
                     <div className="mt-6 pt-6 border-t flex justify-end gap-3">
                         <button onClick={onClose} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Wróć</button>
-                        <button onClick={onContinue} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Kontynuuj</button>
+                        <button onClick={onContinue} className="bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Kontynuuj</button>
                     </div>
                 </div>
             </div>
@@ -450,7 +452,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const filteredPackages = selectedCategoryId ? packages.filter(p => p.category_id === selectedCategoryId) : [];
 
     if (isLoading) {
-        return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+        return <div className="flex justify-center items-center py-20"><EngagementRingSpinner /></div>;
     }
 
     if (error) {
@@ -495,7 +497,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                  <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
                      <button 
                         onClick={() => navigateTo('login')}
-                        className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                        className="bg-brand-dark-green text-white font-bold py-3 px-6 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-transform hover:scale-105">
                         Przejdź do Panelu Klienta
                     </button>
                     <button 
@@ -508,7 +510,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         );
     }
     
-    let headerContent, mainContent;
+    let headerContent, mainContent, backButton;
 
     switch(step) {
         case 'serviceType':
@@ -527,14 +529,16 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             );
             break;
         case 'selection':
+            backButton = (
+                <button 
+                    onClick={() => setStep('serviceType')} 
+                    className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                    <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
+                     Wróć
+                </button>
+            );
             headerContent = (
-                <header className="relative text-center">
-                    <button 
-                        onClick={() => setStep('serviceType')} 
-                        className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                        <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                         Wróć
-                    </button>
+                <header className="text-center">
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Wybierz swój pakiet</h1>
                     <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
                 </header>
@@ -557,14 +561,16 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         case 'customization':
             if (selectedPackage) {
                 const availableAddons = getAvailableAddons();
+                backButton = (
+                     <button 
+                        onClick={() => setStep('selection')} 
+                        className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                        <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
+                         Zmień pakiet
+                    </button>
+                );
                 headerContent = (
-                    <header className="relative text-center">
-                        <button 
-                            onClick={() => setStep('selection')} 
-                            className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                             Zmień pakiet
-                        </button>
+                    <header className="text-center">
                         <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
                         <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dodaj lub usuń elementy poniżej.</p>
                     </header>
@@ -607,7 +613,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                                 <div className="mt-6 space-y-3">
                                     <button 
                                         onClick={() => setIsBookingModalOpen(true)}
-                                        className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                                        className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-transform hover:scale-105">
                                         Przejdź do rezerwacji
                                     </button>
                                     <button className="w-full bg-slate-100 text-slate-700 font-bold py-3 px-4 rounded-lg hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
@@ -621,11 +627,13 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             }
             break;
         case 'form':
+            backButton = (
+                <button onClick={() => setStep('customization')} className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                    <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do kalkulatora
+                </button>
+            );
             headerContent = (
-                <header className="relative text-center">
-                    <button onClick={() => setStep('customization')} className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                        <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do kalkulatora
-                    </button>
+                <header className="text-center">
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły Rezerwacji</h1>
                     <p className="mt-2 text-lg text-slate-600">Uzupełnij poniższe informacje, aby dokończyć rezerwację.</p>
                 </header>
@@ -648,8 +656,9 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
 
     return (
         <div className="py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-8 mb-6">{backButton}</div>
             {headerContent}
-            <div className="my-10 flex justify-center">
+            <div className="my-12 flex justify-center">
                  <StepIndicator currentStep={currentStepIndex()} steps={STEPS} />
             </div>
             {mainContent}
