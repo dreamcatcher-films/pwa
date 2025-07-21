@@ -2,6 +2,7 @@
 
 
 
+
 import React from 'react';
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -272,5 +273,11 @@ export const CameraIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-
 export const ChevronDownIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+    </svg>
+);
+
+export const PaperClipIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3.375 3.375 0 1118.374 7.3l-9.19 9.19a2.25 2.25 0 01-3.182-3.182l7.693-7.693a.75.75 0 011.06 1.06l-7.693 7.693a.75.75 0 001.06 1.06l9.19-9.19a1.875 1.875 0 10-2.652-2.652L6.375 15.625a3 3 0 104.242 4.242l7.693-7.693a.75.75 0 011.06-1.06z" />
     </svg>
 );
