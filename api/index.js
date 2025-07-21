@@ -134,8 +134,15 @@ app.post('/api/contact', async (req, res) => {
         if (!firstName || !lastName || !email || !message || !subject) {
             return res.status(400).json({ message: 'Proszę wypełnić wszystkie wymagane pola.' });
         }
+        
+        // 1. Save message to the database
+        await getPool().query(
+            `INSERT INTO contact_messages (first_name, last_name, email, phone, subject, message)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [firstName, lastName, email, phone, subject, message]
+        );
 
-        // 1. Send email notification via Resend
+        // 2. Send email notification via Resend
         if (resend) {
             try {
                 const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
@@ -163,21 +170,9 @@ app.post('/api/contact', async (req, res) => {
                 }
             } catch (emailError) {
                 console.error("Contact form - failed to send email notification:", emailError);
-                // We don't stop execution, the in-app notification is more critical.
             }
         } else {
              console.warn("RESEND_API_KEY is not configured. Skipping email notification for contact form.");
-        }
-
-        // 2. Save message to trigger in-app notification
-        const contactInboxRes = await getPool().query("SELECT id FROM bookings WHERE client_id = 'CONTACTFORM' LIMIT 1");
-        if (contactInboxRes.rows.length > 0) {
-            const inboxBookingId = contactInboxRes.rows[0].id;
-            const formattedMessage = `Nowe zapytanie od: ${firstName} ${lastName}\nEmail: ${email}\nTelefon: ${phone || 'Nie podano'}\n\nTemat: ${subject}\n\nWiadomość:\n${message}`;
-            await getPool().query(
-                'INSERT INTO messages (booking_id, sender, content) VALUES ($1, $2, $3)',
-                [inboxBookingId, 'client', formattedMessage]
-            );
         }
 
         res.status(200).json({ message: 'Wiadomość została wysłana pomyślnie.' });
@@ -387,6 +382,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(255) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
+                notification_email VARCHAR(255),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             
@@ -462,6 +458,18 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
                 sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
                 content TEXT NOT NULL,
                 is_read_by_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                first_name VARCHAR(255) NOT NULL,
+                last_name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                phone VARCHAR(255),
+                subject TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -545,14 +553,8 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
             await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
         }
         
-        const contactFormRes = await client.query("SELECT * FROM bookings WHERE client_id = 'CONTACTFORM'");
-        if (contactFormRes.rows.length === 0) {
-            const fakePassword = await bcrypt.hash('system_internal_use_only_password_that_is_long_enough', 10);
-            await client.query(
-              `INSERT INTO bookings (client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, email, password_hash) VALUES ($1, 'System', 0, '{}', 'Skrzynka', 'Odbiorcza', '2000-01-01', 'system@internal.local', $2)`,
-              ['CONTACTFORM', fakePassword]
-            );
-        }
+        // Remove old CONTACTFORM booking if it exists
+        await client.query("DELETE FROM bookings WHERE client_id = 'CONTACTFORM'");
 
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
@@ -578,7 +580,7 @@ app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
 // Admin Endpoints - All protected
 app.get('/api/admin/bookings', verifyAdminToken, async (req, res) => {
     try {
-        const result = await getPool().query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
+        const result = await getPool().query("SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings WHERE client_id <> 'CONTACTFORM' ORDER BY created_at DESC");
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching bookings for admin: ${err.message}`);
@@ -656,7 +658,7 @@ app.delete('/api/admin/access-keys/:id', verifyAdminToken, async (req, res) => {
 app.get('/api/admin/availability', verifyAdminToken, async (req, res) => {
     try {
         const eventsRes = await getPool().query('SELECT * FROM availability');
-        const bookingsRes = await getPool().query('SELECT id, wedding_date, bride_name, groom_name FROM bookings');
+        const bookingsRes = await getPool().query("SELECT id, wedding_date, bride_name, groom_name FROM bookings WHERE client_id <> 'CONTACTFORM'");
         
         const calendarEvents = eventsRes.rows.map(e => ({
             id: e.id,
@@ -997,6 +999,34 @@ app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) 
     }
 });
 
+// --- INBOX & MESSAGING ENDPOINTS ---
+app.get('/api/admin/inbox', verifyAdminToken, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM contact_messages ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).send(`Error fetching inbox messages: ${err.message}`);
+    }
+});
+
+app.patch('/api/admin/inbox/:id/read', verifyAdminToken, async (req, res) => {
+    try {
+        await getPool().query('UPDATE contact_messages SET is_read = TRUE WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error marking message as read: ${err.message}`);
+    }
+});
+
+app.delete('/api/admin/inbox/:id', verifyAdminToken, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM contact_messages WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error deleting inbox message: ${err.message}`);
+    }
+});
+
 // Communication & Notification Endpoints
 app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
     try {
@@ -1080,8 +1110,13 @@ app.post('/api/messages', verifyToken, async (req, res) => {
 
 app.get('/api/admin/notifications/count', verifyAdminToken, async (req, res) => {
     try {
-        const result = await getPool().query("SELECT COUNT(*) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
-        res.json({ count: parseInt(result.rows[0].count, 10) });
+        const result = await getPool().query(`
+            SELECT 
+                (SELECT COUNT(*) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE) as client_messages,
+                (SELECT COUNT(*) FROM contact_messages WHERE is_read = FALSE) as inbox_messages
+        `);
+        const count = parseInt(result.rows[0].client_messages, 10) + parseInt(result.rows[0].inbox_messages, 10);
+        res.json({ count });
     } catch (err) {
         res.status(500).send(`Error fetching notification count: ${err.message}`);
     }
@@ -1089,21 +1124,38 @@ app.get('/api/admin/notifications/count', verifyAdminToken, async (req, res) => 
 
 app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
     try {
-        const query = `
+        const clientMessagesQuery = `
             SELECT
+                'client_message' as type,
                 b.id AS booking_id,
-                b.bride_name,
-                b.groom_name,
+                b.bride_name || ' & ' || b.groom_name AS sender_name,
                 COUNT(m.id) AS unread_count,
-                (array_agg(m.content ORDER BY m.created_at DESC))[1] AS latest_message_preview
+                (array_agg(m.content ORDER BY m.created_at DESC))[1] AS preview,
+                MAX(m.created_at) as created_at
             FROM messages m
             JOIN bookings b ON m.booking_id = b.id
-            WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE
+            WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE AND b.client_id <> 'CONTACTFORM'
             GROUP BY b.id, b.bride_name, b.groom_name
-            ORDER BY MAX(m.created_at) DESC;
         `;
-        const result = await getPool().query(query);
-        res.json(result.rows);
+        
+        const inboxMessagesQuery = `
+            SELECT
+                'inbox_message' as type,
+                id as message_id,
+                first_name || ' ' || last_name AS sender_name,
+                message AS preview,
+                created_at
+            FROM contact_messages
+            WHERE is_read = FALSE
+        `;
+
+        const clientRes = await getPool().query(clientMessagesQuery);
+        const inboxRes = await getPool().query(inboxMessagesQuery);
+
+        const allNotifications = [...clientRes.rows, ...inboxRes.rows]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.json(allNotifications);
     } catch (err) {
         res.status(500).send(`Error fetching notifications: ${err.message}`);
     }
