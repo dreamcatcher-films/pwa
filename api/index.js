@@ -467,7 +467,10 @@ app.post('/api/contact', async (req, res) => {
                     `,
                 });
                 if (error) {
-                    console.error("Contact form - Resend API error:", error);
+                    const errorMessage = error.message || JSON.stringify(error);
+                    console.error(`Contact form - Resend API error: ${errorMessage}`);
+                } else if (!data || !data.id) {
+                    console.warn("Contact form - Resend API returned success but no data ID.", data);
                 } else {
                     console.log("Contact form - notification email sent:", data.id);
                 }
@@ -531,7 +534,10 @@ app.post('/api/bookings', async (req, res) => {
                 `,
             });
             if (error) {
-                console.error(`Failed to send confirmation email to ${bookingData.email}:`, error);
+                const errorMessage = error.message || JSON.stringify(error);
+                console.error(`Failed to send confirmation email to ${bookingData.email}: ${errorMessage}`);
+            } else if (!data || !data.id) {
+                console.warn(`Confirmation email to ${bookingData.email} - Resend API returned success but no data ID.`, data);
             } else {
                 console.log(`Confirmation email sent successfully to ${bookingData.email}, ID: ${data.id}`);
             }
@@ -708,8 +714,8 @@ app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
 });
 
 app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (req, res) => {
+    const { id } = req.params;
     try {
-        const { id } = req.params;
         const bookingRes = await getPool().query('SELECT client_id, email, bride_name FROM bookings WHERE id = $1', [id]);
         if (bookingRes.rows.length === 0) {
             return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
@@ -741,13 +747,20 @@ app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (
         });
 
         if (error) {
-            throw new Error(`Resend API Error: ${error.message}`);
+            const errorMessage = error.message || JSON.stringify(error);
+            console.error(`Resend API Error for booking #${id}: ${errorMessage}`, error);
+            return res.status(500).json({ message: `Błąd API Resend: ${errorMessage}` });
+        }
+        
+        if (!data || !data.id) {
+            console.error(`Resend API returned success status but no data ID for booking #${id}. Response:`, data);
+            return res.status(500).json({ message: 'Nieprawidłowa odpowiedź z API Resend.' });
         }
 
         res.status(200).json({ message: 'Email z danymi logowania został wysłany pomyślnie.' });
 
     } catch (err) {
-        console.error(`Error resending credentials for booking #${req.params.id}:`, err);
+        console.error(`Error resending credentials for booking #${id}:`, err);
         res.status(500).json({ message: `Błąd serwera: ${err.message}` });
     }
 });
@@ -1361,7 +1374,10 @@ app.post('/api/messages', verifyToken, async (req, res) => {
                     `,
                 });
                 if (error) {
-                    console.error("Failed to send email notification:", error);
+                    const errorMessage = error.message || JSON.stringify(error);
+                    console.error(`Failed to send email notification: ${errorMessage}`);
+                } else if (!data || !data.id) {
+                    console.warn(`Email notification - Resend API returned success but no data ID.`, data);
                 } else {
                     console.log(`Email notification sent successfully to ${adminEmail}, ID: ${data.id}`);
                 }
