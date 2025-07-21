@@ -183,7 +183,8 @@ const runDbSetup = async () => {
                 wedding_date DATE NOT NULL,
                 bride_address TEXT,
                 groom_address TEXT,
-                locations TEXT,
+                church_location TEXT,
+                venue_location TEXT,
                 schedule TEXT,
                 email VARCHAR(255) NOT NULL,
                 phone_number VARCHAR(255),
@@ -211,6 +212,7 @@ const runDbSetup = async () => {
                 sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
                 content TEXT NOT NULL,
                 is_read_by_admin BOOLEAN DEFAULT FALSE,
+                is_read_by_client BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -259,6 +261,16 @@ const runDbSetup = async () => {
                 console.log("MIGRATION: Package structure migration completed.");
             }
         }
+
+        const bookingsColumnsCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='bookings' AND column_name='locations'`);
+        if (bookingsColumnsCheck.rows.length > 0) {
+            console.log("MIGRATION: Splitting locations column in bookings table.");
+            await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS church_location TEXT;`);
+            await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS venue_location TEXT;`);
+            await client.query(`ALTER TABLE bookings DROP COLUMN locations;`);
+            console.log("MIGRATION: Locations column split complete.");
+        }
+        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read_by_client BOOLEAN DEFAULT FALSE;`);
         
         // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
@@ -478,9 +490,9 @@ app.post('/api/bookings', async (req, res) => {
         const clientId = await generateUniqueClientId(4);
 
         const result = await getPool().query(
-            `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, locations, schedule, email, phone_number, additional_info, discount_code) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
-            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, bookingData.selectedItems, bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.locations, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
+            `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, bookingData.selectedItems, bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
         );
         
         if (bookingData.discountCode) {
@@ -593,10 +605,10 @@ app.get('/api/my-booking', verifyToken, async (req, res) => {
 
 app.patch('/api/my-booking', verifyToken, async (req, res) => {
     try {
-        const { bride_address, groom_address, locations, schedule, additional_info } = req.body;
+        const { bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
         const result = await getPool().query(
-            `UPDATE bookings SET bride_address = $1, groom_address = $2, locations = $3, schedule = $4, additional_info = $5 WHERE id = $6 RETURNING *`,
-            [bride_address, groom_address, locations, schedule, additional_info, req.user.bookingId]
+            `UPDATE bookings SET bride_address = $1, groom_address = $2, church_location = $3, venue_location = $4, schedule = $5, additional_info = $6 WHERE id = $7 RETURNING *`,
+            [bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.user.bookingId]
         );
         res.json({ booking: result.rows[0] });
     } catch (err) {
@@ -671,10 +683,10 @@ app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
 
 app.patch('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
     try {
-        const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, locations, schedule, additional_info } = req.body;
+        const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
         const result = await getPool().query(
-            `UPDATE bookings SET bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, bride_address = $6, groom_address = $7, locations = $8, schedule = $9, additional_info = $10 WHERE id = $11 RETURNING *`,
-            [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, locations, schedule, additional_info, req.params.id]
+            `UPDATE bookings SET bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, bride_address = $6, groom_address = $7, church_location = $8, venue_location = $9, schedule = $10, additional_info = $11 WHERE id = $12 RETURNING *`,
+            [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.params.id]
         );
         res.json({ booking: result.rows[0] });
     } catch (err) {
@@ -1187,6 +1199,24 @@ app.get('/api/messages', verifyToken, async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         res.status(500).send(`Error fetching messages: ${err.message}`);
+    }
+});
+
+app.get('/api/messages/unread-count', verifyToken, async (req, res) => {
+    try {
+        const result = await getPool().query("SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = 'admin' AND is_read_by_client = FALSE", [req.user.bookingId]);
+        res.json({ count: parseInt(result.rows[0].count, 10) });
+    } catch (err) {
+        res.status(500).send(`Error fetching unread message count: ${err.message}`);
+    }
+});
+
+app.patch('/api/messages/mark-as-read', verifyToken, async (req, res) => {
+    try {
+        await getPool().query("UPDATE messages SET is_read_by_client = TRUE WHERE booking_id = $1 AND sender = 'admin'", [req.user.bookingId]);
+        res.status(204).send();
+    } catch (err) {
+        res.status(500).send(`Error marking messages as read: ${err.message}`);
     }
 });
 
