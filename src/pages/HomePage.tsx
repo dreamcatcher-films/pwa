@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { EngagementRingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
-import HeroCarousel from '../components/HeroCarousel.tsx';
+import { HeroCarousel } from '../components/HeroCarousel.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
