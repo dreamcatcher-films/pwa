@@ -454,151 +454,157 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         );
     }
     
-    const renderServiceTypeScreen = () => (
-        <div>
-             <header className="text-center mb-10">
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Stwórz Swój Pakiet</h1>
-                <p className="mt-2 text-lg text-slate-600">Zacznijmy od wyboru usługi, która Cię interesuje.</p>
-            </header>
-            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                <ServiceTypeCard title="Film" icon={<FilmIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('film')} />
-                <ServiceTypeCard title="Fotografia" icon={<CameraIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('photo')} />
-                <ServiceTypeCard title="Film + Fotografia" icon={<><FilmIcon className="w-7 h-7 text-indigo-500" /><CameraIcon className="w-7 h-7 text-indigo-500" /></>} onClick={() => handleSelectServiceType('combo')} />
-            </div>
-        </div>
-    );
+    let headerContent, mainContent;
 
-    const renderSelectionScreen = () => (
-        <div>
-            <header className="relative text-center mb-10">
-                <button 
-                    onClick={() => setStep('serviceType')} 
-                    className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
-                    <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                     Wróć
-                </button>
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Wybierz swój pakiet</h1>
-                <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
-            </header>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredPackages.map(pkg => (
-                    <PackageCard key={pkg.id} packageInfo={pkg} onSelect={handleSelectPackage} />
-                ))}
-            </div>
-            {filteredPackages.length === 0 && (
-                <div className="text-center py-12 text-slate-500">
-                    <p>Brak dostępnych pakietów dla wybranej usługi.</p>
+    switch(step) {
+        case 'serviceType':
+            headerContent = (
+                <header className="text-center">
+                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Stwórz Swój Pakiet</h1>
+                    <p className="mt-2 text-lg text-slate-600">Zacznijmy od wyboru usługi, która Cię interesuje.</p>
+                </header>
+            );
+            mainContent = (
+                <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <ServiceTypeCard title="Film" icon={<FilmIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('film')} />
+                    <ServiceTypeCard title="Fotografia" icon={<CameraIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('photo')} />
+                    <ServiceTypeCard title="Film + Fotografia" icon={<><FilmIcon className="w-7 h-7 text-indigo-500" /><CameraIcon className="w-7 h-7 text-indigo-500" /></>} onClick={() => handleSelectServiceType('combo')} />
                 </div>
-            )}
-        </div>
-    );
-
-    const renderCustomizationScreen = () => {
-       if (!selectedPackage) return null;
-       const availableAddons = getAvailableAddons();
-
-       return (
-            <div>
-                 <header className="relative text-center mb-10">
-                     <button 
-                        onClick={() => setStep('selection')} 
+            );
+            break;
+        case 'selection':
+            headerContent = (
+                <header className="relative text-center">
+                    <button 
+                        onClick={() => setStep('serviceType')} 
                         className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
                         <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                         Zmień pakiet
-                     </button>
-                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
-                    <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dodaj lub usuń elementy poniżej.</p>
+                         Wróć
+                    </button>
+                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Wybierz swój pakiet</h1>
+                    <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
                 </header>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
-                    <div className="lg:col-span-2 space-y-8">
-                        <section>
-                            <h2 className="text-xl font-semibold text-slate-800 mb-4">Elementy w Twoim pakiecie</h2>
-                             <div className="space-y-3">
-                                {selectedPackage.included.map(item => (
-                                    <CustomizationListItem key={item.id} item={item} isSelected={customizedItems.includes(item.id)} onToggle={handleItemToggle} />
-                                ))}
-                            </div>
-                        </section>
-                        
-                        {availableAddons.length > 0 && (
+            );
+            mainContent = (
+                <div className="max-w-7xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredPackages.map(pkg => (
+                            <PackageCard key={pkg.id} packageInfo={pkg} onSelect={handleSelectPackage} />
+                        ))}
+                    </div>
+                    {filteredPackages.length === 0 && (
+                        <div className="text-center py-12 text-slate-500">
+                            <p>Brak dostępnych pakietów dla wybranej usługi.</p>
+                        </div>
+                    )}
+                </div>
+            );
+            break;
+        case 'customization':
+            if (selectedPackage) {
+                const availableAddons = getAvailableAddons();
+                headerContent = (
+                    <header className="relative text-center">
+                        <button 
+                            onClick={() => setStep('selection')} 
+                            className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
+                             Zmień pakiet
+                        </button>
+                        <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
+                        <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dodaj lub usuń elementy poniżej.</p>
+                    </header>
+                );
+                mainContent = (
+                     <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
+                        <div className="lg:col-span-2 space-y-8">
                             <section>
-                                <h2 className="text-xl font-semibold text-slate-800 mb-4">Dostępne dodatki</h2>
-                                <div className="space-y-3">
-                                    {availableAddons.map(addon => (
-                                         <CustomizationListItem key={addon.id} item={addon} isSelected={customizedItems.includes(addon.id)} onToggle={handleItemToggle} />
+                                <h2 className="text-xl font-semibold text-slate-800 mb-4">Elementy w Twoim pakiecie</h2>
+                                 <div className="space-y-3">
+                                    {selectedPackage.included.map(item => (
+                                        <CustomizationListItem key={item.id} item={item} isSelected={customizedItems.includes(item.id)} onToggle={handleItemToggle} />
                                     ))}
                                 </div>
                             </section>
-                        )}
-                    </div>
-                    <div className="lg:col-span-1 mt-8 lg:mt-0">
-                        <div className="sticky top-28 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
-                            <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
-                            <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
                             
-                            <div className="mt-6 border-t border-slate-200 pt-6">
-                                <div className="flex justify-between items-center text-2xl font-bold">
-                                    <span className="text-slate-900">Suma</span>
-                                    <span className="text-indigo-600">{formatCurrency(totalPrice)}</span>
+                            {availableAddons.length > 0 && (
+                                <section>
+                                    <h2 className="text-xl font-semibold text-slate-800 mb-4">Dostępne dodatki</h2>
+                                    <div className="space-y-3">
+                                        {availableAddons.map(addon => (
+                                             <CustomizationListItem key={addon.id} item={addon} isSelected={customizedItems.includes(addon.id)} onToggle={handleItemToggle} />
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+                        </div>
+                        <div className="lg:col-span-1 mt-8 lg:mt-0">
+                            <div className="sticky top-28 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
+                                <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
+                                <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
+                                
+                                <div className="mt-6 border-t border-slate-200 pt-6">
+                                    <div className="flex justify-between items-center text-2xl font-bold">
+                                        <span className="text-slate-900">Suma</span>
+                                        <span className="text-indigo-600">{formatCurrency(totalPrice)}</span>
+                                    </div>
                                 </div>
-                            </div>
-                             
-                            <div className="mt-6 space-y-3">
-                                <button 
-                                    onClick={() => setIsBookingModalOpen(true)}
-                                    className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
-                                    Przejdź do rezerwacji
-                                </button>
-                                <button className="w-full bg-slate-100 text-slate-700 font-bold py-3 px-4 rounded-lg hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
-                                    Zapisz jako wersję roboczą
-                                </button>
+                                 
+                                <div className="mt-6 space-y-3">
+                                    <button 
+                                        onClick={() => setIsBookingModalOpen(true)}
+                                        className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105">
+                                        Przejdź do rezerwacji
+                                    </button>
+                                    <button className="w-full bg-slate-100 text-slate-700 font-bold py-3 px-4 rounded-lg hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
+                                        Zapisz jako wersję roboczą
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-       );
-    };
-    
-    const renderContent = () => {
-        switch(step) {
-            case 'form':
-                return (
-                    <div className="max-w-4xl mx-auto">
-                        <BookingForm
-                            bookingDetails={{
-                                accessKey: validatedAccessKey,
-                                packageName: selectedPackage?.name || '',
-                                totalPrice: totalPrice,
-                                selectedItems: customizedItems.map(id => allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
-                            }}
-                            onBookingComplete={handleBookingComplete}
-                            onBack={() => setStep('customization')}
-                        />
-                    </div>
                 );
-            case 'serviceType': return renderServiceTypeScreen();
-            case 'selection': return renderSelectionScreen();
-            case 'customization': return renderCustomizationScreen();
-            default: return renderServiceTypeScreen();
-        }
-    };
+            }
+            break;
+        case 'form':
+            headerContent = (
+                <header className="relative text-center">
+                    <button onClick={() => setStep('customization')} className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                        <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do kalkulatora
+                    </button>
+                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły Rezerwacji</h1>
+                    <p className="mt-2 text-lg text-slate-600">Uzupełnij poniższe informacje, aby dokończyć rezerwację.</p>
+                </header>
+            );
+            mainContent = (
+                <div className="max-w-4xl mx-auto">
+                    <BookingForm
+                        bookingDetails={{
+                            accessKey: validatedAccessKey,
+                            packageName: selectedPackage?.name || '',
+                            totalPrice: totalPrice,
+                            selectedItems: customizedItems.map(id => allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
+                        }}
+                        onBookingComplete={handleBookingComplete}
+                    />
+                </div>
+            );
+            break;
+    }
 
     return (
-        <>
-            {step !== 'booked' && (
-                <div className="mb-12 pb-4">
-                    <StepIndicator currentStep={currentStepIndex()} steps={STEPS} />
-                </div>
-            )}
-            {renderContent()}
+        <div className="py-8">
+            {headerContent}
+            <div className="my-10 flex justify-center">
+                 <StepIndicator currentStep={currentStepIndex()} steps={STEPS} />
+            </div>
+            {mainContent}
             <BookingModal 
                 isOpen={isBookingModalOpen} 
                 onClose={() => setIsBookingModalOpen(false)}
                 onKeyValidated={handleKeyValidated}
             />
-        </>
+        </div>
     );
 };
 
