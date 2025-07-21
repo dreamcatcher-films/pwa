@@ -309,7 +309,7 @@ interface CalculatorPageProps {
     navigateTo: (page: Page) => void;
 }
 
-const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwacja'];
+const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
 const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
