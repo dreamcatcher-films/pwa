@@ -48,7 +48,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onNavigate, onClose }) => {
                                 onClick={(e) => { e.preventDefault(); onNavigate('calculator'); }}
                                 className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"
                             >
-                                Kalkulator Usług
+                                Kreator Pakietu
                             </a>
                         </li>
                          <li>
