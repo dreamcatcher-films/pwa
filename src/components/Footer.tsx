@@ -29,7 +29,7 @@ const Footer: React.FC = () => {
     const currentYear = new Date().getFullYear();
 
     return (
-        <footer className="bg-[#0F3E34] text-slate-300 relative footer-gradient-overlay mt-24">
+        <footer className="bg-[#0F3E34] text-slate-300 relative footer-gradient-overlay">
             <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 text-center">
                 <img src="/dreamcatcher-icon.png" alt="Dreamcatcher Film Logo" className="h-16 w-16 mx-auto mb-6" />
 
