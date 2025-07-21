@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
@@ -87,6 +85,27 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
     return (
         <div className="space-y-16 md:space-y-24">
             {slides.length > 0 && <HeroCarousel slides={slides} navigateTo={navigateTo} />}
+            
+            <section className="max-w-5xl mx-auto text-center py-16 px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Gotowi, by stworzyć własną historię?</h2>
+                <p className="mt-4 text-xl text-slate-600 max-w-2xl mx-auto">
+                    Sprawdź naszą ofertę lub skontaktuj się z nami, aby omówić szczegóły Twojego wymarzonego dnia.
+                </p>
+                <div className="mt-10 flex justify-center gap-4 flex-wrap">
+                     <button
+                        onClick={() => navigateTo('calculator')}
+                        className="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105 shadow-lg"
+                    >
+                        Stwórz Swój Pakiet
+                    </button>
+                    <button
+                        onClick={() => navigateTo('contact')}
+                        className="bg-slate-200 text-slate-800 font-bold py-4 px-8 rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition"
+                    >
+                       Skontaktuj się z nami
+                    </button>
+                </div>
+            </section>
 
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid md:grid-cols-2 gap-12 items-center">
@@ -166,27 +185,6 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                     </div>
                 </section>
             )}
-
-            <section className="max-w-5xl mx-auto text-center py-16 px-4 sm:px-6 lg:px-8">
-                <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Gotowi, by stworzyć własną historię?</h2>
-                <p className="mt-4 text-xl text-slate-600 max-w-2xl mx-auto">
-                    Sprawdź naszą ofertę lub skontaktuj się z nami, aby omówić szczegóły Twojego wymarzonego dnia.
-                </p>
-                <div className="mt-10 flex justify-center gap-4 flex-wrap">
-                     <button
-                        onClick={() => navigateTo('calculator')}
-                        className="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105 shadow-lg"
-                    >
-                        Stwórz Swój Pakiet
-                    </button>
-                    <button
-                        onClick={() => navigateTo('contact')}
-                        className="bg-slate-200 text-slate-800 font-bold py-4 px-8 rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition"
-                    >
-                       Skontaktuj się z nami
-                    </button>
-                </div>
-            </section>
         </div>
     );
 };
