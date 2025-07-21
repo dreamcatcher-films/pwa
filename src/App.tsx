@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -83,6 +84,11 @@ const App = () => {
                 return <HomePage navigateTo={navigateTo} />;
         }
     };
+    
+    // Only apply the container class to pages that need it.
+    // The new admin dashboard has its own full-width layout.
+    // Public-facing pages manage their own containers for full-width sections.
+    const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin';
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
@@ -93,7 +99,7 @@ const App = () => {
             />
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
             <main>
-                <div className={`${currentPage.startsWith('admin') || currentPage === 'clientPanel' ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}`}>
+                <div className={hasAppContainer ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}>
                     {renderCurrentPage()}
                 </div>
             </main>
