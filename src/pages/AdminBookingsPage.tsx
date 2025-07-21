@@ -100,6 +100,7 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
                             <thead className="text-xs text-slate-700 uppercase bg-slate-50">
                                 <tr>
                                     <th scope="col" className="px-6 py-3">ID Rezerwacji</th>
+                                    <th scope="col" className="px-6 py-3">ID Klienta</th>
                                     <th scope="col" className="px-6 py-3">Klient</th>
                                     <th scope="col" className="px-6 py-3">Data ślubu</th>
                                     <th scope="col" className="px-6 py-3">Cena</th>
@@ -111,6 +112,7 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
                                 {bookings.map(booking => (
                                     <tr key={booking.id} className="bg-white border-b hover:bg-slate-50">
                                         <th scope="row" className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap">#{booking.id}</th>
+                                        <td className="px-6 py-4 font-mono">{booking.client_id}</td>
                                         <td className="px-6 py-4"><div>{booking.bride_name}</div><div className="text-xs text-slate-400">{booking.groom_name}</div></td>
                                         <td className="px-6 py-4">{booking.wedding_date ? formatDate(booking.wedding_date) : '-'}</td>
                                         <td className="px-6 py-4 font-semibold">{formatCurrency(Number(booking.total_price))}</td>
