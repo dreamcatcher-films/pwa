@@ -88,7 +88,7 @@ const App = () => {
     const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+        <div className="min-h-screen font-sans flex flex-col">
             <Header
                 onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                 onViewDetails={handleViewBookingDetails}
