@@ -248,6 +248,28 @@ const runDbSetup = async () => {
                     );
                 `);
                 
+                // FIX: Correct the foreign key on package_addons to point to the new packages table
+                const fkCheckRes = await client.query(`
+                    SELECT 1
+                    FROM pg_constraint
+                    JOIN pg_class AS to_tbl ON to_tbl.oid = pg_constraint.confrelid
+                    WHERE pg_constraint.conname = 'package_addons_package_id_fkey'
+                      AND to_tbl.relname = 'packages_old'
+                `);
+        
+                if (fkCheckRes.rows.length > 0) {
+                    console.log("MIGRATION: Fixing foreign key constraint on package_addons...");
+                    await client.query('ALTER TABLE package_addons DROP CONSTRAINT package_addons_package_id_fkey;');
+                    await client.query(`
+                        ALTER TABLE package_addons 
+                        ADD CONSTRAINT package_addons_package_id_fkey 
+                        FOREIGN KEY (package_id) 
+                        REFERENCES packages(id) 
+                        ON DELETE CASCADE;
+                    `);
+                    console.log("MIGRATION: Foreign key constraint on package_addons fixed.");
+                }
+
                 await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film', 'FilmIcon') ON CONFLICT (name) DO NOTHING;`);
                 await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Fotografia', 'CameraIcon') ON CONFLICT (name) DO NOTHING;`);
                 await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
@@ -1190,19 +1212,19 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
         
         const packageRes = await client.query(
             `INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
             [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
         );
-        const newPackageId = packageRes.rows[0].id;
+        const newPackage = packageRes.rows[0];
         
         if (addons && addons.length > 0) {
             for (const addon of addons) {
-                await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)`, [newPackageId, addon.id]);
+                await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)`, [newPackage.id, addon.id]);
             }
         }
         
         await client.query('COMMIT');
-        res.status(201).json({ id: newPackageId });
+        res.status(201).json(newPackage);
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error creating package:", err);
@@ -1219,9 +1241,9 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
         const packageId = req.params.id;
 
-        await client.query(
+        const updatedPackageRes = await client.query(
             `UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 
-             WHERE id=$8`,
+             WHERE id=$8 RETURNING *`,
             [name, description, price, category_id, is_published, rich_description, rich_description_image_url, packageId]
         );
         
@@ -1233,11 +1255,11 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         }
         
         await client.query('COMMIT');
-        res.status(200).json({ message: 'Pakiet zaktualizowany.' });
+        res.status(200).json(updatedPackageRes.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("Error updating package:", err);
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        console.error(`Error updating package:`, err);
+        res.status(500).json({ message: `Error updating package: ${err.message}` });
     } finally {
         client.release();
     }
@@ -1276,7 +1298,7 @@ app.post('/api/admin/addons', verifyAdminToken, async (req, res) => {
     try {
         await client.query('BEGIN');
         const { name, price, category_ids } = req.body;
-        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
+        const addonRes = await getPool().query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
         const newAddonId = addonRes.rows[0].id;
         
         if (category_ids && category_ids.length > 0) {
@@ -1928,4 +1950,20 @@ app.post('/api/admin/homepage/instagram/order', verifyAdminToken, async (req, re
     }
 });
 
+app.get('/api/validate-discount', async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ message: 'Kod rabatowy jest wymagany.' });
+    }
+    const result = await getPool().query('SELECT * FROM discount_codes WHERE code = $1', [code]);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ message: 'Nieprawidłowy kod rabatowy.' });
+    }
+  } catch (err) {
+    res.status(500).send(`Server error: ${err.message}`);
+  }
+});
 export default app;
