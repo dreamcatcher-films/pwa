@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ChatBubbleBottomCenterTextIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
 import HeroCarousel from '../components/HeroCarousel.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,6 +26,13 @@ interface Testimonial {
     content: string;
 }
 
+interface InstagramPost {
+    id: number;
+    post_url: string;
+    image_url: string;
+    caption: string;
+}
+
 interface AboutSection {
     about_us_title: string;
     about_us_text: string;
@@ -34,6 +42,7 @@ interface AboutSection {
 interface HomePageContent {
     slides: Slide[];
     testimonials: Testimonial[];
+    instagramPosts: InstagramPost[];
     aboutSection: AboutSection;
 }
 
@@ -72,7 +81,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
         return <div className="text-center py-20">Brak zawartości do wyświetlenia.</div>;
     }
 
-    const { slides, aboutSection, testimonials } = content;
+    const { slides, aboutSection, testimonials, instagramPosts } = content;
 
     return (
         <div className="space-y-16 md:space-y-24">
@@ -114,6 +123,45 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                                 </blockquote>
                             ))}
                         </div>
+                    </div>
+                </section>
+            )}
+
+            {instagramPosts && instagramPosts.length > 0 && (
+                 <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center">
+                        <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl flex items-center justify-center gap-3">
+                            <InstagramIcon className="w-8 h-8"/>
+                            Znajdź nas na Instagramie
+                        </h2>
+                        <p className="mt-4 text-lg text-slate-600">Zobacz nasze ostatnie prace i kulisy naszej działalności.</p>
+                    </div>
+                     <div className="mt-12 grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        {instagramPosts.map((post) => (
+                            <a
+                                key={post.id}
+                                href={post.post_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group aspect-square block bg-black rounded-2xl overflow-hidden shadow-lg relative"
+                            >
+                                <img
+                                    alt={post.caption || 'Post z Instagrama'}
+                                    src={post.image_url}
+                                    className="absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-300 group-hover:opacity-75 group-hover:scale-105"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <InstagramIcon className="w-12 h-12 text-white drop-shadow-lg" />
+                                </div>
+                            </a>
+                        ))}
+                    </div>
+                     <div className="mt-10 text-center">
+                         <a href="https://www.instagram.com/dreamcatcher.film" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-slate-800 text-white font-bold py-3 px-6 rounded-lg hover:bg-slate-900 transition-colors">
+                            <InstagramIcon className="w-5 h-5"/>
+                            Obserwuj nas
+                         </a>
                     </div>
                 </section>
             )}
