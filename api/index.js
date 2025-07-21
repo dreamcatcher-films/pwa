@@ -497,7 +497,8 @@ app.post('/api/bookings', async (req, res) => {
         const clientId = await generateUniqueClientId(4);
 
         // Manually format the selectedItems array for PostgreSQL to avoid driver serialization issues.
-        const formattedSelectedItems = `{${bookingData.selectedItems.map(item => `"${item.replace(/"/g, '""')}"`).join(',')}}`;
+        // This version handles both double quotes and backslashes within item names.
+        const formattedSelectedItems = `{${bookingData.selectedItems.map(item => `"${item.replace(/\\/g, '\\\\').replace(/"/g, '""')}"`).join(',')}}`;
 
         const result = await getPool().query(
             `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
