@@ -496,10 +496,13 @@ app.post('/api/bookings', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const clientId = await generateUniqueClientId(4);
 
+        // Manually format the selectedItems array for PostgreSQL to avoid driver serialization issues.
+        const formattedSelectedItems = `{${bookingData.selectedItems.map(item => `"${item.replace(/"/g, '""')}"`).join(',')}}`;
+
         const result = await getPool().query(
             `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, bookingData.selectedItems, bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
+            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, formattedSelectedItems, bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
         );
         const newBookingId = result.rows[0].id;
         
