@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
@@ -176,7 +177,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                         onClick={() => navigateTo('calculator')}
                         className="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform hover:scale-105 shadow-lg"
                     >
-                        Sprawdź naszą ofertę
+                        Stwórz Swój Pakiet
                     </button>
                     <button
                         onClick={() => navigateTo('contact')}
