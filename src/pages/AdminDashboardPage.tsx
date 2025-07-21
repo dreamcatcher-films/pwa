@@ -1,7 +1,8 @@
 
+
 import React, { useEffect, FC, ReactNode } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon } from '../components/Icons.tsx';
 import AdminBookingsPage from './AdminBookingsPage.tsx';
 import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
@@ -11,9 +12,10 @@ import AdminDiscountsPage from './AdminDiscountsPage.tsx';
 import AdminStagesPage from './AdminStagesPage.tsx';
 import AdminSettingsPage from './AdminSettingsPage.tsx';
 import AdminHomepagePage from './AdminHomepagePage.tsx';
+import AdminInboxPage from './AdminInboxPage.tsx';
 
 // --- SHARED TYPES ---
-export type AdminTab = 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages' | 'settings' | 'homepage';
+export type AdminTab = 'inbox' | 'bookings' | 'accessKeys' | 'availability' | 'gallery' | 'packages' | 'discounts' | 'stages' | 'settings' | 'homepage';
 
 interface AdminDashboardPageProps {
     navigateTo: (page: Page) => void;
@@ -45,6 +47,8 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
 
     const renderContent = () => {
         switch (currentPage) {
+            case 'inbox':
+                return <AdminInboxPage />;
             case 'bookings':
                 return <AdminBookingsPage onViewDetails={onViewDetails} />;
             case 'accessKeys':
@@ -64,7 +68,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
             case 'homepage':
                 return <AdminHomepagePage />;
             default:
-                return <AdminBookingsPage onViewDetails={onViewDetails} />;
+                return <AdminInboxPage />;
         }
     }
 
@@ -85,11 +89,14 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
 
             <div className="border-b border-slate-200 mb-8">
                 <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
-                    <TabButton isActive={currentPage === 'homepage'} onClick={() => navigateTo('adminHomepage')}>
-                        <HomeModernIcon className="w-5 h-5" /> Strona Główna
+                    <TabButton isActive={currentPage === 'inbox'} onClick={() => navigateTo('adminInbox')}>
+                        <EnvelopeIcon className="w-5 h-5" /> Skrzynka odbiorcza
                     </TabButton>
                     <TabButton isActive={currentPage === 'bookings'} onClick={() => navigateTo('adminDashboard')}>
                         <InboxStackIcon className="w-5 h-5" /> Rezerwacje
+                    </TabButton>
+                     <TabButton isActive={currentPage === 'homepage'} onClick={() => navigateTo('adminHomepage')}>
+                        <HomeModernIcon className="w-5 h-5" /> Strona Główna
                     </TabButton>
                     <TabButton isActive={currentPage === 'accessKeys'} onClick={() => navigateTo('adminAccessKeys')}>
                         <KeyIcon className="w-5 h-5" /> Klucze Dostępu
