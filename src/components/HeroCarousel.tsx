@@ -1,4 +1,4 @@
-import React, { useRef, MouseEvent, TouchEvent } from 'react';
+import React, { useRef, MouseEvent, TouchEvent, useEffect } from 'react';
 import { Page } from '../App.tsx';
 
 interface Slide {
@@ -18,6 +18,7 @@ interface HeroCarouselProps {
 const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
     const carouselRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
+    const isHovering = useRef(false);
     const startX = useRef(0);
     const scrollLeft = useRef(0);
     const hasDragged = useRef(false);
@@ -26,43 +27,57 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
     if (!slides || slides.length === 0) {
         return null;
     }
-    
-    // Pausing via CSS is cleaner. We add a `dragging` class during drag.
-    // Hover pause is handled by `group-hover`.
+
     const startDragging = (pageX: number) => {
         if (!carouselRef.current) return;
         isDragging.current = true;
         startX.current = pageX - carouselRef.current.offsetLeft;
         scrollLeft.current = carouselRef.current.scrollLeft;
         hasDragged.current = false;
-        carouselRef.current.classList.add('dragging');
         if (animationFrameId.current) {
             cancelAnimationFrame(animationFrameId.current);
+            animationFrameId.current = null;
         }
     };
 
     const stopDragging = () => {
         if (!isDragging.current) return;
         isDragging.current = false;
-        carouselRef.current?.classList.remove('dragging');
     };
 
     const onDrag = (pageX: number) => {
         if (!isDragging.current || !carouselRef.current) return;
         const x = pageX - carouselRef.current.offsetLeft;
-        const walk = (x - startX.current) * 1.5; // Drag speed multiplier
-        
-        const drag = () => {
-            if(carouselRef.current) {
-                carouselRef.current.scrollLeft = scrollLeft.current - walk;
-            }
-        };
-        animationFrameId.current = requestAnimationFrame(drag);
+        const walk = (x - startX.current) * 1.5;
+        carouselRef.current.scrollLeft = scrollLeft.current - walk;
 
-        if (Math.abs(walk) > 5) { // Threshold to count as a drag
+        if (Math.abs(walk) > 5) {
             hasDragged.current = true;
         }
     };
+
+    useEffect(() => {
+        const carousel = carouselRef.current;
+        if (!carousel) return;
+
+        const animateScroll = () => {
+            if (!isDragging.current && !isHovering.current) {
+                carousel.scrollLeft += 0.5; // Scroll speed
+                if (carousel.scrollLeft >= carousel.scrollWidth / 2) {
+                    carousel.scrollLeft = 0;
+                }
+            }
+            animationFrameId.current = requestAnimationFrame(animateScroll);
+        };
+
+        animateScroll();
+
+        return () => {
+            if (animationFrameId.current) {
+                cancelAnimationFrame(animationFrameId.current);
+            }
+        };
+    }, []);
 
     const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
         if (!isDragging.current) return;
@@ -87,24 +102,23 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
         }
     };
 
-    const duplicatedSlides = [...slides, ...slides];
+    const duplicatedSlides = [...slides, ...slides, ...slides]; // Duplicate more times for wider screens
 
     return (
-        <div className="w-full h-[550px] relative group py-8">
-            <style>{`.group:hover .animate-scroll-filmstrip, .animate-scroll-filmstrip.dragging { animation-play-state: paused; }`}</style>
-            {/* Left fade mask */}
+        <div className="w-full h-[550px] relative py-8">
             <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none"></div>
 
             <div
                 ref={carouselRef}
-                className="flex items-center h-full animate-scroll-filmstrip cursor-grab will-change-transform overflow-x-auto scrollbar-hide"
+                className="flex items-center h-full cursor-grab will-change-transform overflow-x-auto scrollbar-hide"
+                onMouseEnter={() => (isHovering.current = true)}
+                onMouseLeave={() => { isHovering.current = false; stopDragging(); }}
                 onMouseDown={(e) => startDragging(e.pageX)}
-                onMouseLeave={stopDragging}
                 onMouseUp={stopDragging}
                 onMouseMove={handleMouseMove}
                 onTouchStart={(e) => startDragging(e.touches[0].pageX)}
-                onTouchMove={handleTouchMove}
                 onTouchEnd={stopDragging}
+                onTouchMove={handleTouchMove}
             >
                 {duplicatedSlides.map((slide, index) => (
                     <a
@@ -113,21 +127,19 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
                         onClick={(e) => slide.button_link && handleLinkClick(e, slide.button_link)}
                         target={slide.button_link && !slide.button_link.startsWith('/') ? '_blank' : '_self'}
                         rel="noopener noreferrer"
-                        className="flex-shrink-0 h-full w-auto mx-2 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl"
+                        className="flex-shrink-0 h-full w-auto mx-4 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl transition-transform duration-300 ease-in-out hover:scale-105 hover:z-20"
                         aria-label={`Zobacz realizację: ${slide.title}`}
                         draggable="false"
                     >
                         <img
                             src={slide.image_url}
                             alt={slide.title}
-                            className="h-full w-auto object-contain rounded-2xl drop-shadow-lg transition-transform duration-300 pointer-events-none"
+                            className="h-full w-auto object-contain rounded-2xl drop-shadow-lg pointer-events-none"
                             draggable="false"
                         />
                     </a>
                 ))}
             </div>
-
-            {/* Right fade mask */}
             <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none"></div>
         </div>
     );
