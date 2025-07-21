@@ -181,7 +181,7 @@ const runDbSetup = async () => {
                 access_key VARCHAR(4),
                 package_name VARCHAR(255) NOT NULL,
                 total_price NUMERIC(10, 2) NOT NULL,
-                selected_items TEXT[] NOT NULL,
+                selected_items JSONB NOT NULL,
                 bride_name VARCHAR(255) NOT NULL,
                 groom_name VARCHAR(255) NOT NULL,
                 wedding_date DATE NOT NULL,
@@ -499,8 +499,8 @@ app.post('/api/bookings', async (req, res) => {
 
         const result = await getPool().query(
             `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
-             VALUES ($1, $2, $3, $4, $5, string_to_array($6, '|||'), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, bookingData.selectedItems.join('|||'), bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+            [accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, JSON.stringify(bookingData.selectedItems), bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
         );
         const newBookingId = result.rows[0].id;
         
