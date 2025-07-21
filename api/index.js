@@ -444,32 +444,33 @@ app.post('/api/contact', async (req, res) => {
 
         // 2. Send email notification via Resend
         if (resend) {
-            try {
-                const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
-                const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
-                
-                if (adminEmail) {
-                    await resend.emails.send({
-                        from: 'Dreamcatcher Films (Kontakt) <onboarding@resend.dev>',
-                        to: adminEmail,
-                        reply_to: email,
-                        subject: `Nowe zapytanie z formularza: ${subject}`,
-                        html: `
-                            <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-                                <h2 style="color: #1e293b;">Otrzymano nowe zapytanie ze strony!</h2>
-                                <p><strong>Od:</strong> ${firstName} ${lastName}</p>
-                                <p><strong>E-mail:</strong> ${email}</p>
-                                <p><strong>Telefon:</strong> ${phone || 'Nie podano'}</p>
-                                <p><strong>Temat:</strong> ${subject}</p>
-                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                                <p style="font-weight: bold;">Treść wiadomości:</p>
-                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${message}</div>
-                            </div>
-                        `,
-                    });
+            const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+            const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
+            
+            if (adminEmail) {
+                const { data, error } = await resend.emails.send({
+                    from: 'Dreamcatcher Films (Kontakt) <onboarding@resend.dev>',
+                    to: adminEmail,
+                    reply_to: email,
+                    subject: `Nowe zapytanie z formularza: ${subject}`,
+                    html: `
+                        <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                            <h2 style="color: #1e293b;">Otrzymano nowe zapytanie ze strony!</h2>
+                            <p><strong>Od:</strong> ${firstName} ${lastName}</p>
+                            <p><strong>E-mail:</strong> ${email}</p>
+                            <p><strong>Telefon:</strong> ${phone || 'Nie podano'}</p>
+                            <p><strong>Temat:</strong> ${subject}</p>
+                            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                            <p style="font-weight: bold;">Treść wiadomości:</p>
+                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${message}</div>
+                        </div>
+                    `,
+                });
+                if (error) {
+                    console.error("Contact form - Resend API error:", error);
+                } else {
+                    console.log("Contact form - notification email sent:", data.id);
                 }
-            } catch (emailError) {
-                console.error("Contact form - failed to send email notification:", emailError);
             }
         } else {
              console.warn("RESEND_API_KEY is not configured. Skipping email notification for contact form.");
@@ -509,30 +510,30 @@ app.post('/api/bookings', async (req, res) => {
 
         // --- Send confirmation email to client ---
         if (resend) {
-            try {
-                const appUrl = `${req.protocol}://${req.get('host')}`;
-                await resend.emails.send({
-                    from: 'Dreamcatcher Films <onboarding@resend.dev>',
-                    to: bookingData.email,
-                    subject: `Witaj w Dreamcatcher Film! Twoje konto zostało utworzone.`,
-                    html: `
-                        <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-                            <h2 style="color: #1e293b;">Witaj ${bookingData.brideName}!</h2>
-                            <p>Dziękujemy za zaufanie i rezerwację terminu w Dreamcatcher Film. Twoje konto w panelu klienta zostało pomyślnie utworzone.</p>
-                            <p>Poniżej znajdziesz swoje dane do logowania. Zapisz je w bezpiecznym miejscu.</p>
-                            <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                                <p style="margin: 0 0 10px 0;"><strong>Numer Klienta (login):</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${clientId}</span></p>
-                                <p style="margin: 0;"><strong>Twoje hasło:</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${password}</span></p>
-                            </div>
-                            <p>Możesz teraz zalogować się do swojego panelu, aby zobaczyć szczegóły rezerwacji, śledzić postępy i komunikować się z nami.</p>
-                            <a href="${appUrl}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; margin-top: 15px; font-weight: bold;">Przejdź do Panelu Klienta</a>
-                            <p style="margin-top: 30px; font-size: 0.9em; color: #64748b;">Z pozdrowieniami,<br/>Zespół Dreamcatcher Film</p>
+            const appUrl = `${req.protocol}://${req.get('host')}`;
+            const { data, error } = await resend.emails.send({
+                from: 'Dreamcatcher Films <onboarding@resend.dev>',
+                to: bookingData.email,
+                subject: `Witaj w Dreamcatcher Film! Twoje konto zostało utworzone.`,
+                html: `
+                    <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                        <h2 style="color: #1e293b;">Witaj ${bookingData.brideName}!</h2>
+                        <p>Dziękujemy za zaufanie i rezerwację terminu w Dreamcatcher Film. Twoje konto w panelu klienta zostało pomyślnie utworzone.</p>
+                        <p>Poniżej znajdziesz swoje dane do logowania. Zapisz je w bezpiecznym miejscu.</p>
+                        <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <p style="margin: 0 0 10px 0;"><strong>Numer Klienta (login):</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${clientId}</span></p>
+                            <p style="margin: 0;"><strong>Twoje hasło:</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${password}</span></p>
                         </div>
-                    `,
-                });
-            } catch (emailError) {
-                console.error(`Failed to send confirmation email to ${bookingData.email}:`, emailError);
-                // We don't want to fail the whole request if the email fails. Just log it.
+                        <p>Możesz teraz zalogować się do swojego panelu, aby zobaczyć szczegóły rezerwacji, śledzić postępy i komunikować się z nami.</p>
+                        <a href="${appUrl}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; margin-top: 15px; font-weight: bold;">Przejdź do Panelu Klienta</a>
+                        <p style="margin-top: 30px; font-size: 0.9em; color: #64748b;">Z pozdrowieniami,<br/>Zespół Dreamcatcher Film</p>
+                    </div>
+                `,
+            });
+            if (error) {
+                console.error(`Failed to send confirmation email to ${bookingData.email}:`, error);
+            } else {
+                console.log(`Confirmation email sent successfully to ${bookingData.email}, ID: ${data.id}`);
             }
         } else {
             console.warn("RESEND_API_KEY is not configured. Skipping client confirmation email.");
@@ -721,7 +722,7 @@ app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (
         }
 
         const appUrl = `${req.protocol}://${req.get('host')}`;
-        await resend.emails.send({
+        const { data, error } = await resend.emails.send({
             from: 'Dreamcatcher Films <onboarding@resend.dev>',
             to: booking.email,
             subject: 'Twoje dane do logowania do panelu Dreamcatcher Film',
@@ -739,11 +740,15 @@ app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (
             `,
         });
 
+        if (error) {
+            throw new Error(`Resend API Error: ${error.message}`);
+        }
+
         res.status(200).json({ message: 'Email z danymi logowania został wysłany pomyślnie.' });
 
     } catch (err) {
         console.error(`Error resending credentials for booking #${req.params.id}:`, err);
-        res.status(500).send(`Server error: ${err.message}`);
+        res.status(500).json({ message: `Błąd serwera: ${err.message}` });
     }
 });
 
@@ -1332,34 +1337,34 @@ app.post('/api/messages', verifyToken, async (req, res) => {
         
         // --- Real Email Notification ---
         if (resend) {
-            try {
-                const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
-                const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
-                
-                const bookingRes = await getPool().query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
-                const clientName = bookingRes.rows.length > 0 ? `${bookingRes.rows[0].bride_name} & ${bookingRes.rows[0].groom_name}` : 'Klient';
+            const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
+            const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
+            
+            const bookingRes = await getPool().query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
+            const clientName = bookingRes.rows.length > 0 ? `${bookingRes.rows[0].bride_name} & ${bookingRes.rows[0].groom_name}` : 'Klient';
 
-                if (adminEmail) {
-                    await resend.emails.send({
-                        from: 'Powiadomienia Dreamcatcher <onboarding@resend.dev>',
-                        to: adminEmail,
-                        subject: `Nowa wiadomość od ${clientName} (Rezerwacja #${req.user.bookingId})`,
-                        html: `
-                            <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                                <h2 style="color: #1e293b;">Otrzymano nową wiadomość!</h2>
-                                <p><strong>Klient:</strong> ${clientName}</p>
-                                <p><strong>Numer rezerwacji:</strong> #${req.user.bookingId}</p>
-                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                                <p style="font-weight: bold;">Wiadomość:</p>
-                                <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${content}</div>
-                                <p style="margin-top: 20px;">Możesz odpowiedzieć klientowi w panelu administratora.</p>
-                            </div>
-                        `,
-                    });
-                     console.log(`Email notification sent successfully to ${adminEmail}`);
+            if (adminEmail) {
+                const { data, error } = await resend.emails.send({
+                    from: 'Powiadomienia Dreamcatcher <onboarding@resend.dev>',
+                    to: adminEmail,
+                    subject: `Nowa wiadomość od ${clientName} (Rezerwacja #${req.user.bookingId})`,
+                    html: `
+                        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                            <h2 style="color: #1e293b;">Otrzymano nową wiadomość!</h2>
+                            <p><strong>Klient:</strong> ${clientName}</p>
+                            <p><strong>Numer rezerwacji:</strong> #${req.user.bookingId}</p>
+                            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                            <p style="font-weight: bold;">Wiadomość:</p>
+                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${content}</div>
+                            <p style="margin-top: 20px;">Możesz odpowiedzieć klientowi w panelu administratora.</p>
+                        </div>
+                    `,
+                });
+                if (error) {
+                    console.error("Failed to send email notification:", error);
+                } else {
+                    console.log(`Email notification sent successfully to ${adminEmail}, ID: ${data.id}`);
                 }
-            } catch (emailError) {
-                console.error("Failed to send email notification:", emailError);
             }
         } else {
              console.warn("RESEND_API_KEY is not configured. Skipping email notification.");
