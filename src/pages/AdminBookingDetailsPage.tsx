@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef, FC } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon, ChevronDownIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon, ChevronDownIcon, EnvelopeIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
@@ -109,6 +108,9 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const chatEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
+    const [resendStatus, setResendStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [resendMessage, setResendMessage] = useState('');
+
     const token = localStorage.getItem('adminAuthToken');
 
     const fetchAllData = async () => {
@@ -363,6 +365,30 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         }
     };
 
+    const handleResendCredentials = async () => {
+        setResendStatus('loading');
+        setResendMessage('');
+        try {
+            const response = await fetch(`/api/admin/bookings/${bookingId}/resend-credentials`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Nie udało się wysłać e-maila.');
+            
+            setResendStatus('success');
+            setResendMessage(data.message);
+        } catch (err) {
+            setResendStatus('error');
+            setResendMessage(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        } finally {
+            setTimeout(() => {
+                setResendStatus('idle');
+                setResendMessage('');
+            }, 3000);
+        }
+    };
+
     if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
     if (error) return ( <div className="text-center py-20"><p className="text-red-500">{error}</p><button onClick={handleBack} className="mt-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Wróć do panelu</button></div> );
     if (!bookingData || !formData) return <div className="text-center py-20">Nie znaleziono danych rezerwacji.</div>;
@@ -507,14 +533,28 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 <InputField id="phone_number" name="phone_number" label="Numer telefonu" type="tel" value={formData.phone_number} onChange={handleFormChange} />
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <InfoItem label="Panna Młoda" value={bookingData.bride_name} />
-                                <InfoItem label="Pan Młody" value={bookingData.groom_name} />
-                                <InfoItem label="Adres e-mail" value={bookingData.email} />
-                                <InfoItem label="Numer telefonu" value={bookingData.phone_number} />
-                                <InfoItem label="ID Klienta (do logowania)" value={bookingData.client_id} />
-                                <InfoItem label="Data utworzenia rezerwacji" value={formatDateForDisplay(bookingData.created_at)} />
-                            </div>
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <InfoItem label="Panna Młoda" value={bookingData.bride_name} />
+                                    <InfoItem label="Pan Młody" value={bookingData.groom_name} />
+                                    <InfoItem label="Adres e-mail" value={bookingData.email} />
+                                    <InfoItem label="Numer telefonu" value={bookingData.phone_number} />
+                                    <InfoItem label="ID Klienta (do logowania)" value={bookingData.client_id} />
+                                    <InfoItem label="Data utworzenia rezerwacji" value={formatDateForDisplay(bookingData.created_at)} />
+                                </div>
+                                 <div className="pt-4 mt-4 border-t flex items-center justify-between">
+                                    <button 
+                                        onClick={handleResendCredentials}
+                                        disabled={resendStatus === 'loading'}
+                                        className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {resendStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : <EnvelopeIcon className="w-5 h-5" />}
+                                        Wyślij ponownie dane logowania
+                                    </button>
+                                    {resendStatus === 'success' && <p className="text-sm text-green-600">{resendMessage}</p>}
+                                    {resendStatus === 'error' && <p className="text-sm text-red-600">{resendMessage}</p>}
+                                </div>
+                            </>
                         )}
                     </InfoCard>
 
