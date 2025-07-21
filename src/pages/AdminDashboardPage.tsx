@@ -1,10 +1,7 @@
 
-
-
-
-import React, { useEffect, FC, ReactNode } from 'react';
+import React, { useEffect, FC, ReactNode, useState } from 'react';
 import { Page } from '../App.tsx';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon } from '../components/Icons.tsx';
+import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon } from '../components/Icons.tsx';
 import AdminBookingsPage from './AdminBookingsPage.tsx';
 import AdminAccessKeysPage from './AdminAccessKeysPage.tsx';
 import AdminAvailabilityPage from './AdminAvailabilityPage.tsx';
@@ -86,6 +83,7 @@ const SidebarNavItem: FC<{ item: NavItem, isActive: boolean, onClick: () => void
 
 // --- MAIN COMPONENT ---
 const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onViewDetails, currentPage }) => {
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
     useEffect(() => {
         const token = localStorage.getItem('adminAuthToken');
@@ -119,9 +117,23 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
     const currentNavItem = navConfig.flatMap(g => g.items).find(item => item.tab === currentPage);
 
     return (
-        <div className="flex" style={{ minHeight: 'calc(100vh - 64px)' }}>
+        <div className="flex relative" style={{ minHeight: 'calc(100vh - 64px)' }}>
+            {/* Overlay for mobile */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                ></div>
+            )}
+
             {/* Sidebar */}
-            <aside className="w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col">
+            <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="p-4 flex justify-between items-center md:hidden border-b border-slate-200">
+                    <h2 className="font-bold text-lg text-slate-800">Menu</h2>
+                    <button onClick={() => setIsSidebarOpen(false)} className="p-2">
+                        <XMarkIcon className="w-6 h-6"/>
+                    </button>
+                </div>
                 <nav className="p-4 flex-grow">
                     {navConfig.map(group => (
                         <div key={group.title} className="mb-6">
@@ -132,7 +144,10 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                                         key={item.page}
                                         item={item}
                                         isActive={currentPage === item.tab}
-                                        onClick={() => navigateTo(item.page)}
+                                        onClick={() => {
+                                            navigateTo(item.page);
+                                            setIsSidebarOpen(false);
+                                        }}
                                     />
                                 ))}
                             </ul>
@@ -143,11 +158,16 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
 
             {/* Main Content */}
             <main className="flex-1 bg-slate-50 overflow-y-auto">
-                <div className="max-w-7xl mx-auto p-6 sm:p-8 lg:p-10">
+                 <div className="p-6 sm:p-8 lg:p-10">
                     <header className="flex flex-col sm:flex-row justify-between items-start mb-8">
-                        <div>
-                            <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
-                            <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
+                        <div className="flex items-center gap-4">
+                             <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-md md:hidden">
+                                <MenuIcon className="w-6 h-6" />
+                            </button>
+                            <div>
+                                <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
+                                <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
+                            </div>
                         </div>
                         <button 
                             onClick={handleLogout}
@@ -157,7 +177,7 @@ const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ navigateTo, onV
                         </button>
                     </header>
 
-                    <div>
+                    <div className="max-w-7xl mx-auto">
                         {renderContent()}
                     </div>
                 </div>
