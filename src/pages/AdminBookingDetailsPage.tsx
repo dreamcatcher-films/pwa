@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, FC } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon, ChevronDownIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
@@ -104,6 +104,8 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [messageError, setMessageError] = useState('');
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
@@ -113,11 +115,12 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         if (!token) { navigateTo('adminLogin'); return; }
 
         try {
-            const [bookingRes, bookingStagesRes, allStagesRes, messagesRes] = await Promise.all([
+            const [bookingRes, bookingStagesRes, allStagesRes, messagesRes, unreadCountRes] = await Promise.all([
                 fetch(`/api/admin/bookings/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch(`/api/admin/booking-stages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch(`/api/admin/stages`, { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch(`/api/admin/messages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch(`/api/admin/messages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`/api/admin/bookings/${bookingId}/unread-count`, { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
             
             if (bookingRes.status === 401 || bookingRes.status === 403) {
@@ -130,11 +133,13 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             if (!bookingStagesRes.ok) throw new Error(await bookingStagesRes.text() || 'Błąd pobierania etapów projektu.');
             if (!allStagesRes.ok) throw new Error(await allStagesRes.text() || 'Błąd pobierania szablonów etapów.');
             if (!messagesRes.ok) throw new Error(await messagesRes.text() || 'Błąd pobierania wiadomości.');
+            if (!unreadCountRes.ok) throw new Error(await unreadCountRes.text() || 'Błąd pobierania licznika wiadomości.');
             
             const bookingDataResult = await bookingRes.json();
             const bookingStagesData = await bookingStagesRes.json();
             const allStagesData = await allStagesRes.json();
             const messagesData = await messagesRes.json();
+            const unreadCountData = await unreadCountRes.json();
 
             setBookingData(bookingDataResult);
             setFormData(bookingDataResult);
@@ -142,6 +147,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             setBookingStages(bookingStagesData);
             setAllStageTemplates(allStagesData);
             setMessages(messagesData);
+            setUnreadCount(unreadCountData.count);
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -151,25 +157,30 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     };
 
     useEffect(() => {
-        const markMessagesAsRead = async () => {
-            if (!token) return;
+        fetchAllData();
+    }, [navigateTo, bookingId, token]);
+
+    useEffect(() => {
+        if(isChatOpen) {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages, isChatOpen]);
+
+    const handleToggleChat = async () => {
+        const newChatState = !isChatOpen;
+        setIsChatOpen(newChatState);
+        if (newChatState && unreadCount > 0) {
             try {
                 await fetch(`/api/admin/bookings/${bookingId}/messages/mark-as-read`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                setUnreadCount(0);
             } catch (err) {
-                console.error('Failed to mark messages as read:', err);
+                console.error("Failed to mark messages as read", err);
             }
-        };
-
-        fetchAllData();
-        markMessagesAsRead();
-    }, [navigateTo, bookingId, token]);
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        }
+    };
 
     const handleBack = () => navigateTo('adminDashboard');
     
@@ -362,7 +373,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const availableStagesToAdd = allStageTemplates.filter(template => !bookingStages.some(bs => bs.name === template.name));
 
     return (
-        <div>
+        <div className="max-w-7xl mx-auto p-6 sm:p-8 lg:p-10">
             <header className="relative mb-10">
                 <div className="flex justify-between items-start">
                     <div>
@@ -431,6 +442,62 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                         </div>
                     </InfoCard>
 
+                    <div className="bg-white rounded-2xl shadow-md">
+                        <button onClick={handleToggleChat} className="w-full flex items-center justify-between p-6 cursor-pointer">
+                            <div className="flex items-center">
+                                <ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />
+                                <h2 className="text-xl font-bold text-slate-800">Komunikacja z Klientem</h2>
+                                {unreadCount > 0 && <span className="ml-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{unreadCount} nowa</span>}
+                            </div>
+                            <ChevronDownIcon className={`w-6 h-6 text-slate-500 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isChatOpen && (
+                            <div className="p-6 pt-0">
+                                <div className="border-t border-slate-200 pt-4">
+                                    <div className="space-y-4 pr-2 max-h-96 overflow-y-auto">
+                                        {messages.map(msg => (
+                                            <div key={msg.id} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'admin' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
+                                                    {msg.attachment_url && msg.attachment_type?.startsWith('image/') && (
+                                                        <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer">
+                                                            <img src={msg.attachment_url} alt="Załącznik" className="rounded-lg max-w-xs mb-2" />
+                                                        </a>
+                                                    )}
+                                                    {msg.content && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
+                                                    <p className={`text-xs mt-1 ${msg.sender === 'admin' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                                        {msg.status === 'sending' && 'Wysyłanie...'}
+                                                        {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
+                                                        {!msg.status && formatMessageDate(msg.created_at)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div ref={chatEndRef} />
+                                    </div>
+                                    <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t border-slate-200">
+                                        {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
+                                        <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz odpowiedź do klienta..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
+                                        {attachmentPreview && (
+                                            <div className="mt-2 relative w-24 h-24">
+                                                <img src={attachmentPreview} alt="Podgląd załącznika" className="w-full h-full object-cover rounded-lg" />
+                                                <button onClick={removeAttachment} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"><XMarkIcon className="w-4 h-4" /></button>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between items-center mt-2">
+                                            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full" aria-label="Dodaj załącznik">
+                                                <PaperClipIcon className="w-6 h-6" />
+                                            </button>
+                                            <button type="submit" disabled={isSendingMessage || (!newMessage.trim() && !attachmentFile)} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
+                                                {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
                     <InfoCard title="Dane Klienta" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         {isEditing ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -478,48 +545,6 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 <InfoItem label="Dodatkowe informacje od klienta" value={bookingData.additional_info} />
                              </>
                         )}
-                    </InfoCard>
-
-                    <InfoCard title="Komunikacja z Klientem" icon={<ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
-                         <div className="space-y-4 pr-2 max-h-96 overflow-y-auto">
-                            {messages.map(msg => (
-                                <div key={msg.id} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'admin' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
-                                        {msg.attachment_url && msg.attachment_type?.startsWith('image/') && (
-                                            <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer">
-                                                <img src={msg.attachment_url} alt="Załącznik" className="rounded-lg max-w-xs mb-2" />
-                                            </a>
-                                        )}
-                                        {msg.content && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
-                                        <p className={`text-xs mt-1 ${msg.sender === 'admin' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                                            {msg.status === 'sending' && 'Wysyłanie...'}
-                                            {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
-                                            {!msg.status && formatMessageDate(msg.created_at)}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                            <div ref={chatEndRef} />
-                        </div>
-                         <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
-                            {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
-                            <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz odpowiedź do klienta..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
-                            {attachmentPreview && (
-                                <div className="mt-2 relative w-24 h-24">
-                                    <img src={attachmentPreview} alt="Podgląd załącznika" className="w-full h-full object-cover rounded-lg" />
-                                    <button onClick={removeAttachment} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"><XMarkIcon className="w-4 h-4" /></button>
-                                </div>
-                            )}
-                            <div className="flex justify-between items-center mt-2">
-                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-                                <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full" aria-label="Dodaj załącznik">
-                                    <PaperClipIcon className="w-6 h-6" />
-                                </button>
-                                <button type="submit" disabled={isSendingMessage || (!newMessage.trim() && !attachmentFile)} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
-                                    {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
-                                </button>
-                            </div>
-                        </form>
                     </InfoCard>
                 </div>
 
