@@ -1,5 +1,6 @@
 
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -18,6 +19,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // --- Database Configuration & Initialization ---
 let pool;
+let initializationPromise = null;
 
 const getPool = () => {
     if (!pool) {
@@ -30,21 +32,293 @@ const getPool = () => {
             ssl: { rejectUnauthorized: false },
         });
 
-        // The 'error' event on a pool is for errors that happen on idle clients
         pool.on('error', (err, client) => {
             console.error('Unexpected error on idle client in pool', err);
-            // For serverless, it's often best to tear down the pool and recreate it.
             pool = null; 
         });
     }
     return pool;
 };
 
+const runDbSetup = async () => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS access_keys (
+                id SERIAL PRIMARY KEY,
+                key VARCHAR(4) UNIQUE NOT NULL,
+                client_name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS bookings (
+                id SERIAL PRIMARY KEY,
+                client_id VARCHAR(255) UNIQUE,
+                access_key VARCHAR(4),
+                package_name VARCHAR(255) NOT NULL,
+                total_price NUMERIC(10, 2) NOT NULL,
+                selected_items TEXT[] NOT NULL,
+                bride_name VARCHAR(255) NOT NULL,
+                groom_name VARCHAR(255) NOT NULL,
+                wedding_date DATE NOT NULL,
+                bride_address TEXT,
+                groom_address TEXT,
+                locations TEXT,
+                schedule TEXT,
+                email VARCHAR(255) NOT NULL,
+                phone_number VARCHAR(255),
+                additional_info TEXT,
+                password_hash VARCHAR(255) NOT NULL,
+                discount_code VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                payment_status VARCHAR(50) DEFAULT 'pending',
+                amount_paid NUMERIC(10, 2) DEFAULT 0.00,
+                payment_intent_id VARCHAR(255)
+            );
+
+            CREATE TABLE IF NOT EXISTS admins (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                notification_email VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS availability (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                is_all_day BOOLEAN DEFAULT FALSE
+            );
+
+            CREATE TABLE IF NOT EXISTS galleries (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                image_url TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS packages (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) NOT NULL,
+              description TEXT,
+              price NUMERIC(10, 2) NOT NULL,
+              type VARCHAR(50) NOT NULL DEFAULT 'combo', -- 'film', 'photo', 'combo'
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS addons (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(255) NOT NULL,
+              price NUMERIC(10, 2) NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS package_addons (
+              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
+              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+              PRIMARY KEY (package_id, addon_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS discount_codes (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(255) UNIQUE NOT NULL,
+                type VARCHAR(50) NOT NULL, -- 'percentage' or 'fixed'
+                value NUMERIC(10, 2) NOT NULL,
+                usage_limit INTEGER,
+                times_used INTEGER DEFAULT 0,
+                expires_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            
+             CREATE TABLE IF NOT EXISTS production_stages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS booking_stages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                stage_id INTEGER REFERENCES production_stages(id),
+                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
+                content TEXT NOT NULL,
+                is_read_by_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id SERIAL PRIMARY KEY,
+                first_name VARCHAR(255) NOT NULL,
+                last_name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                phone VARCHAR(255),
+                subject TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key VARCHAR(255) PRIMARY KEY,
+                value TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS homepage_carousel_slides (
+                id SERIAL PRIMARY KEY,
+                image_url TEXT NOT NULL,
+                title TEXT,
+                subtitle TEXT,
+                button_text TEXT,
+                button_link TEXT,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS homepage_testimonials (
+                id SERIAL PRIMARY KEY,
+                author VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS homepage_instagram_posts (
+                id SERIAL PRIMARY KEY,
+                post_url TEXT NOT NULL,
+                image_url TEXT NOT NULL,
+                caption TEXT,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // --- MIGRATIONS ---
+        const packagesTypeColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'packages' AND column_name = 'type'`);
+        if (packagesTypeColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE packages ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT 'combo';`);
+            console.log("MIGRATION APPLIED: Added 'type' column to 'packages' table.");
+        }
+
+        const bookingsClientIdColumnCheck = await client.query(`SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'client_id'`);
+        if (bookingsClientIdColumnCheck.rows.length > 0 && bookingsClientIdColumnCheck.rows[0].character_maximum_length < 255) {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN client_id TYPE VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Expanded 'client_id' column in 'bookings' table to VARCHAR(255).");
+        }
+        
+        const messagesColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_read_by_admin'`);
+        if (messagesColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
+            console.log("MIGRATION APPLIED: Added 'is_read_by_admin' column to 'messages' table.");
+        }
+
+        const adminsColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'admins' AND column_name = 'notification_email'`);
+        if (adminsColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE admins ADD COLUMN notification_email VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
+        }
+        
+        const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
+        if (bookingsPaymentIntentColumnCheck.rows.length === 0) {
+            await client.query(`ALTER TABLE bookings ADD COLUMN payment_intent_id VARCHAR(255);`);
+            console.log("MIGRATION APPLIED: Added 'payment_intent_id' column to 'bookings' table.");
+        }
+
+        const accessKeyConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'access_key'`);
+        if (accessKeyConstraintCheck.rows.length > 0 && accessKeyConstraintCheck.rows[0].is_nullable === 'NO') {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN access_key DROP NOT NULL;`);
+            console.log("MIGRATION APPLIED: Made 'access_key' column in 'bookings' table nullable.");
+        }
+
+        const phoneNumberConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'phone_number'`);
+        if (phoneNumberConstraintCheck.rows.length > 0 && phoneNumberConstraintCheck.rows[0].is_nullable === 'NO') {
+            await client.query(`ALTER TABLE bookings ALTER COLUMN phone_number DROP NOT NULL;`);
+            console.log("MIGRATION APPLIED: Made 'phone_number' column in 'bookings' table nullable.");
+        }
+        
+        // --- SEEDING ---
+        const adminRes = await client.query('SELECT * FROM admins');
+        if (adminRes.rows.length === 0) {
+            const adminPassword = 'adminpassword';
+            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            await client.query('INSERT INTO admins (email, password_hash, notification_email) VALUES ($1, $2, $3)', ['admin@dreamcatcher.com', hashedPassword, 'admin@dreamcatcher.com']);
+        } else {
+            await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
+        }
+        
+        // Remove old CONTACTFORM booking if it exists
+        await client.query("DELETE FROM bookings WHERE client_id = 'CONTACTFORM'");
+
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Kilka słów o nas') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy pasjonatami opowiadania historii. Każdy ślub to dla nas unikalna opowieść, którą staramy się uchwycić w najbardziej autentyczny i emocjonalny sposób. Naszym celem jest stworzenie pamiątki, która przetrwa próbę czasu i będziecie do niej wracać z uśmiechem przez lata.') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', '') ON CONFLICT (key) DO NOTHING;`);
+
+
+        await client.query('COMMIT');
+        return { success: true, message: 'Database schema initialized and migrated successfully.' };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Database setup error:', err);
+        throw new Error(`Error setting up database schema: ${err.message}`);
+    } finally {
+        client.release();
+    }
+};
+
+const initializeDatabase = () => {
+    if (initializationPromise) {
+        return initializationPromise;
+    }
+    initializationPromise = new Promise(async (resolve, reject) => {
+        try {
+            getPool(); // This will throw if DATABASE_URL is not set
+            console.log("Running automatic database setup on cold start...");
+            await runDbSetup();
+            console.log("Automatic database setup finished successfully.");
+            resolve();
+        } catch (error) {
+            console.error("AUTOMATIC DATABASE SETUP FAILED:", error);
+            reject(error);
+        }
+    });
+    return initializationPromise;
+};
+
+// Start initialization on module load.
+initializeDatabase();
+
+const awaitDbInitialization = async (req, res, next) => {
+    try {
+        await initializationPromise;
+        next();
+    } catch (error) {
+        res.status(503).send("Service temporarily unavailable due to a database initialization error. Please check the function logs.");
+    }
+};
+
 
 // --- JWT & Config Middleware ---
 const checkConfig = (req, res, next) => {
     try {
-        getPool(); // This will throw if DATABASE_URL is not set
+        getPool();
     } catch(err) {
          return res.status(500).send(err.message);
     }
@@ -80,7 +354,8 @@ const verifyAdminToken = (req, res, next) => {
     }
 };
 
-// Apply config check to all routes
+// Apply middleware. This ensures DB is ready before any route is handled.
+app.use(awaitDbInitialization);
 app.use(checkConfig);
 
 // --- Helper Functions ---
@@ -341,238 +616,12 @@ app.post('/api/admin/login', async (req, res) => {
 
 
 app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
     try {
-        await client.query('BEGIN');
-
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS access_keys (
-                id SERIAL PRIMARY KEY,
-                key VARCHAR(4) UNIQUE NOT NULL,
-                client_name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS bookings (
-                id SERIAL PRIMARY KEY,
-                client_id VARCHAR(255) UNIQUE,
-                access_key VARCHAR(4),
-                package_name VARCHAR(255) NOT NULL,
-                total_price NUMERIC(10, 2) NOT NULL,
-                selected_items TEXT[] NOT NULL,
-                bride_name VARCHAR(255) NOT NULL,
-                groom_name VARCHAR(255) NOT NULL,
-                wedding_date DATE NOT NULL,
-                bride_address TEXT,
-                groom_address TEXT,
-                locations TEXT,
-                schedule TEXT,
-                email VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(255),
-                additional_info TEXT,
-                password_hash VARCHAR(255) NOT NULL,
-                discount_code VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                payment_status VARCHAR(50) DEFAULT 'pending',
-                amount_paid NUMERIC(10, 2) DEFAULT 0.00,
-                payment_intent_id VARCHAR(255)
-            );
-
-            CREATE TABLE IF NOT EXISTS admins (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                notification_email VARCHAR(255),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS availability (
-                id SERIAL PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                description TEXT,
-                start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                is_all_day BOOLEAN DEFAULT FALSE
-            );
-
-            CREATE TABLE IF NOT EXISTS galleries (
-                id SERIAL PRIMARY KEY,
-                title VARCHAR(255) NOT NULL,
-                description TEXT,
-                image_url TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS packages (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) NOT NULL,
-              description TEXT,
-              price NUMERIC(10, 2) NOT NULL,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE TABLE IF NOT EXISTS addons (
-              id SERIAL PRIMARY KEY,
-              name VARCHAR(255) NOT NULL,
-              price NUMERIC(10, 2) NOT NULL,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS package_addons (
-              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
-              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
-              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-              PRIMARY KEY (package_id, addon_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS discount_codes (
-                id SERIAL PRIMARY KEY,
-                code VARCHAR(255) UNIQUE NOT NULL,
-                type VARCHAR(50) NOT NULL, -- 'percentage' or 'fixed'
-                value NUMERIC(10, 2) NOT NULL,
-                usage_limit INTEGER,
-                times_used INTEGER DEFAULT 0,
-                expires_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-            
-             CREATE TABLE IF NOT EXISTS production_stages (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS booking_stages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                stage_id INTEGER REFERENCES production_stages(id),
-                status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, awaiting_approval, completed
-                completed_at TIMESTAMP WITH TIME ZONE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-                sender VARCHAR(50) NOT NULL, -- 'client' or 'admin'
-                content TEXT NOT NULL,
-                is_read_by_admin BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS contact_messages (
-                id SERIAL PRIMARY KEY,
-                first_name VARCHAR(255) NOT NULL,
-                last_name VARCHAR(255) NOT NULL,
-                email VARCHAR(255) NOT NULL,
-                phone VARCHAR(255),
-                subject TEXT NOT NULL,
-                message TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS app_settings (
-                key VARCHAR(255) PRIMARY KEY,
-                value TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS homepage_carousel_slides (
-                id SERIAL PRIMARY KEY,
-                image_url TEXT NOT NULL,
-                title TEXT,
-                subtitle TEXT,
-                button_text TEXT,
-                button_link TEXT,
-                sort_order INTEGER DEFAULT 0,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS homepage_testimonials (
-                id SERIAL PRIMARY KEY,
-                author VARCHAR(255) NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS homepage_instagram_posts (
-                id SERIAL PRIMARY KEY,
-                post_url TEXT NOT NULL,
-                image_url TEXT NOT NULL,
-                caption TEXT,
-                sort_order INTEGER DEFAULT 0,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-
-        // --- MIGRATIONS ---
-        const bookingsClientIdColumnCheck = await client.query(`SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'client_id'`);
-        if (bookingsClientIdColumnCheck.rows.length > 0 && bookingsClientIdColumnCheck.rows[0].character_maximum_length < 255) {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN client_id TYPE VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Expanded 'client_id' column in 'bookings' table to VARCHAR(255).");
-        }
-        
-        const messagesColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_read_by_admin'`);
-        if (messagesColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE messages ADD COLUMN is_read_by_admin BOOLEAN DEFAULT FALSE;`);
-            console.log("MIGRATION APPLIED: Added 'is_read_by_admin' column to 'messages' table.");
-        }
-
-        const adminsColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'admins' AND column_name = 'notification_email'`);
-        if (adminsColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE admins ADD COLUMN notification_email VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Added 'notification_email' column to 'admins' table.");
-        }
-        
-        const bookingsPaymentIntentColumnCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'payment_intent_id'`);
-        if (bookingsPaymentIntentColumnCheck.rows.length === 0) {
-            await client.query(`ALTER TABLE bookings ADD COLUMN payment_intent_id VARCHAR(255);`);
-            console.log("MIGRATION APPLIED: Added 'payment_intent_id' column to 'bookings' table.");
-        }
-
-        const accessKeyConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'access_key'`);
-        if (accessKeyConstraintCheck.rows.length > 0 && accessKeyConstraintCheck.rows[0].is_nullable === 'NO') {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN access_key DROP NOT NULL;`);
-            console.log("MIGRATION APPLIED: Made 'access_key' column in 'bookings' table nullable.");
-        }
-
-        const phoneNumberConstraintCheck = await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name = 'phone_number'`);
-        if (phoneNumberConstraintCheck.rows.length > 0 && phoneNumberConstraintCheck.rows[0].is_nullable === 'NO') {
-            await client.query(`ALTER TABLE bookings ALTER COLUMN phone_number DROP NOT NULL;`);
-            console.log("MIGRATION APPLIED: Made 'phone_number' column in 'bookings' table nullable.");
-        }
-        
-        // --- SEEDING ---
-        const adminRes = await client.query('SELECT * FROM admins');
-        if (adminRes.rows.length === 0) {
-            const adminPassword = 'adminpassword';
-            const hashedPassword = await bcrypt.hash(adminPassword, 10);
-            await client.query('INSERT INTO admins (email, password_hash, notification_email) VALUES ($1, $2, $3)', ['admin@dreamcatcher.com', hashedPassword, 'admin@dreamcatcher.com']);
-        } else {
-            await client.query("UPDATE admins SET notification_email = email WHERE notification_email IS NULL");
-        }
-        
-        // Remove old CONTACTFORM booking if it exists
-        await client.query("DELETE FROM bookings WHERE client_id = 'CONTACTFORM'");
-
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Kilka słów o nas') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy pasjonatami opowiadania historii. Każdy ślub to dla nas unikalna opowieść, którą staramy się uchwycić w najbardziej autentyczny i emocjonalny sposób. Naszym celem jest stworzenie pamiątki, która przetrwa próbę czasu i będziecie do niej wracać z uśmiechem przez lata.') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', '') ON CONFLICT (key) DO NOTHING;`);
-
-
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Database schema initialized and migrated successfully.' });
+        console.log("Manual database setup triggered by admin.");
+        const result = await runDbSetup();
+        res.status(200).json(result);
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('Database setup error:', err);
-        res.status(500).json({ message: 'Error setting up database schema.', error: err.message });
-    } finally {
-        client.release();
+        res.status(500).json({ success: false, message: err.message, error: err });
     }
 });
 
@@ -789,11 +838,11 @@ app.get('/api/admin/addons', verifyAdminToken, async (req, res) => {
 });
 
 app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
-    const { name, description, price, addons } = req.body;
+    const { name, description, price, addons, type } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const pkgRes = await client.query('INSERT INTO packages (name, description, price) VALUES ($1, $2, $3) RETURNING id', [name, description, price]);
+        const pkgRes = await client.query('INSERT INTO packages (name, description, price, type) VALUES ($1, $2, $3, $4) RETURNING id', [name, description, price, type]);
         const packageId = pkgRes.rows[0].id;
 
         if (addons && addons.length > 0) {
@@ -813,11 +862,11 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
 
 app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     const packageId = req.params.id;
-    const { name, description, price, addons } = req.body;
+    const { name, description, price, addons, type } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        await client.query('UPDATE packages SET name = $1, description = $2, price = $3 WHERE id = $4', [name, description, price, packageId]);
+        await client.query('UPDATE packages SET name = $1, description = $2, price = $3, type = $4 WHERE id = $5', [name, description, price, type, packageId]);
         await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
 
         if (addons && addons.length > 0) {
@@ -834,6 +883,7 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         client.release();
     }
 });
+
 
 app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
     try {
