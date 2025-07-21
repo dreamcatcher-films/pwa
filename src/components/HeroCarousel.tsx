@@ -26,15 +26,16 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
     if (!slides || slides.length === 0) {
         return null;
     }
-
+    
+    // Pausing via CSS is cleaner. We add a `dragging` class during drag.
+    // Hover pause is handled by `group-hover`.
     const startDragging = (pageX: number) => {
         if (!carouselRef.current) return;
         isDragging.current = true;
         startX.current = pageX - carouselRef.current.offsetLeft;
         scrollLeft.current = carouselRef.current.scrollLeft;
         hasDragged.current = false;
-        // Pause animation by changing class
-        carouselRef.current.classList.remove('animate-scroll-filmstrip');
+        carouselRef.current.classList.add('dragging');
         if (animationFrameId.current) {
             cancelAnimationFrame(animationFrameId.current);
         }
@@ -43,10 +44,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
     const stopDragging = () => {
         if (!isDragging.current) return;
         isDragging.current = false;
-        // Resume animation if not hovered
-        if (carouselRef.current && !carouselRef.current.matches(':hover')) {
-             carouselRef.current.classList.add('animate-scroll-filmstrip');
-        }
+        carouselRef.current?.classList.remove('dragging');
     };
 
     const onDrag = (pageX: number) => {
@@ -59,7 +57,6 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
                 carouselRef.current.scrollLeft = scrollLeft.current - walk;
             }
         };
-
         animationFrameId.current = requestAnimationFrame(drag);
 
         if (Math.abs(walk) > 5) { // Threshold to count as a drag
@@ -67,42 +64,22 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
         }
     };
 
-    // Mouse Events
-    const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => startDragging(e.pageX);
     const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
         if (!isDragging.current) return;
         e.preventDefault();
         onDrag(e.pageX);
     };
-    const handleMouseUp = () => stopDragging();
-    const handleMouseLeave = () => {
-        if (carouselRef.current) {
-            carouselRef.current.classList.add('animate-scroll-filmstrip');
-        }
-        stopDragging();
-    };
-    const handleMouseEnter = () => {
-        if (carouselRef.current) {
-            carouselRef.current.classList.remove('animate-scroll-filmstrip');
-        }
-    }
-
-
-    // Touch Events
-    const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => startDragging(e.touches[0].pageX);
+    
     const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
         if (!isDragging.current) return;
         onDrag(e.touches[0].pageX);
     };
-    const handleTouchEnd = () => stopDragging();
 
-    // Click prevention after drag
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
         if (hasDragged.current) {
             e.preventDefault();
             return;
         }
-
         if (link.startsWith('/')) {
             e.preventDefault();
             const page = link.substring(1) as Page;
@@ -114,20 +91,20 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
 
     return (
         <div className="w-full h-[550px] relative group py-8">
+            <style>{`.group:hover .animate-scroll-filmstrip, .animate-scroll-filmstrip.dragging { animation-play-state: paused; }`}</style>
             {/* Left fade mask */}
             <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none"></div>
 
             <div
                 ref={carouselRef}
-                className="flex items-center h-full animate-scroll-filmstrip cursor-grab active:cursor-grabbing will-change-transform overflow-x-auto scrollbar-hide"
-                onMouseDown={handleMouseDown}
-                onMouseLeave={handleMouseLeave}
-                onMouseEnter={handleMouseEnter}
-                onMouseUp={handleMouseUp}
+                className="flex items-center h-full animate-scroll-filmstrip cursor-grab will-change-transform overflow-x-auto scrollbar-hide"
+                onMouseDown={(e) => startDragging(e.pageX)}
+                onMouseLeave={stopDragging}
+                onMouseUp={stopDragging}
                 onMouseMove={handleMouseMove}
-                onTouchStart={handleTouchStart}
+                onTouchStart={(e) => startDragging(e.touches[0].pageX)}
                 onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+                onTouchEnd={stopDragging}
             >
                 {duplicatedSlides.map((slide, index) => (
                     <a
