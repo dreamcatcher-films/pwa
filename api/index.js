@@ -1351,6 +1351,19 @@ app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
     }
 });
 
+app.get('/api/admin/bookings/:bookingId/unread-count', verifyAdminToken, async (req, res) => {
+    try {
+        const { bookingId } = req.params;
+        const result = await getPool().query(
+            "SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = 'client' AND is_read_by_admin = FALSE",
+            [bookingId]
+        );
+        res.json({ count: parseInt(result.rows[0].count, 10) });
+    } catch (err) {
+        res.status(500).send(`Error fetching unread count for booking: ${err.message}`);
+    }
+});
+
 app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminToken, async (req, res) => {
     try {
         await getPool().query(
