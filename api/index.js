@@ -1,6 +1,3 @@
-
-
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -453,7 +450,7 @@ app.post('/api/contact', async (req, res) => {
                 
                 if (adminEmail) {
                     await resend.emails.send({
-                        from: 'Formularz Kontaktowy <onboarding@resend.dev>',
+                        from: 'Dreamcatcher Films (Kontakt) <onboarding@resend.dev>',
                         to: adminEmail,
                         reply_to: email,
                         subject: `Nowe zapytanie z formularza: ${subject}`,
@@ -515,7 +512,7 @@ app.post('/api/bookings', async (req, res) => {
             try {
                 const appUrl = `${req.protocol}://${req.get('host')}`;
                 await resend.emails.send({
-                    from: 'Potwierdzenie Rejestracji <onboarding@resend.dev>',
+                    from: 'Dreamcatcher Films <onboarding@resend.dev>',
                     to: bookingData.email,
                     subject: `Witaj w Dreamcatcher Film! Twoje konto zostało utworzone.`,
                     html: `
@@ -706,6 +703,47 @@ app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
         res.json(result.rows[0]);
     } catch (err) {
         res.status(500).send(`Error fetching booking details for admin: ${err.message}`);
+    }
+});
+
+app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const bookingRes = await getPool().query('SELECT client_id, email, bride_name FROM bookings WHERE id = $1', [id]);
+        if (bookingRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
+        }
+
+        const booking = bookingRes.rows[0];
+
+        if (!resend) {
+            return res.status(503).json({ message: 'Usługa e-mail jest nieskonfigurowana.' });
+        }
+
+        const appUrl = `${req.protocol}://${req.get('host')}`;
+        await resend.emails.send({
+            from: 'Dreamcatcher Films <onboarding@resend.dev>',
+            to: booking.email,
+            subject: 'Twoje dane do logowania do panelu Dreamcatcher Film',
+            html: `
+                <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
+                    <h2 style="color: #1e293b;">Witaj ${booking.bride_name}!</h2>
+                    <p>Na prośbę administratora, ponownie wysyłamy Twoje dane logowania do panelu klienta.</p>
+                    <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0 0 10px 0;"><strong>Twój numer klienta (login):</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${booking.client_id}</span></p>
+                    </div>
+                    <p>Twoje hasło to to, które zostało ustawione podczas tworzenia rezerwacji. Jeśli go nie pamiętasz, skontaktuj się z nami w celu jego zresetowania.</p>
+                    <a href="${appUrl}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; margin-top: 15px; font-weight: bold;">Przejdź do Panelu Klienta</a>
+                    <p style="margin-top: 30px; font-size: 0.9em; color: #64748b;">Z pozdrowieniami,<br/>Zespół Dreamcatcher Film</p>
+                </div>
+            `,
+        });
+
+        res.status(200).json({ message: 'Email z danymi logowania został wysłany pomyślnie.' });
+
+    } catch (err) {
+        console.error(`Error resending credentials for booking #${req.params.id}:`, err);
+        res.status(500).send(`Server error: ${err.message}`);
     }
 });
 
