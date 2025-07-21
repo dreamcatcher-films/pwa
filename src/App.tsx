@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -18,7 +19,7 @@ export type Page =
   'home' | 'calculator' | 'gallery' | 'contact' |
   'login' | 'clientPanel' | 
   'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage';
+  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage' | 'adminInstagram';
 
 const App = () => {
     const [currentPage, setCurrentPage] = useState<Page>('home');
