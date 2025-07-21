@@ -168,8 +168,13 @@ const runDbSetup = async () => {
             CREATE TABLE IF NOT EXISTS package_addons (
               package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
               addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
-              is_locked BOOLEAN NOT NULL DEFAULT FALSE,
               PRIMARY KEY (package_id, addon_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS addon_categories (
+              addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+              category_id INTEGER REFERENCES package_categories(id) ON DELETE CASCADE,
+              PRIMARY KEY (addon_id, category_id)
             );
             
              CREATE TABLE IF NOT EXISTS bookings (
@@ -276,6 +281,7 @@ const runDbSetup = async () => {
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read_by_client BOOLEAN DEFAULT FALSE;`);
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url TEXT;`);
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);`);
+        await client.query(`ALTER TABLE package_addons DROP COLUMN IF EXISTS is_locked;`);
         
         // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
@@ -525,7 +531,7 @@ app.post('/api/bookings', async (req, res) => {
                         <p>Poniżej znajdziesz swoje dane do logowania. Zapisz je w bezpiecznym miejscu.</p>
                         <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
                             <p style="margin: 0 0 10px 0;"><strong>Numer Klienta (login):</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${clientId}</span></p>
-                            <p style="margin: 0;"><strong>Twoje hasło:</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">${password}</span></p>
+                            <p style="margin: 0;"><strong>Twoje hasło:</strong> <span style="font-family: monospace; font-size: 1.2em; color: #4f46e5; font-weight: bold;">[ustawione przez Ciebie]</span></p>
                         </div>
                         <p>Możesz teraz zalogować się do swojego panelu, aby zobaczyć szczegóły rezerwacji, śledzić postępy i komunikować się z nami.</p>
                         <a href="${appUrl}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; margin-top: 15px; font-weight: bold;">Przejdź do Panelu Klienta</a>
@@ -563,7 +569,10 @@ app.get('/api/packages', async (req, res) => {
         const packages = packagesRes.rows.map(p => {
             const included = relationsRes.rows
                 .filter(r => r.package_id === p.id)
-                .map(r => ({ ...addonsMap.get(r.addon_id), locked: r.is_locked }));
+                .map(r => {
+                    const addon = addonsMap.get(r.addon_id);
+                    return { ...addon, locked: addon ? parseFloat(addon.price) === 0 : false };
+                });
             return { ...p, included };
         });
 
@@ -940,13 +949,21 @@ app.get('/api/admin/offer-data', verifyAdminToken, async (req, res) => {
         const addonsRes = await getPool().query('SELECT * FROM addons ORDER BY name');
         const categoriesRes = await getPool().query('SELECT * FROM package_categories ORDER BY id ASC');
         const relationsRes = await getPool().query('SELECT * FROM package_addons');
+        const addonCategoriesRes = await getPool().query('SELECT * FROM addon_categories');
+
+        const addons = addonsRes.rows.map(a => ({
+            ...a,
+            category_ids: addonCategoriesRes.rows
+                .filter(ac => ac.addon_id === a.id)
+                .map(ac => ac.category_id)
+        }));
 
         const packages = packagesRes.rows.map(p => ({
             ...p,
-            addons: relationsRes.rows.filter(r => r.package_id === p.id).map(r => ({id: r.addon_id, is_locked: r.is_locked}))
+            addons: relationsRes.rows.filter(r => r.package_id === p.id).map(r => ({id: r.addon_id}))
         }));
         
-        res.json({ packages, addons: addonsRes.rows, categories: categoriesRes.rows });
+        res.json({ packages, addons, categories: categoriesRes.rows });
     } catch (err) {
         res.status(500).send(`Błąd pobierania danych oferty: ${err.message}`);
     }
@@ -982,23 +999,53 @@ app.delete('/api/admin/categories/:id', verifyAdminToken, async (req, res) => {
 
 // Addons CRUD
 app.post('/api/admin/addons', verifyAdminToken, async (req, res) => {
-    const { name, price } = req.body;
+    const { name, price, category_ids = [] } = req.body;
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
-        res.status(201).json(result.rows[0]);
+        await client.query('BEGIN');
+        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
+        const newAddon = addonRes.rows[0];
+
+        if (category_ids && category_ids.length > 0) {
+            for (const categoryId of category_ids) {
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [newAddon.id, categoryId]);
+            }
+        }
+        await client.query('COMMIT');
+        res.status(201).json(newAddon);
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).send(`Błąd tworzenia dodatku: ${err.message}`);
+    } finally {
+        client.release();
     }
 });
+
 app.patch('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
-    const { name, price } = req.body;
+    const { name, price, category_ids = [] } = req.body;
+    const addonId = req.params.id;
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('UPDATE addons SET name=$1, price=$2 WHERE id=$3 RETURNING *', [name, price, req.params.id]);
+        await client.query('BEGIN');
+        const result = await client.query('UPDATE addons SET name=$1, price=$2 WHERE id=$3 RETURNING *', [name, price, addonId]);
+        
+        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [addonId]);
+        if (category_ids && category_ids.length > 0) {
+            for (const categoryId of category_ids) {
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, categoryId]);
+            }
+        }
+        
+        await client.query('COMMIT');
         res.json(result.rows[0]);
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).send(`Błąd aktualizacji dodatku: ${err.message}`);
+    } finally {
+        client.release();
     }
 });
+
 app.delete('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
     try {
         await getPool().query('DELETE FROM addons WHERE id = $1', [req.params.id]);
@@ -1022,7 +1069,7 @@ app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
 
         if (addons && addons.length > 0) {
             for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [newPackage.id, addon.id, addon.is_locked]);
+                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [newPackage.id, addon.id]);
             }
         }
         await client.query('COMMIT');
@@ -1049,7 +1096,7 @@ app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
         await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
         if (addons && addons.length > 0) {
             for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id, is_locked) VALUES ($1, $2, $3)', [packageId, addon.id, addon.is_locked]);
+                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
             }
         }
         await client.query('COMMIT');
