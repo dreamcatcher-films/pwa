@@ -158,7 +158,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                         ))}
                     </div>
                      <div className="mt-10 text-center">
-                         <a href="https://www.instagram.com/dreamcatcher.film" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-slate-800 text-white font-bold py-3 px-6 rounded-lg hover:bg-slate-900 transition-colors">
+                         <a href="https://www.instagram.com/dreamcatcher_film_" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-slate-800 text-white font-bold py-3 px-6 rounded-lg hover:bg-slate-900 transition-colors">
                             <InstagramIcon className="w-5 h-5"/>
                             Obserwuj nas
                          </a>
