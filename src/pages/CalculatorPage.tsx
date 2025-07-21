@@ -1,8 +1,11 @@
+
 import React, { useState, useEffect, FC, ReactNode } from 'react';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon } from '../components/Icons.tsx';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import { Page } from '../App.tsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // --- DATA STRUCTURE ---
 interface Addon {
@@ -15,14 +18,30 @@ interface PackageAddon extends Addon {
     locked: boolean;
 }
 
+interface Category {
+    id: number;
+    name: string;
+    description: string;
+    icon_name: string;
+}
+
 interface Package {
     id: number;
     name: string;
     price: number;
     description: string;
-    type: 'film' | 'photo' | 'combo';
+    category_id: number;
     included: PackageAddon[];
+    rich_description: string;
+    rich_description_image_url: string;
 }
+
+const iconMap: { [key: string]: React.ReactNode } = {
+    'FilmIcon': <FilmIcon className="w-8 h-8 text-indigo-500" />,
+    'CameraIcon': <CameraIcon className="w-8 h-8 text-indigo-500" />,
+    'FilmCameraIcon': <div className="flex justify-center items-center"><FilmIcon className="w-7 h-7 text-indigo-500" /><CameraIcon className="w-7 h-7 text-indigo-500" /></div>,
+    'default': <PhotoIcon className="w-8 h-8 text-indigo-500" />
+};
 
 // --- UI COMPONENTS ---
 const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentStep, steps }) => (
@@ -83,7 +102,7 @@ const ServiceTypeCard: FC<{ title: string; icon: ReactNode; onClick: () => void 
 
 const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
     <div
-        onClick={() => onSelect(packageInfo.id)}
+        onClick={() => onSelect(packageInfo)}
         className="cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1"
     >
         <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
@@ -101,7 +120,7 @@ const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
 );
 interface PackageCardProps {
     packageInfo: Package;
-    onSelect: (packageId: number) => void;
+    onSelect: (pkg: Package) => void;
 }
 
 
@@ -137,13 +156,15 @@ interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     children: ReactNode;
+    size?: 'md' | 'lg';
 }
-const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
+const Modal: FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' }) => {
     if (!isOpen) return null;
+    const sizeClass = size === 'lg' ? 'max-w-2xl' : 'max-w-md';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" aria-modal="true" role="dialog">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative transform transition-all duration-300 scale-95 animate-modal-in">
+            <div className={`bg-white rounded-2xl shadow-2xl p-8 w-full relative transform transition-all duration-300 scale-95 animate-modal-in ${sizeClass}`}>
                 <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Zamknij okno">
                     <XMarkIcon className="w-6 h-6" />
                 </button>
@@ -254,6 +275,32 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
     );
 };
 
+interface MarketingModalProps {
+    pkg: Package | null;
+    onClose: () => void;
+    onContinue: () => void;
+}
+const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) => {
+    if (!pkg) return null;
+    return (
+        <Modal isOpen={!!pkg} onClose={onClose} size="lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <img src={pkg.rich_description_image_url} alt={pkg.name} className="rounded-lg object-cover w-full h-96" />
+                <div className="flex flex-col h-full">
+                    <h2 className="text-3xl font-bold text-slate-900">{pkg.name}</h2>
+                    <div className="mt-4 text-slate-600 flex-grow overflow-y-auto max-h-60 pr-2 prose prose-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{pkg.rich_description}</ReactMarkdown>
+                    </div>
+                    <div className="mt-6 pt-6 border-t flex justify-end gap-3">
+                        <button onClick={onClose} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Wróć</button>
+                        <button onClick={onContinue} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Kontynuuj</button>
+                    </div>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 
 // --- MAIN CREATOR APP ---
 interface CalculatorPageProps {
@@ -264,8 +311,8 @@ const STEPS = ['Usługa', 'Pakiet', 'Dostosowanie', 'Rezerwacja'];
 
 const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
-    const [serviceType, setServiceType] = useState<'film' | 'photo' | 'combo' | null>(null);
-    const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+    const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
     const [customizedItems, setCustomizedItems] = useState<number[]>([]);
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -273,8 +320,10 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [finalBookingId, setFinalBookingId] = useState<number | null>(null);
     const [finalClientId, setFinalClientId] = useState<string | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
+    const [marketingModalPkg, setMarketingModalPkg] = useState<Package | null>(null);
 
     // Dynamic offer state
+    const [categories, setCategories] = useState<Category[]>([]);
     const [packages, setPackages] = useState<Package[]>([]);
     const [allAddons, setAllAddons] = useState<Addon[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -297,10 +346,10 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             try {
                 const response = await fetch('/api/packages');
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || `Błąd ładowania oferty (${response.status})`);
+                    throw new Error(await response.text() || `Błąd ładowania oferty.`);
                 }
                 const data = await response.json();
+                setCategories(data.categories);
                 setPackages(data.packages);
                 setAllAddons(data.allAddons);
             } catch (err) {
@@ -312,7 +361,6 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         fetchOffer();
     }, []);
     
-    const selectedPackage = packages.find(p => p.id === selectedPackageId);
 
     useEffect(() => {
         if (!selectedPackage) {
@@ -335,17 +383,23 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         setTotalPrice(finalPrice);
     }, [selectedPackage, customizedItems, allAddons]);
 
-    const handleSelectServiceType = (type: 'film' | 'photo' | 'combo') => {
-        setServiceType(type);
+    const handleSelectServiceType = (categoryId: number) => {
+        setSelectedCategoryId(categoryId);
         setStep('selection');
     }
 
-    const handleSelectPackage = (packageId: number) => {
-        setSelectedPackageId(packageId);
-        const pkg = packages.find(p => p.id === packageId);
-        const initialItems = pkg?.included.map(i => i.id) || [];
-        setCustomizedItems(initialItems);
-        setStep('customization');
+    const handleSelectPackage = (pkg: Package) => {
+        setMarketingModalPkg(pkg);
+    };
+
+    const handleContinueFromMarketing = () => {
+        if (marketingModalPkg) {
+            setSelectedPackage(marketingModalPkg);
+            const initialItems = marketingModalPkg.included.map(i => i.id) || [];
+            setCustomizedItems(initialItems);
+            setStep('customization');
+            setMarketingModalPkg(null);
+        }
     };
     
     const handleKeyValidated = (accessKey: string) => {
@@ -376,8 +430,8 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     
     const resetCalculator = () => {
         setStep('serviceType');
-        setServiceType(null);
-        setSelectedPackageId(null);
+        setSelectedCategoryId(null);
+        setSelectedPackage(null);
         setCustomizedItems([]);
         setTotalPrice(0);
         setFinalBookingId(null);
@@ -393,7 +447,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         }
     };
     
-    const filteredPackages = serviceType ? packages.filter(p => p.type === serviceType) : [];
+    const filteredPackages = selectedCategoryId ? packages.filter(p => p.category_id === selectedCategoryId) : [];
 
     if (isLoading) {
         return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
@@ -466,9 +520,9 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             );
             mainContent = (
                 <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <ServiceTypeCard title="Film" icon={<FilmIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('film')} />
-                    <ServiceTypeCard title="Fotografia" icon={<CameraIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('photo')} />
-                    <ServiceTypeCard title="Film + Fotografia" icon={<><FilmIcon className="w-7 h-7 text-indigo-500" /><CameraIcon className="w-7 h-7 text-indigo-500" /></>} onClick={() => handleSelectServiceType('combo')} />
+                    {categories.map(cat => (
+                        <ServiceTypeCard key={cat.id} title={cat.name} icon={iconMap[cat.icon_name] || iconMap.default} onClick={() => handleSelectServiceType(cat.id)} />
+                    ))}
                 </div>
             );
             break;
@@ -603,6 +657,11 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                 isOpen={isBookingModalOpen} 
                 onClose={() => setIsBookingModalOpen(false)}
                 onKeyValidated={handleKeyValidated}
+            />
+            <MarketingModal
+                pkg={marketingModalPkg}
+                onClose={() => setMarketingModalPkg(null)}
+                onContinue={handleContinueFromMarketing}
             />
         </div>
     );
