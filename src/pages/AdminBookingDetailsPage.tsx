@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, FC } from 'react';
 import { Page } from '../App.tsx';
 import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
@@ -10,6 +10,25 @@ interface AdminBookingDetailsPageProps {
     navigateTo: (page: Page) => void;
     bookingId: number;
 }
+
+const AddressWithMapLink: FC<{ address: string | null }> = ({ address }) => {
+    if (!address) return <span className="italic text-slate-400">Brak danych</span>;
+
+    return (
+        <div className="flex items-center gap-2">
+            <span className="flex-grow">{address}</span>
+            <a 
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-500 hover:text-indigo-700 p-1 rounded-full hover:bg-indigo-50 transition-colors flex-shrink-0"
+                aria-label="Pokaż na mapie"
+            >
+                <MapPinIcon className="w-5 h-5" />
+            </a>
+        </div>
+    );
+};
 
 interface BookingData {
     id: number;
@@ -22,7 +41,8 @@ interface BookingData {
     wedding_date: string;
     bride_address: string;
     groom_address: string;
-    locations: string;
+    church_location: string | null;
+    venue_location: string | null;
     schedule: string;
     email: string;
     phone_number: string;
@@ -69,16 +89,13 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [updateError, setUpdateError] = useState('');
     
-    // Payment state
     const [paymentData, setPaymentData] = useState<PaymentData>({ payment_status: 'pending', amount_paid: '0' });
     const [paymentUpdateStatus, setPaymentUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     
-    // Production stages state
     const [bookingStages, setBookingStages] = useState<BookingStage[]>([]);
     const [allStageTemplates, setAllStageTemplates] = useState<ProductionStageTemplate[]>([]);
     const [selectedStageToAdd, setSelectedStageToAdd] = useState('');
 
-    // Messages state
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -87,11 +104,8 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     
     const token = localStorage.getItem('adminAuthToken');
 
-    const fetchAllData = async (shouldScrollChat = false) => {
-        if (!token) {
-            navigateTo('adminLogin');
-            return;
-        }
+    const fetchAllData = async () => {
+        if (!token) { navigateTo('adminLogin'); return; }
 
         try {
             const [bookingRes, bookingStagesRes, allStagesRes, messagesRes] = await Promise.all([
@@ -124,19 +138,11 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             setAllStageTemplates(allStagesData);
             setMessages(messagesData);
 
-            if (shouldScrollChat) {
-                scrollToChatBottom();
-            }
-
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const scrollToChatBottom = () => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
     useEffect(() => {
@@ -157,39 +163,25 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     }, [navigateTo, bookingId, token]);
 
     useEffect(() => {
-        scrollToChatBottom();
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     const handleBack = () => navigateTo('adminDashboard');
     
     const handleDeleteBooking = async () => {
-        if (!window.confirm(`Czy na pewno chcesz usunąć rezerwację #${bookingId}? Tej operacji nie można cofnąć.`)) {
-            return;
-        }
-
+        if (!window.confirm(`Czy na pewno chcesz usunąć rezerwację #${bookingId}? Tej operacji nie można cofnąć.`)) { return; }
         setError('');
         try {
-            const response = await fetch(`/api/admin/bookings/${bookingId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Nie udało się usunąć rezerwacji.');
-            }
-
+            const response = await fetch(`/api/admin/bookings/${bookingId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) throw new Error(await response.text() || 'Nie udało się usunąć rezerwacji.');
             navigateTo('adminDashboard');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
         }
     };
 
-
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        if (formData) {
-            setFormData({ ...formData, [e.target.id]: e.target.value });
-        }
+        if (formData) { setFormData({ ...formData, [e.target.id]: e.target.value }); }
     };
     
     const handleCancelEdit = () => {
@@ -202,35 +194,20 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const handleSave = async () => {
         setUpdateStatus('loading');
         setUpdateError('');
-
-        if (!formData) {
-            setUpdateError('Brak danych do zapisu.');
-            setUpdateStatus('error');
-            return;
-        }
+        if (!formData) { setUpdateError('Brak danych do zapisu.'); setUpdateStatus('error'); return; }
 
         try {
             const response = await fetch(`/api/admin/bookings/${bookingId}`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify(formData),
             });
-            
-            if(!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Błąd zapisu danych.');
-            }
+            if(!response.ok) throw new Error(await response.text() || 'Błąd zapisu danych.');
             const result = await response.json();
             setBookingData(result.booking);
             setFormData(result.booking);
             setUpdateStatus('success');
-            setTimeout(() => {
-                setIsEditing(false);
-                setUpdateStatus('idle');
-            }, 2000);
+            setTimeout(() => { setIsEditing(false); setUpdateStatus('idle'); }, 2000);
         } catch(err) {
             setUpdateError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
             setUpdateStatus('error');
@@ -238,8 +215,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     };
 
     const handlePaymentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setPaymentData(prev => ({ ...prev, [name]: value }));
+        setPaymentData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
     const handleSavePayment = async () => {
@@ -267,20 +243,13 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         if (!content || isSendingMessage) return;
 
         const tempId = `temp-${Date.now()}`;
-        const optimisticMessage: Message = {
-            id: tempId,
-            sender: 'admin',
-            content,
-            created_at: new Date().toISOString(),
-            status: 'sending',
-        };
+        const optimisticMessage: Message = { id: tempId, sender: 'admin', content, created_at: new Date().toISOString(), status: 'sending' };
 
         setMessages(prev => [...prev, optimisticMessage]);
         setNewMessage('');
         setMessageError('');
         setIsSendingMessage(true);
-        
-        setTimeout(() => scrollToChatBottom(), 0);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
 
         try {
             const response = await fetch(`/api/admin/messages/${bookingId}`, {
@@ -288,15 +257,9 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ content }),
             });
-
-             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Błąd wysyłania wiadomości.');
-            }
-            
+             if (!response.ok) throw new Error(await response.text() || 'Błąd wysyłania wiadomości.');
             const savedMessage = await response.json();
             setMessages(prev => prev.map(msg => msg.id === tempId ? savedMessage : msg));
-
         } catch (err) {
             setMessageError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
             setMessages(prev => prev.map(msg => msg.id === tempId ? { ...msg, status: 'error' } : msg));
@@ -305,19 +268,15 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         }
     };
     
-    // Stage Management Handlers
     const handleAddStageToBooking = async () => {
         if (!selectedStageToAdd) return;
         try {
-            const response = await fetch(`/api/admin/booking-stages/${bookingId}`, {
+            await fetch(`/api/admin/booking-stages/${bookingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ stage_id: selectedStageToAdd })
             });
-            if (!response.ok) throw new Error(await response.text() || 'Błąd dodawania etapu.');
-            const allStagesRes = await fetch(`/api/admin/booking-stages/${bookingId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            const bookingStagesData = await allStagesRes.json();
-            setBookingStages(bookingStagesData);
+            await fetchAllData();
             setSelectedStageToAdd('');
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -350,22 +309,9 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         }
     };
 
-    if (isLoading) {
-        return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
-    }
-
-    if (error) {
-        return (
-             <div className="text-center py-20">
-                <p className="text-red-500">{error}</p>
-                <button onClick={handleBack} className="mt-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Wróć do panelu</button>
-            </div>
-        );
-    }
-    
-    if (!bookingData || !formData) {
-        return <div className="text-center py-20">Nie znaleziono danych rezerwacji.</div>;
-    }
+    if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+    if (error) return ( <div className="text-center py-20"><p className="text-red-500">{error}</p><button onClick={handleBack} className="mt-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">Wróć do panelu</button></div> );
+    if (!bookingData || !formData) return <div className="text-center py-20">Nie znaleziono danych rezerwacji.</div>;
 
     const formatDateForDisplay = (dateString: string) => new Date(dateString).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const formatDateForInput = (dateString: string) => dateString.split('T')[0];
@@ -377,11 +323,8 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             <header className="relative mb-10">
                 <div className="flex justify-between items-start">
                     <div>
-                        <button 
-                            onClick={handleBack} 
-                            className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group mb-4">
-                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
-                            Wróć do panelu
+                        <button onClick={handleBack} className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group mb-4">
+                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do panelu
                         </button>
                         <div className="text-center sm:text-left">
                             <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły rezerwacji #{bookingData.id}</h1>
@@ -399,19 +342,11 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                             </>
                         ) : (
                             <>
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50"
-                                >
-                                    <PencilSquareIcon className="w-5 h-5" />
-                                    Edytuj rezerwację
+                                <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50">
+                                    <PencilSquareIcon className="w-5 h-5" /> Edytuj rezerwację
                                 </button>
-                                <button
-                                    onClick={handleDeleteBooking}
-                                    className="flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-800 transition-colors px-3 py-1.5 rounded-lg bg-red-50"
-                                >
-                                    <TrashIcon className="w-5 h-5" />
-                                    Usuń rezerwację
+                                <button onClick={handleDeleteBooking} className="flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-800 transition-colors px-3 py-1.5 rounded-lg bg-red-50">
+                                    <TrashIcon className="w-5 h-5" /> Usuń rezerwację
                                 </button>
                             </>
                         )}
@@ -451,22 +386,24 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <InputField id="bride_address" name="bride_address" label="Adres przygotowań Panny Młodej" value={formData.bride_address} onChange={handleFormChange} />
                                     <InputField id="groom_address" name="groom_address" label="Adres przygotowań Pana Młodego" value={formData.groom_address} onChange={handleFormChange} />
+                                    <InputField id="church_location" name="church_location" label="Adres ceremonii" value={formData.church_location || ''} onChange={handleFormChange} />
+                                    <InputField id="venue_location" name="venue_location" label="Adres przyjęcia" value={formData.venue_location || ''} onChange={handleFormChange} />
                                 </div>
-                                <TextAreaField id="locations" name="locations" label="Lokalizacje (ceremonia, wesele)" value={formData.locations} onChange={handleFormChange} />
                                 <TextAreaField id="schedule" name="schedule" label="Przybliżony harmonogram dnia" value={formData.schedule} onChange={handleFormChange} />
                                 <TextAreaField id="additional_info" name="additional_info" label="Dodatkowe informacje od klienta" value={formData.additional_info || ''} onChange={handleFormChange} required={false} />
                             </div>
                         ) : (
                              <>
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                      <InfoItem label="Data ślubu" value={new Date(bookingData.wedding_date).toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric' })} />
                                      <div></div>
-                                    <InfoItem label="Adres przygotowań Panny Młodej" value={bookingData.bride_address} />
-                                    <InfoItem label="Adres przygotowań Pana Młodego" value={bookingData.groom_address} />
-                                 </div>
-                                 <InfoItem label="Lokalizacje (ceremonia, wesele)" value={bookingData.locations} />
-                                 <InfoItem label="Przybliżony harmonogram dnia" value={bookingData.schedule} />
-                                 <InfoItem label="Dodatkowe informacje od klienta" value={bookingData.additional_info} />
+                                    <InfoItem label="Adres przygotowań Panny Młodej" value={<AddressWithMapLink address={bookingData.bride_address} />} />
+                                    <InfoItem label="Adres przygotowań Pana Młodego" value={<AddressWithMapLink address={bookingData.groom_address} />} />
+                                    <InfoItem label="Adres ceremonii" value={<AddressWithMapLink address={bookingData.church_location} />} />
+                                    <InfoItem label="Adres przyjęcia" value={<AddressWithMapLink address={bookingData.venue_location} />} />
+                                </div>
+                                <InfoItem label="Przybliżony harmonogram dnia" value={bookingData.schedule} />
+                                <InfoItem label="Dodatkowe informacje od klienta" value={bookingData.additional_info} />
                              </>
                         )}
                     </InfoCard>
@@ -489,20 +426,9 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                         </div>
                          <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
                             {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
-                            <textarea
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                placeholder="Napisz odpowiedź do klienta..."
-                                rows={3}
-                                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                                disabled={isSendingMessage}
-                            />
+                            <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz odpowiedź do klienta..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
                             <div className="text-right mt-2">
-                                <button
-                                    type="submit"
-                                    disabled={isSendingMessage || !newMessage.trim()}
-                                    className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto"
-                                >
+                                <button type="submit" disabled={isSendingMessage || !newMessage.trim()} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
                                     {isSendingMessage ? <LoadingSpinner className="w-5 h-5" /> : 'Wyślij'}
                                 </button>
                             </div>
@@ -515,11 +441,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 <div key={stage.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                                     <span className="font-medium text-slate-800">{stage.name}</span>
                                     <div className="flex items-center gap-2">
-                                        <select
-                                            value={stage.status}
-                                            onChange={(e) => handleUpdateStageStatus(stage.id, e.target.value)}
-                                            className="block w-48 rounded-md border-slate-300 py-1.5 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                                        >
+                                        <select value={stage.status} onChange={(e) => handleUpdateStageStatus(stage.id, e.target.value)} className="block w-48 rounded-md border-slate-300 py-1.5 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
                                             <option value="pending">Oczekuje</option>
                                             <option value="in_progress">W toku</option>
                                             <option value="awaiting_approval">Oczekuje na akceptację</option>
@@ -532,11 +454,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                              {bookingStages.length === 0 && <p className="text-sm text-slate-500 text-center py-4">Brak etapów w tym projekcie.</p>}
                         </div>
                         <div className="flex items-center gap-2 pt-4 mt-4 border-t">
-                            <select
-                                value={selectedStageToAdd}
-                                onChange={e => setSelectedStageToAdd(e.target.value)}
-                                className="block w-full rounded-md border-slate-300 py-2 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                            >
+                            <select value={selectedStageToAdd} onChange={e => setSelectedStageToAdd(e.target.value)} className="block w-full rounded-md border-slate-300 py-2 pl-3 pr-8 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500" >
                                 <option value="">-- Wybierz etap do dodania --</option>
                                 {availableStagesToAdd.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
                             </select>
@@ -545,17 +463,13 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                             </button>
                         </div>
                     </InfoCard>
-
                 </div>
 
                  <div className="lg:col-span-1">
                     <div className="sticky top-8 space-y-8">
                          <InfoCard title="Pakiet i Wycena" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                             <InfoItem label="Wybrany pakiet" value={bookingData.package_name} />
-                            <InfoItem 
-                                label="Wybrane usługi" 
-                                value={<ul className="list-disc list-inside mt-1 font-medium">{bookingData.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}</ul>} 
-                            />
+                            <InfoItem label="Wybrane usługi" value={<ul className="list-disc list-inside mt-1 font-medium">{bookingData.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}</ul>} />
                             <InfoItem label="Użyty kod rabatowy" value={bookingData.discount_code} />
                             <div className="border-t pt-4 mt-2">
                                 <div className="flex justify-between items-baseline">
@@ -569,13 +483,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                             <div className="space-y-4">
                                 <div>
                                     <label htmlFor="payment_status" className="block text-sm font-medium text-slate-700">Status płatności</label>
-                                    <select
-                                        id="payment_status"
-                                        name="payment_status"
-                                        value={paymentData.payment_status}
-                                        onChange={handlePaymentChange}
-                                        className="mt-1 block w-full rounded-md border-slate-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                                    >
+                                    <select id="payment_status" name="payment_status" value={paymentData.payment_status} onChange={handlePaymentChange} className="mt-1 block w-full rounded-md border-slate-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm" >
                                         <option value="pending">Oczekuje na płatność</option>
                                         <option value="partial">Częściowo opłacone</option>
                                         <option value="paid">Opłacono w całości</option>
@@ -583,15 +491,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                                 </div>
                                 <div>
                                      <label htmlFor="amount_paid" className="block text-sm font-medium text-slate-700">Wpłacona kwota (PLN)</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        id="amount_paid"
-                                        name="amount_paid"
-                                        value={paymentData.amount_paid}
-                                        onChange={handlePaymentChange}
-                                        className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                    />
+                                    <input type="number" step="0.01" id="amount_paid" name="amount_paid" value={paymentData.amount_paid} onChange={handlePaymentChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" />
                                 </div>
                                  <div className="border-t pt-4">
                                     <InfoItem label="Pozostało do zapłaty" value={formatCurrency(Number(bookingData.total_price) - Number(paymentData.amount_paid))} />
