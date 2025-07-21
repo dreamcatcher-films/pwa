@@ -449,7 +449,7 @@ app.post('/api/contact', async (req, res) => {
             
             if (adminEmail) {
                 const { data, error } = await resend.emails.send({
-                    from: 'Dreamcatcher Films (Kontakt) <onboarding@resend.dev>',
+                    from: 'Dreamcatcher Films (Kontakt) <powiadomienia@dreamcatcherfilms.co.uk>',
                     to: adminEmail,
                     reply_to: email,
                     subject: `Nowe zapytanie z formularza: ${subject}`,
@@ -515,7 +515,7 @@ app.post('/api/bookings', async (req, res) => {
         if (resend) {
             const appUrl = `${req.protocol}://${req.get('host')}`;
             const { data, error } = await resend.emails.send({
-                from: 'Dreamcatcher Films <onboarding@resend.dev>',
+                from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
                 to: bookingData.email,
                 subject: `Witaj w Dreamcatcher Film! Twoje konto zostało utworzone.`,
                 html: `
@@ -729,7 +729,7 @@ app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (
 
         const appUrl = `${req.protocol}://${req.get('host')}`;
         const { data, error } = await resend.emails.send({
-            from: 'Dreamcatcher Films <onboarding@resend.dev>',
+            from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
             to: booking.email,
             subject: 'Twoje dane do logowania do panelu Dreamcatcher Film',
             html: `
@@ -1358,7 +1358,7 @@ app.post('/api/messages', verifyToken, async (req, res) => {
 
             if (adminEmail) {
                 const { data, error } = await resend.emails.send({
-                    from: 'Powiadomienia Dreamcatcher <onboarding@resend.dev>',
+                    from: 'Powiadomienia Dreamcatcher <powiadomienia@dreamcatcherfilms.co.uk>',
                     to: adminEmail,
                     subject: `Nowa wiadomość od ${clientName} (Rezerwacja #${req.user.bookingId})`,
                     html: `
