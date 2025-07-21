@@ -66,7 +66,8 @@ const runDbSetup = async () => {
                 description TEXT,
                 start_time TIMESTAMP WITH TIME ZONE NOT NULL,
                 end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                is_all_day BOOLEAN DEFAULT FALSE
+                is_all_day BOOLEAN DEFAULT FALSE,
+                resource JSONB
             );
 
             CREATE TABLE IF NOT EXISTS galleries (
@@ -226,55 +227,52 @@ const runDbSetup = async () => {
         `);
         
         // --- MIGRATIONS ---
-        const typeColCheck = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages_old'`);
-        if (typeColCheck.rows.length === 0) {
-            const oldPackagesExist = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages'`);
-            const oldTypeColExist = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='packages' AND column_name='type'`);
-
-            if (oldPackagesExist.rows.length > 0 && oldTypeColExist.rows.length > 0) {
-                console.log("MIGRATION: Starting package structure migration...");
-                await client.query(`ALTER TABLE packages RENAME TO packages_old;`);
-                await client.query(`
-                    CREATE TABLE packages (
-                      id SERIAL PRIMARY KEY,
-                      name VARCHAR(255) NOT NULL,
-                      description TEXT,
-                      price NUMERIC(10, 2) NOT NULL,
-                      category_id INTEGER REFERENCES package_categories(id) ON DELETE SET NULL,
-                      is_published BOOLEAN DEFAULT FALSE,
-                      rich_description TEXT,
-                      rich_description_image_url TEXT,
-                      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                    );
-                `);
-                
-                // FIX: Correct the foreign key on package_addons to point to the new packages table
-                const fkCheckRes = await client.query(`
-                    SELECT 1
-                    FROM pg_constraint
-                    JOIN pg_class AS to_tbl ON to_tbl.oid = pg_constraint.confrelid
-                    WHERE pg_constraint.conname = 'package_addons_package_id_fkey'
-                      AND to_tbl.relname = 'packages_old'
-                `);
         
-                if (fkCheckRes.rows.length > 0) {
-                    console.log("MIGRATION: Fixing foreign key constraint on package_addons...");
-                    await client.query('ALTER TABLE package_addons DROP CONSTRAINT package_addons_package_id_fkey;');
-                    await client.query(`
-                        ALTER TABLE package_addons 
-                        ADD CONSTRAINT package_addons_package_id_fkey 
-                        FOREIGN KEY (package_id) 
-                        REFERENCES packages(id) 
-                        ON DELETE CASCADE;
-                    `);
-                    console.log("MIGRATION: Foreign key constraint on package_addons fixed.");
-                }
+        // This migration handles the old package structure with a 'type' column.
+        const oldTypeColExist = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='packages' AND column_name='type'`);
+        if (oldTypeColExist.rows.length > 0) {
+            console.log("MIGRATION: Starting old package structure migration...");
+            // Check if packages_old already exists to avoid errors on re-run
+            const packagesOldExists = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages_old'`);
+            if (packagesOldExists.rows.length === 0) {
+                await client.query(`ALTER TABLE packages RENAME TO packages_old;`);
+            } else {
+                 console.log("MIGRATION: 'packages_old' already exists, skipping rename.");
+            }
 
-                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film', 'FilmIcon') ON CONFLICT (name) DO NOTHING;`);
-                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Fotografia', 'CameraIcon') ON CONFLICT (name) DO NOTHING;`);
-                await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
+            // Re-create the packages table with the new schema (if it was renamed)
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS packages (
+                  id SERIAL PRIMARY KEY,
+                  name VARCHAR(255) NOT NULL,
+                  description TEXT,
+                  price NUMERIC(10, 2) NOT NULL,
+                  category_id INTEGER REFERENCES package_categories(id) ON DELETE SET NULL,
+                  is_published BOOLEAN DEFAULT FALSE,
+                  rich_description TEXT,
+                  rich_description_image_url TEXT,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            
+            // Re-create package_addons table to ensure correct FK reference
+            await client.query('DROP TABLE IF EXISTS package_addons;');
+            await client.query(`
+                 CREATE TABLE package_addons (
+                  package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
+                  addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
+                  PRIMARY KEY (package_id, addon_id)
+                );
+            `);
 
-                await client.query(`
+            // Seed categories and migrate data
+            await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film', 'FilmIcon') ON CONFLICT (name) DO NOTHING;`);
+            await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Fotografia', 'CameraIcon') ON CONFLICT (name) DO NOTHING;`);
+            await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
+            
+            const newPackagesEmpty = await client.query(`SELECT 1 FROM packages LIMIT 1`);
+            if(newPackagesEmpty.rows.length === 0) {
+                 await client.query(`
                     INSERT INTO packages (id, name, description, price, category_id, is_published)
                     SELECT 
                         id, name, description, price,
@@ -286,12 +284,41 @@ const runDbSetup = async () => {
                         TRUE as is_published
                     FROM packages_old;
                 `);
-
                 await client.query(`SELECT setval('packages_id_seq', (SELECT MAX(id) FROM packages));`);
-                console.log("MIGRATION: Package structure migration completed.");
             }
+            console.log("MIGRATION: Package structure migration completed.");
+        }
+        
+        // MIGRATION: Fix the foreign key for package_addons if it points to the old table.
+        // This is a robust check that runs on every startup to catch a failed previous migration.
+        const fkCheckRes = await client.query(`
+            SELECT con.conname AS constraint_name
+            FROM pg_constraint con
+            JOIN pg_class AS from_tbl ON from_tbl.oid = con.conrelid
+            JOIN pg_class AS to_tbl ON to_tbl.oid = con.confrelid
+            WHERE from_tbl.relname = 'package_addons'
+              AND con.contype = 'f' -- Foreign key
+              AND to_tbl.relname = 'packages_old'
+        `);
+
+        if (fkCheckRes.rows.length > 0) {
+            const constraintName = fkCheckRes.rows[0].constraint_name;
+            console.log(`MIGRATION: Found incorrect foreign key '${constraintName}' on 'package_addons' pointing to 'packages_old'. Fixing...`);
+            
+            await client.query(`ALTER TABLE package_addons DROP CONSTRAINT "${constraintName}";`);
+            
+            await client.query(`
+                ALTER TABLE package_addons 
+                ADD CONSTRAINT package_addons_package_id_fkey 
+                FOREIGN KEY (package_id) 
+                REFERENCES packages(id) 
+                ON DELETE CASCADE;
+            `);
+            console.log("MIGRATION: Foreign key constraint on 'package_addons' has been corrected to point to 'packages'.");
         }
 
+
+        // Other minor migrations
         const bookingsColumnsCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='bookings' AND column_name='locations'`);
         if (bookingsColumnsCheck.rows.length > 0) {
             console.log("MIGRATION: Splitting locations column in bookings table.");
@@ -304,6 +331,8 @@ const runDbSetup = async () => {
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url TEXT;`);
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);`);
         await client.query(`ALTER TABLE package_addons DROP COLUMN IF EXISTS is_locked;`);
+        await client.query(`ALTER TABLE availability ALTER COLUMN resource TYPE JSONB USING resource::jsonb;`);
+
         
         // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
@@ -941,7 +970,7 @@ app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
         await client.query('BEGIN');
         await client.query('DELETE FROM messages WHERE booking_id = $1', [req.params.id]);
         await client.query('DELETE FROM booking_stages WHERE booking_id = $1', [req.params.id]);
-        await client.query('DELETE FROM availability WHERE resource->>\'bookingId\' = $1', [req.params.id]);
+        await client.query(`DELETE FROM availability WHERE resource->>'type' = 'booking' AND (resource->>'bookingId')::int = $1`, [req.params.id]);
         const result = await client.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
         if (result.rowCount === 0) {
             return res.status(404).send('Rezerwacja nieznaleziona.');
@@ -1950,7 +1979,8 @@ app.post('/api/admin/homepage/instagram/order', verifyAdminToken, async (req, re
     }
 });
 
-app.get('/api/validate-discount', async (req, res) => {
+// This is an older, likely unused endpoint. Keeping for safety but should be reviewed.
+app.get('/api/validate-discount-old', async (req, res) => {
   try {
     const { code } = req.body;
     if (!code) {
@@ -1966,4 +1996,5 @@ app.get('/api/validate-discount', async (req, res) => {
     res.status(500).send(`Server error: ${err.message}`);
   }
 });
+
 export default app;
