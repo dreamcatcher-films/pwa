@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { InputField, TextAreaField } from './FormControls.tsx';
-import { LoadingSpinner, CheckCircleIcon } from './Icons.tsx';
+import { EngagementRingSpinner, CheckCircleIcon } from './Icons.tsx';
 
 const ContactForm: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -130,9 +130,9 @@ const ContactForm: React.FC = () => {
                 <button
                     type="submit"
                     disabled={status === 'loading'}
-                    className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                    className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed"
                 >
-                    {status === 'loading' ? <LoadingSpinner /> : 'Wyślij wiadomość'}
+                    {status === 'loading' ? <EngagementRingSpinner className="w-6 h-6" /> : 'Wyślij wiadomość'}
                 </button>
             </div>
         </form>
