@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Page } from '../App.tsx';
-import { LoadingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
 
 interface AdminLoginPageProps {
     navigateTo: (page: Page) => void;
@@ -101,9 +102,9 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex justify-center items-center h-12 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                        className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed"
                     >
-                        {isLoading ? <LoadingSpinner /> : 'Zaloguj się'}
+                        {isLoading ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zaloguj się'}
                     </button>
                 </form>
             </div>
