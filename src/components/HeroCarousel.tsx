@@ -15,7 +15,7 @@ interface HeroCarouselProps {
     navigateTo: (page: Page) => void;
 }
 
-const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
+export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
     const carouselRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
     const isHovering = useRef(false);
@@ -102,11 +102,12 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
         }
     };
 
-    const duplicatedSlides = [...slides, ...slides, ...slides]; // Duplicate more times for wider screens
+    // Duplicating slides to create an infinite loop effect
+    const duplicatedSlides = slides.length > 0 ? [...slides, ...slides, ...slides] : [];
 
     return (
         <div className="w-full h-[550px] relative py-8">
-            <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none"></div>
+            <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
 
             <div
                 ref={carouselRef}
@@ -140,9 +141,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
                     </a>
                 ))}
             </div>
-            <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none"></div>
+            <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
         </div>
     );
 };
-
-export default HeroCarousel;
