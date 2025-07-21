@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -85,10 +82,10 @@ const App = () => {
         }
     };
     
-    // Only apply the container class to pages that need it.
-    // The new admin dashboard has its own full-width layout.
-    // Public-facing pages manage their own containers for full-width sections.
-    const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin';
+    // Apply the main container with padding and max-width to specific pages.
+    // The new admin dashboard has its own full-width layout, and public pages
+    // manage their own containers for sections that need to be full-width (like the hero carousel).
+    const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin' || currentPage === 'login';
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
