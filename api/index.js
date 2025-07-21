@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -81,7 +82,8 @@ const runDbSetup = async () => {
                 description TEXT,
                 start_time TIMESTAMP WITH TIME ZONE NOT NULL,
                 end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                is_all_day BOOLEAN DEFAULT FALSE
+                is_all_day BOOLEAN DEFAULT FALSE,
+                resource JSONB
             );
 
             CREATE TABLE IF NOT EXISTS galleries (
@@ -255,6 +257,7 @@ const runDbSetup = async () => {
         
         // --- MIGRATIONS ---
         
+        // Check for the correct foreign key on package_addons
         const correctFkCheck = await client.query(`
             SELECT 1 
             FROM pg_constraint 
@@ -276,28 +279,18 @@ const runDbSetup = async () => {
                 ON DELETE CASCADE;
             `);
         }
-
-        const bookingsColumnsCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='bookings' AND column_name='locations'`);
-        if (bookingsColumnsCheck.rows.length > 0) {
-            console.log("MIGRATION: Splitting locations column in bookings table.");
-            await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS church_location TEXT;`);
-            await client.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS venue_location TEXT;`);
-            await client.query(`ALTER TABLE bookings DROP COLUMN locations;`);
-            console.log("MIGRATION: Locations column split complete.");
-        }
-        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read_by_client BOOLEAN DEFAULT FALSE;`);
-        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url TEXT;`);
-        await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);`);
-        await client.query(`ALTER TABLE package_addons DROP COLUMN IF EXISTS is_locked;`);
         
         // MIGRATION: Robustly add the 'resource' column to the 'availability' table
-        const resourceColumnCheck = await client.query(`
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_schema = 'public' AND table_name = 'availability' AND column_name = 'resource'
-        `);
-        if (resourceColumnCheck.rows.length === 0) {
-            console.log("MIGRATION: Adding 'resource' column to 'availability' table.");
-            await client.query('ALTER TABLE availability ADD COLUMN resource JSONB;');
+        const availabilityTableExists = await client.query("SELECT to_regclass('public.availability')");
+        if(availabilityTableExists.rows[0].to_regclass) {
+            const resourceColumnCheck = await client.query(`
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'availability' AND column_name = 'resource'
+            `);
+            if (resourceColumnCheck.rows.length === 0) {
+                console.log("MIGRATION: Adding 'resource' column to 'availability' table.");
+                await client.query('ALTER TABLE availability ADD COLUMN resource JSONB;');
+            }
         }
         
         // --- SEEDING ---
@@ -341,7 +334,7 @@ const ensureDbInitialized = async (req, res, next) => {
         next();
     } catch (error) {
         console.error("CRITICAL: Database initialization failed.", error.message);
-        res.status(503).send('Service Unavailable: Could not connect to the database.');
+        res.status(503).send('Service Unavailable: Could not initialize database.');
     }
 };
 
@@ -1644,6 +1637,46 @@ app.post('/api/admin/setup-database', authenticateAdmin, async (req, res) => {
     }
 });
 
+const dropAllKnownTables = async (client) => {
+    const tables = [
+        'messages', 'booking_stages', 'package_addons', 'addon_categories',
+        'homepage_carousel_slides', 'homepage_testimonials', 'homepage_instagram_posts',
+        'bookings', 'production_stages', 'packages', 'package_categories', 
+        'addons', 'galleries', 'availability', 'admins', 'access_keys', 
+        'contact_messages', 'discount_codes', 'app_settings'
+    ];
+    // Reverse order for dropping to handle dependencies, though CASCADE should handle it.
+    for (const table of tables.reverse()) {
+        await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+    }
+    console.log("All known tables have been dropped.");
+};
+
+app.post('/api/admin/reset-database', authenticateAdmin, async (req, res) => {
+    console.log("--- DATABASE RESET INITIATED BY ADMIN ---");
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await dropAllKnownTables(client);
+        await client.query('COMMIT');
+        
+        console.log("--- TABLES DROPPED, RE-INITIALIZING SCHEMA ---");
+        // Force re-running the setup
+        initializationPromise = null;
+        await runDbSetup(); 
+        
+        res.json({ message: 'Baza danych została wyczyszczona i zainicjowana pomyślnie. Odśwież stronę, aby zobaczyć zmiany.' });
+
+    } catch (error) {
+        console.error("Database reset failed:", error);
+        try { await client.query('ROLLBACK'); } catch (rbError) { console.error('Rollback failed:', rbError); }
+        res.status(500).json({ message: `Błąd resetowania bazy danych: ${error.message}` });
+    } finally {
+        client.release();
+    }
+});
+
+
 app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
     const client = await getPool().connect();
     try {
@@ -2103,154 +2136,4 @@ app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
-export default app;--- START OF FILE src/components/HeroCarousel.tsx ---
-
-import React, { useRef, MouseEvent, TouchEvent, useEffect } from 'react';
-import { Page } from '../App.tsx';
-
-interface Slide {
-    id: number;
-    image_url: string;
-    title: string;
-    subtitle: string;
-    button_text: string;
-    button_link: string;
-}
-
-interface HeroCarouselProps {
-    slides: Slide[];
-    navigateTo: (page: Page) => void;
-}
-
-const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
-    const carouselRef = useRef<HTMLDivElement>(null);
-    const isDragging = useRef(false);
-    const isHovering = useRef(false);
-    const startX = useRef(0);
-    const scrollLeft = useRef(0);
-    const hasDragged = useRef(false);
-    const animationFrameId = useRef<number | null>(null);
-
-    if (!slides || slides.length === 0) {
-        return null;
-    }
-
-    const startDragging = (pageX: number) => {
-        if (!carouselRef.current) return;
-        isDragging.current = true;
-        startX.current = pageX - carouselRef.current.offsetLeft;
-        scrollLeft.current = carouselRef.current.scrollLeft;
-        hasDragged.current = false;
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-            animationFrameId.current = null;
-        }
-    };
-
-    const stopDragging = () => {
-        if (!isDragging.current) return;
-        isDragging.current = false;
-    };
-
-    const onDrag = (pageX: number) => {
-        if (!isDragging.current || !carouselRef.current) return;
-        const x = pageX - carouselRef.current.offsetLeft;
-        const walk = (x - startX.current) * 1.5;
-        carouselRef.current.scrollLeft = scrollLeft.current - walk;
-
-        if (Math.abs(walk) > 5) {
-            hasDragged.current = true;
-        }
-    };
-
-    useEffect(() => {
-        const carousel = carouselRef.current;
-        if (!carousel) return;
-
-        const animateScroll = () => {
-            if (!isDragging.current && !isHovering.current) {
-                carousel.scrollLeft += 0.5; // Scroll speed
-                if (carousel.scrollLeft >= carousel.scrollWidth / 2) {
-                    carousel.scrollLeft = 0;
-                }
-            }
-            animationFrameId.current = requestAnimationFrame(animateScroll);
-        };
-
-        animateScroll();
-
-        return () => {
-            if (animationFrameId.current) {
-                cancelAnimationFrame(animationFrameId.current);
-            }
-        };
-    }, []);
-
-    const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-        if (!isDragging.current) return;
-        e.preventDefault();
-        onDrag(e.pageX);
-    };
-    
-    const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
-        if (!isDragging.current) return;
-        onDrag(e.touches[0].pageX);
-    };
-
-    const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, link: string) => {
-        if (hasDragged.current) {
-            e.preventDefault();
-            return;
-        }
-        if (link.startsWith('/')) {
-            e.preventDefault();
-            const page = link.substring(1) as Page;
-            navigateTo(page);
-        }
-    };
-
-    // Duplicating slides to create an infinite loop effect
-    const duplicatedSlides = slides.length > 0 ? [...slides, ...slides, ...slides] : [];
-
-    return (
-        <div className="w-full h-[550px] relative py-8">
-            <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
-
-            <div
-                ref={carouselRef}
-                className="flex items-center h-full cursor-grab will-change-transform overflow-x-auto scrollbar-hide"
-                onMouseEnter={() => (isHovering.current = true)}
-                onMouseLeave={() => { isHovering.current = false; stopDragging(); }}
-                onMouseDown={(e) => startDragging(e.pageX)}
-                onMouseUp={stopDragging}
-                onMouseMove={handleMouseMove}
-                onTouchStart={(e) => startDragging(e.touches[0].pageX)}
-                onTouchEnd={stopDragging}
-                onTouchMove={handleTouchMove}
-            >
-                {duplicatedSlides.map((slide, index) => (
-                    <a
-                        key={`${slide.id}-${index}`}
-                        href={slide.button_link || '#'}
-                        onClick={(e) => slide.button_link && handleLinkClick(e, slide.button_link)}
-                        target={slide.button_link && !slide.button_link.startsWith('/') ? '_blank' : '_self'}
-                        rel="noopener noreferrer"
-                        className="flex-shrink-0 h-full w-auto mx-4 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl transition-transform duration-300 ease-in-out hover:scale-105 hover:z-20"
-                        aria-label={`Zobacz realizację: ${slide.title}`}
-                        draggable="false"
-                    >
-                        <img
-                            src={slide.image_url}
-                            alt={slide.title}
-                            className="h-full w-auto object-contain rounded-2xl drop-shadow-lg pointer-events-none"
-                            draggable="false"
-                        />
-                    </a>
-                ))}
-            </div>
-            <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#F5F3ED] to-transparent z-10 pointer-events-none"></div>
-        </div>
-    );
-};
-
-export default HeroCarousel;
+export default app;
