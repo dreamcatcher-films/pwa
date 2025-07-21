@@ -243,9 +243,9 @@ const runDbSetup = async () => {
                 await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
 
                 await client.query(`
-                    INSERT INTO packages (id, name, description, price, created_at, category_id, is_published)
+                    INSERT INTO packages (id, name, description, price, category_id, is_published)
                     SELECT 
-                        id, name, description, price, created_at,
+                        id, name, description, price,
                         CASE 
                             WHEN type = 'film' THEN (SELECT id FROM package_categories WHERE name = 'Film')
                             WHEN type = 'photo' THEN (SELECT id FROM package_categories WHERE name = 'Fotografia')
