@@ -1,8 +1,4 @@
 
-
-
-
-
 import React from 'react';
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -279,5 +275,11 @@ export const ChevronDownIcon: React.FC<{className?: string}> = ({ className = 'w
 export const PaperClipIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3.375 3.375 0 1118.374 7.3l-9.19 9.19a2.25 2.25 0 01-3.182-3.182l7.693-7.693a.75.75 0 011.06 1.06l-7.693 7.693a.75.75 0 001.06 1.06l9.19-9.19a1.875 1.875 0 10-2.652-2.652L6.375 15.625a3 3 0 104.242 4.242l7.693-7.693a.75.75 0 011.06-1.06z" />
+    </svg>
+);
+
+export const YouTubeIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className={className}>
+        <path d="M21.582,6.186c-0.23-0.86-0.908-1.538-1.768-1.768C18.254,4,12,4,12,4S5.746,4,4.186,4.418 c-0.86,0.23-1.538,0.908-1.768,1.768C2,7.746,2,12,2,12s0,4.254,0.418,5.814c0.23,0.86,0.908,1.538,1.768,1.768 C5.746,20,12,20,12,20s6.254,0,7.814-0.418c0.861-0.23,1.538-0.908,1.768-1.768C22,16.254,22,12,22,12S22,7.746,21.582,6.186z M9.933,15.5V8.5l6.5,3.5L9.933,15.5z"/>
     </svg>
 );
