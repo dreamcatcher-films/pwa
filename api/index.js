@@ -66,8 +66,7 @@ const runDbSetup = async () => {
                 description TEXT,
                 start_time TIMESTAMP WITH TIME ZONE NOT NULL,
                 end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                is_all_day BOOLEAN DEFAULT FALSE,
-                resource JSONB
+                is_all_day BOOLEAN DEFAULT FALSE
             );
 
             CREATE TABLE IF NOT EXISTS galleries (
@@ -159,15 +158,28 @@ const runDbSetup = async () => {
               name VARCHAR(255) NOT NULL,
               description TEXT,
               price NUMERIC(10, 2) NOT NULL,
-              category_id INTEGER REFERENCES package_categories(id) ON DELETE SET NULL,
+              category_id INTEGER, -- FK added later to handle migration
               is_published BOOLEAN DEFAULT FALSE,
               rich_description TEXT,
               rich_description_image_url TEXT,
               created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+             
+            -- Foreign key for packages.category_id added separately for migration safety
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'packages_category_id_fkey' AND conrelid = 'packages'::regclass
+                ) THEN
+                    ALTER TABLE packages ADD CONSTRAINT packages_category_id_fkey 
+                    FOREIGN KEY (category_id) REFERENCES package_categories(id) ON DELETE SET NULL;
+                END IF;
+            END;
+            $$;
 
             CREATE TABLE IF NOT EXISTS package_addons (
-              package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE,
+              package_id INTEGER, -- FK added later
               addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE,
               PRIMARY KEY (package_id, addon_id)
             );
@@ -232,7 +244,6 @@ const runDbSetup = async () => {
         const oldTypeColExist = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='packages' AND column_name='type'`);
         if (oldTypeColExist.rows.length > 0) {
             console.log("MIGRATION: Starting old package structure migration...");
-            // Check if packages_old already exists to avoid errors on re-run
             const packagesOldExists = await client.query(`SELECT 1 FROM information_schema.tables WHERE table_name='packages_old'`);
             if (packagesOldExists.rows.length === 0) {
                 await client.query(`ALTER TABLE packages RENAME TO packages_old;`);
@@ -240,7 +251,6 @@ const runDbSetup = async () => {
                  console.log("MIGRATION: 'packages_old' already exists, skipping rename.");
             }
 
-            // Re-create the packages table with the new schema (if it was renamed)
             await client.query(`
                 CREATE TABLE IF NOT EXISTS packages (
                   id SERIAL PRIMARY KEY,
@@ -255,7 +265,6 @@ const runDbSetup = async () => {
                 );
             `);
             
-            // Re-create package_addons table to ensure correct FK reference
             await client.query('DROP TABLE IF EXISTS package_addons;');
             await client.query(`
                  CREATE TABLE package_addons (
@@ -265,7 +274,6 @@ const runDbSetup = async () => {
                 );
             `);
 
-            // Seed categories and migrate data
             await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film', 'FilmIcon') ON CONFLICT (name) DO NOTHING;`);
             await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Fotografia', 'CameraIcon') ON CONFLICT (name) DO NOTHING;`);
             await client.query(`INSERT INTO package_categories (name, icon_name) VALUES ('Film + Fotografia', 'FilmCameraIcon') ON CONFLICT (name) DO NOTHING;`);
@@ -289,24 +297,20 @@ const runDbSetup = async () => {
             console.log("MIGRATION: Package structure migration completed.");
         }
         
-        // MIGRATION: Fix the foreign key for package_addons if it points to the old table.
-        // This is a robust check that runs on every startup to catch a failed previous migration.
         const fkCheckRes = await client.query(`
             SELECT con.conname AS constraint_name
             FROM pg_constraint con
             JOIN pg_class AS from_tbl ON from_tbl.oid = con.conrelid
             JOIN pg_class AS to_tbl ON to_tbl.oid = con.confrelid
             WHERE from_tbl.relname = 'package_addons'
-              AND con.contype = 'f' -- Foreign key
+              AND con.contype = 'f' 
               AND to_tbl.relname = 'packages_old'
         `);
 
         if (fkCheckRes.rows.length > 0) {
             const constraintName = fkCheckRes.rows[0].constraint_name;
             console.log(`MIGRATION: Found incorrect foreign key '${constraintName}' on 'package_addons' pointing to 'packages_old'. Fixing...`);
-            
             await client.query(`ALTER TABLE package_addons DROP CONSTRAINT "${constraintName}";`);
-            
             await client.query(`
                 ALTER TABLE package_addons 
                 ADD CONSTRAINT package_addons_package_id_fkey 
@@ -315,10 +319,23 @@ const runDbSetup = async () => {
                 ON DELETE CASCADE;
             `);
             console.log("MIGRATION: Foreign key constraint on 'package_addons' has been corrected to point to 'packages'.");
+        } else {
+             const correctFkCheck = await client.query(`
+                SELECT 1 FROM pg_constraint 
+                WHERE conname = 'package_addons_package_id_fkey' AND conrelid = 'package_addons'::regclass
+            `);
+            if (correctFkCheck.rows.length === 0) {
+                 await client.query(`
+                    ALTER TABLE package_addons 
+                    ADD CONSTRAINT package_addons_package_id_fkey 
+                    FOREIGN KEY (package_id) 
+                    REFERENCES packages(id) 
+                    ON DELETE CASCADE;
+                `);
+                 console.log("MIGRATION: Added missing foreign key to 'package_addons'.");
+            }
         }
 
-
-        // Other minor migrations
         const bookingsColumnsCheck = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='bookings' AND column_name='locations'`);
         if (bookingsColumnsCheck.rows.length > 0) {
             console.log("MIGRATION: Splitting locations column in bookings table.");
@@ -331,8 +348,16 @@ const runDbSetup = async () => {
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_url TEXT;`);
         await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);`);
         await client.query(`ALTER TABLE package_addons DROP COLUMN IF EXISTS is_locked;`);
-        await client.query(`ALTER TABLE availability ALTER COLUMN resource TYPE JSONB USING resource::jsonb;`);
-
+        
+        // MIGRATION: Robustly add the 'resource' column to the 'availability' table
+        const resourceColumnCheck = await client.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'availability' AND column_name = 'resource'
+        `);
+        if (resourceColumnCheck.rows.length === 0) {
+            console.log("MIGRATION: Adding 'resource' column to 'availability' table.");
+            await client.query('ALTER TABLE availability ADD COLUMN resource JSONB;');
+        }
         
         // --- SEEDING ---
         const adminRes = await client.query('SELECT * FROM admins');
@@ -348,1653 +373,1796 @@ const runDbSetup = async () => {
 
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_email', 'info@dreamcatcherfilm.co.uk') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_phone', '+48 123 456 789') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'ul. Filmowa 123, 00-001 Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('contact_address', 'Warszawa, Polska') ON CONFLICT (key) DO NOTHING;`);
         await client.query(`INSERT INTO app_settings (key, value) VALUES ('google_maps_api_key', '') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Kilka słów o nas') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy pasjonatami opowiadania historii. Każdy ślub to dla nas unikalna opowieść, którą staramy się uchwycić w najbardziej autentyczny i emocjonalny sposób. Naszym celem jest stworzenie pamiątki, która przetrwa próbę czasu i będziecie do niej wracać z uśmiechem przez lata.') ON CONFLICT (key) DO NOTHING;`);
-        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', '') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_title', 'Nasza Historia') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_text', 'Jesteśmy parą filmowców, którzy z pasją i zaangażowaniem tworzą niezapomniane pamiątki. Każdy ślub to dla nas wyjątkowa historia, którą staramy się opowiedzieć w najpiękniejszy możliwy sposób.') ON CONFLICT (key) DO NOTHING;`);
+        await client.query(`INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', 'https://images.unsplash.com/photo-1515934751635-481d608ddb38?q=80&w=2070&auto=format&fit=crop') ON CONFLICT (key) DO NOTHING;`);
 
         await client.query('COMMIT');
-        return { success: true, message: 'Database schema initialized and migrated successfully.' };
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Database setup error:', err);
         throw new Error(`Error setting up database schema: ${err.message}`);
     } finally {
         client.release();
+        console.log("Database setup check complete. Connection released.");
     }
 };
 
-const initializeDatabase = () => {
-    if (initializationPromise) {
-        return initializationPromise;
-    }
-    initializationPromise = new Promise(async (resolve, reject) => {
-        try {
-            getPool(); // This will throw if DATABASE_URL is not set
-            console.log("Running automatic database setup on cold start...");
-            await runDbSetup();
-            console.log("Automatic database setup finished successfully.");
-            resolve();
-        } catch (error) {
-            console.error("AUTOMATIC DATABASE SETUP FAILED:", error);
-            reject(error);
-        }
-    });
-    return initializationPromise;
-};
-
-// Start initialization on module load.
-initializeDatabase();
-
-const awaitDbInitialization = async (req, res, next) => {
+const ensureDbInitialized = async (req, res, next) => {
     try {
+        if (!initializationPromise) {
+            console.log("No initialization promise found, starting DB setup...");
+            initializationPromise = runDbSetup();
+        }
         await initializationPromise;
         next();
     } catch (error) {
-        res.status(503).send("Service temporarily unavailable due to a database initialization error. Please check the function logs.");
+        console.error("CRITICAL: Database initialization failed.", error.message);
+        res.status(503).send('Service Unavailable: Could not connect to the database.');
     }
 };
 
+app.use(ensureDbInitialized);
 
-// --- JWT & Config Middleware ---
-const checkConfig = (req, res, next) => {
-    try {
-        getPool();
-    } catch(err) {
-         return res.status(500).send(err.message);
-    }
-    if (!process.env.JWT_SECRET || !process.env.ADMIN_JWT_SECRET) {
-        return res.status(500).send('FATAL ERROR: JWT secrets are not configured in environment variables.');
-    }
-    next();
-};
+// --- JWT Middleware ---
+const authenticateAdmin = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.sendStatus(401);
 
-const verifyToken = (req, res, next) => {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) return res.status(403).send('A token is required for authentication');
-    
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
+    jwt.verify(token, process.env.JWT_ADMIN_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
         next();
-    } catch (err) {
-        return res.status(401).send('Invalid Token');
-    }
+    });
 };
 
-const verifyAdminToken = (req, res, next) => {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) return res.status(403).send('A token is required for authentication');
+const authenticateClient = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.sendStatus(401);
 
-    try {
-        const decoded = jwt.verify(token, process.env.ADMIN_JWT_SECRET);
-        req.user = decoded;
+    jwt.verify(token, process.env.JWT_CLIENT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
         next();
-    } catch (err) {
-        return res.status(401).send('Invalid Token');
-    }
+    });
 };
-
-// Apply middleware. This ensures DB is ready before any route is handled.
-app.use(awaitDbInitialization);
-app.use(checkConfig);
 
 // --- Helper Functions ---
-const generateUniqueKey = async (length) => {
-    let key;
-    let isUnique = false;
-    while (!isUnique) {
-        key = Math.floor(Math.random() * (10 ** length)).toString().padStart(length, '0');
-        const res = await getPool().query('SELECT * FROM access_keys WHERE key = $1', [key]);
-        if (res.rows.length === 0) {
-            isUnique = true;
-        }
-    }
-    return key;
-};
-
-const generateUniqueClientId = async (length) => {
+const generateUniqueClientId = async (client) => {
     let clientId;
     let isUnique = false;
     while (!isUnique) {
-        clientId = Math.floor(Math.random() * (10 ** length)).toString().padStart(length, '0');
-        const res = await getPool().query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
-        if (res.rows.length === 0) {
+        clientId = Math.floor(1000 + Math.random() * 9000).toString();
+        const { rows } = await client.query('SELECT 1 FROM bookings WHERE client_id = $1', [clientId]);
+        if (rows.length === 0) {
             isUnique = true;
         }
     }
     return clientId;
 };
 
-// --- API Endpoints ---
-// Public Endpoints
-app.get('/api/health', (req, res) => res.status(200).send('API is healthy.'));
-app.post('/api/validate-key', async (req, res) => {
-    try {
-        const { key } = req.body;
-        const result = await getPool().query('SELECT * FROM access_keys WHERE key = $1', [key]);
-        if (result.rows.length > 0) {
-            res.json({ valid: true });
-        } else {
-            res.status(404).json({ message: 'Nieprawidłowy klucz dostępu.' });
-        }
-    } catch (err) {
-        res.status(500).send(`Server error: ${err.message}`);
-    }
-});
+const getAdminNotificationEmail = async (client) => {
+    const res = await client.query("SELECT notification_email FROM admins LIMIT 1");
+    return res.rows[0]?.notification_email || null;
+}
 
-app.post('/api/contact', async (req, res) => {
-    try {
-        const { firstName, lastName, email, phone, subject, message } = req.body;
+// --- PUBLIC API ENDPOINTS ---
 
-        if (!firstName || !lastName || !email || !message || !subject) {
-            return res.status(400).json({ message: 'Proszę wypełnić wszystkie wymagane pola.' });
-        }
-        
-        // 1. Save message to the database
-        await getPool().query(
-            `INSERT INTO contact_messages (first_name, last_name, email, phone, subject, message)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [firstName, lastName, email, phone, subject, message]
-        );
-
-        // 2. Send email notification via Resend
-        if (resend) {
-            const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
-            const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
-            
-            if (adminEmail) {
-                const { data, error } = await resend.emails.send({
-                    from: 'Dreamcatcher Films (Kontakt) <powiadomienia@dreamcatcherfilms.co.uk>',
-                    to: adminEmail,
-                    reply_to: email,
-                    subject: `Nowe zapytanie z formularza: ${subject}`,
-                    html: `
-                        <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-                            <h2 style="color: #1e293b;">Otrzymano nowe zapytanie ze strony!</h2>
-                            <p><strong>Od:</strong> ${firstName} ${lastName}</p>
-                            <p><strong>E-mail:</strong> ${email}</p>
-                            <p><strong>Telefon:</strong> ${phone || 'Nie podano'}</p>
-                            <p><strong>Temat:</strong> ${subject}</p>
-                            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                            <p style="font-weight: bold;">Treść wiadomości:</p>
-                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; white-space: pre-wrap;">${message}</div>
-                        </div>
-                    `,
-                });
-                if (error) {
-                    const errorMessage = error.message || JSON.stringify(error);
-                    console.error(`Contact form - Resend API error: ${errorMessage}`);
-                } else if (!data || !data.id) {
-                    console.warn("Contact form - Resend API returned success but no data ID.", data);
-                } else {
-                    console.log("Contact form - notification email sent:", data.id);
-                }
-            }
-        } else {
-             console.warn("RESEND_API_KEY is not configured. Skipping email notification for contact form.");
-        }
-
-        res.status(200).json({ message: 'Wiadomość została wysłana pomyślnie.' });
-
-    } catch (err) {
-        console.error('Contact form error:', err);
-        res.status(500).send(`Server error: ${err.message}`);
-    }
-});
-
-app.post('/api/bookings', async (req, res) => {
+app.get('/api/packages', async (req, res) => {
     const client = await getPool().connect();
     try {
-        await client.query('BEGIN');
+        const categoriesRes = await client.query('SELECT * FROM package_categories ORDER BY id');
+        const packagesRes = await client.query(`
+            SELECT p.*, pa.addons 
+            FROM packages p
+            LEFT JOIN (
+                SELECT package_id, json_agg(json_build_object('id', a.id, 'name', a.name, 'price', a.price, 'locked', true)) as addons
+                FROM package_addons pa
+                JOIN addons a ON pa.addon_id = a.id
+                GROUP BY pa.package_id
+            ) pa ON p.id = pa.package_id
+            WHERE p.is_published = TRUE
+            ORDER BY p.price;
+        `);
+        const allAddonsRes = await client.query('SELECT * FROM addons ORDER BY price');
 
-        const { accessKey, password, selectedItems, ...bookingData } = req.body;
-        
-        const keyCheck = await client.query('SELECT * FROM access_keys WHERE key = $1', [accessKey]);
-        if (keyCheck.rows.length === 0) {
-            return res.status(400).json({ message: 'Nieprawidłowy klucz dostępu.' });
-        }
-        
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const clientId = await generateUniqueClientId(4);
+        const transformedPackages = packagesRes.rows.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            description: p.description,
+            category_id: p.category_id,
+            included: p.addons || [],
+            rich_description: p.rich_description,
+            rich_description_image_url: p.rich_description_image_url
+        }));
 
-        const result = await client.query(
-            `INSERT INTO bookings (access_key, password_hash, client_id, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-            [
-                accessKey, hashedPassword, clientId, bookingData.packageName, bookingData.totalPrice, JSON.stringify(bookingData.selectedItems),
-                bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress,
-                bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule,
-                bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode
-            ]
-        );
-        const newBookingId = result.rows[0].id;
-
-        // Add booking to calendar
-        await client.query(
-            `INSERT INTO availability (title, start_time, end_time, is_all_day, description, resource) VALUES ($1, $2, $3, true, $4, $5)`,
-            [
-                `Rezerwacja: ${bookingData.brideName} & ${bookingData.groomName}`,
-                bookingData.weddingDate,
-                bookingData.weddingDate,
-                `Pakiet: ${bookingData.packageName}`,
-                JSON.stringify({ type: 'booking', bookingId: newBookingId })
-            ]
-        );
-
-        await client.query('DELETE FROM access_keys WHERE key = $1', [accessKey]);
-        
-        // Send confirmation email
-        if (resend) {
-            const { data, error } = await resend.emails.send({
-                from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
-                to: bookingData.email,
-                subject: 'Potwierdzenie Rezerwacji w Dreamcatcher Films!',
-                html: `
-                    <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                        <h2>Witaj ${bookingData.brideName}!</h2>
-                        <p>Dziękujemy za dokonanie rezerwacji. Twoje konto w naszym panelu klienta zostało pomyślnie utworzone.</p>
-                        <p><strong>Oto Twoje dane do logowania:</strong></p>
-                        <ul>
-                            <li><strong>Numer Klienta (login):</strong> <span style="font-weight: bold; font-size: 1.2em;">${clientId}</span></li>
-                            <li><strong>Hasło:</strong> [Twoje hasło podane podczas rejestracji]</li>
-                        </ul>
-                        <p>Możesz zalogować się do swojego panelu, aby śledzić postępy i zarządzać swoją rezerwacją.</p>
-                        <a href="${req.protocol}://${req.get('host')}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 20px; text-decoration: none; border-radius: 8px; margin-top: 20px;">Przejdź do Panelu Klienta</a>
-                        <p style="margin-top: 30px; font-size: 0.9em; color: #666;">Pozdrawiamy,<br>Zespół Dreamcatcher Films</p>
-                    </div>
-                `,
-            });
-            if (error) {
-                const errorMessage = error.message || JSON.stringify(error);
-                console.error(`Booking confirmation - Resend API error: ${errorMessage}`);
-                // Don't fail the whole request, just log it.
-            } else if (!data || !data.id) {
-                 console.warn("Booking confirmation - Resend API returned success but no data ID.", data);
-            } else {
-                 console.log("Booking confirmation email sent:", data.id);
-            }
-        } else {
-            console.warn("RESEND_API_KEY is not configured. Skipping booking confirmation email.");
-        }
-
-        await client.query('COMMIT');
-
-        res.status(201).json({ bookingId: newBookingId, clientId: clientId });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('Booking creation error:', err);
-        res.status(500).json({ message: `Błąd serwera: ${err.message}` });
+        res.json({
+            categories: categoriesRes.rows,
+            packages: transformedPackages,
+            allAddons: allAddonsRes.rows
+        });
+    } catch (error) {
+        console.error('Error fetching packages:', error);
+        res.status(500).send('Error fetching packages data.');
     } finally {
         client.release();
     }
 });
 
-app.post('/api/validate-discount', async (req, res) => {
+app.post('/api/validate-key', async (req, res) => {
+    const { key } = req.body;
+    if (!key || key.length !== 4) {
+        return res.status(400).json({ message: 'Nieprawidłowy format klucza.' });
+    }
+    const client = await getPool().connect();
     try {
-        const { code } = req.body;
-        if (!code) {
-            return res.status(400).json({ message: 'Kod rabatowy jest wymagany.' });
+        const result = await client.query('SELECT id FROM access_keys WHERE key = $1', [key]);
+        if (result.rows.length > 0) {
+            res.json({ message: 'Klucz jest poprawny.' });
+        } else {
+            res.status(404).json({ message: 'Nie znaleziono takiego klucza dostępu.' });
         }
-
-        const result = await getPool().query('SELECT * FROM discount_codes WHERE code = $1 AND (expires_at IS NULL OR expires_at > NOW())', [code.toUpperCase()]);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Kod rabatowy jest nieprawidłowy lub wygasł.' });
-        }
-
-        const discount = result.rows[0];
-        if (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) {
-            return res.status(403).json({ message: 'Limit wykorzystania tego kodu rabatowego został osiągnięty.' });
-        }
-
-        res.json({
-            code: discount.code,
-            type: discount.type,
-            value: parseFloat(discount.value)
-        });
-    } catch (err) {
-        console.error('Discount validation error:', err);
-        res.status(500).json({ message: 'Wystąpił błąd serwera przy walidacji kodu.' });
+    } catch (error) {
+        console.error('Error validating key:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
-// Homepage content
+app.post('/api/bookings', async (req, res) => {
+    const {
+        accessKey, packageName, totalPrice, selectedItems,
+        brideName, groomName, weddingDate, brideAddress,
+        groomAddress, churchLocation, venueLocation, schedule, email,
+        phoneNumber, additionalInfo, password, discountCode
+    } = req.body;
+
+    if (!accessKey || !packageName || !brideName || !groomName || !weddingDate || !email || !password) {
+        return res.status(400).send('Brakuje wymaganych pól.');
+    }
+
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const keyRes = await client.query('SELECT id FROM access_keys WHERE key = $1', [accessKey]);
+        if (keyRes.rows.length === 0) {
+            return res.status(403).send('Nieprawidłowy lub już wykorzystany klucz dostępu.');
+        }
+
+        const clientId = await generateUniqueClientId(client);
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const selectedItemsJson = JSON.stringify(selectedItems);
+
+        const newBooking = await client.query(
+            `INSERT INTO bookings (client_id, access_key, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, password_hash, discount_code, payment_status, amount_paid)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'pending', 0)
+             RETURNING id`,
+            [clientId, accessKey, packageName, totalPrice, selectedItemsJson, brideName, groomName, weddingDate, brideAddress, groomAddress, churchLocation, venueLocation, schedule, email, phoneNumber, additionalInfo, hashedPassword, discountCode]
+        );
+        const newBookingId = newBooking.rows[0].id;
+
+        await client.query('DELETE FROM access_keys WHERE key = $1', [accessKey]);
+
+        const title = `Rezerwacja: ${brideName} & ${groomName}`;
+        const availabilityResult = await client.query(
+            'INSERT INTO availability (title, start_time, end_time, is_all_day, resource) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [title, weddingDate, weddingDate, true, { type: 'booking', bookingId: newBookingId }]
+        );
+        
+        const notificationEmail = await getAdminNotificationEmail(client);
+        if (resend && notificationEmail) {
+            try {
+                const { data, error } = await resend.emails.send({
+                    from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
+                    to: notificationEmail,
+                    subject: `Nowa rezerwacja #${newBookingId} od ${brideName} i ${groomName}`,
+                    html: `<h1>Nowa rezerwacja!</h1><p>Para: <strong>${brideName} i ${groomName}</strong></p><p>Data ślubu: ${weddingDate}</p><p>Pakiet: ${packageName}</p><p>Wartość: ${totalPrice} PLN</p><p>Sprawdź szczegóły w panelu administratora.</p>`,
+                });
+                if (error) { console.error("Resend error (admin notification):", error); }
+            } catch (e) {
+                console.error("Failed to send admin notification email:", e);
+            }
+        }
+        
+        if (resend) {
+             try {
+                const { data, error } = await resend.emails.send({
+                    from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
+                    to: email,
+                    subject: 'Potwierdzenie rezerwacji w Dreamcatcher Films',
+                    html: `
+                        <h1>Witajcie ${brideName} i ${groomName}!</h1>
+                        <p>Dziękujemy za złożenie rezerwacji w Dreamcatcher Films. Wasz termin został pomyślnie zarezerwowany.</p>
+                        <p>Poniżej znajdują się dane do logowania do Waszego osobistego panelu klienta:</p>
+                        <ul>
+                            <li><strong>Numer klienta (login):</strong> ${clientId}</li>
+                            <li><strong>Hasło:</strong> [Twoje hasło podane podczas rejestracji]</li>
+                        </ul>
+                        <p>Możecie zalogować się do panelu, klikając w poniższy link:</p>
+                        <a href="https://pwa-git-main-dreamcatcher-films-projects.vercel.app/">Przejdź do Panelu Klienta</a>
+                        <p>Wkrótce skontaktujemy się z Wami w celu omówienia dalszych szczegółów.</p>
+                        <br/>
+                        <p>Pozdrawiamy,</p>
+                        <p>Zespół Dreamcatcher Films</p>
+                    `,
+                });
+
+                if (error) {
+                    console.error("Resend API Error on client confirmation:", error.message);
+                } else {
+                    console.log("Client confirmation email sent successfully:", data);
+                }
+
+            } catch (e) {
+                console.error("Failed to send client confirmation email:", e);
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Rezerwacja zakończona pomyślnie.', bookingId: newBookingId, clientId: clientId });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Błąd przy tworzeniu rezerwacji:', error);
+        res.status(500).send(`Błąd serwera: ${error.message}`);
+    } finally {
+        client.release();
+    }
+});
+
+
+app.post('/api/validate-discount', async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ message: 'Nie podano kodu.' });
+
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'SELECT * FROM discount_codes WHERE code = $1 AND (expires_at IS NULL OR expires_at > NOW()) AND (usage_limit IS NULL OR times_used < usage_limit)',
+            [code]
+        );
+        if (result.rows.length > 0) {
+            res.json(result.rows[0]);
+        } else {
+            res.status(404).json({ message: 'Kod jest nieprawidłowy lub wygasł.' });
+        }
+    } catch (error) {
+        console.error('Error validating discount code:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera.' });
+    } finally {
+        client.release();
+    }
+});
+
+
+app.get('/api/gallery', async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM galleries ORDER BY id DESC');
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching gallery:', error);
+        res.status(500).send('Błąd pobierania galerii.');
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/contact', async (req, res) => {
+    const { firstName, lastName, email, phone, subject, message } = req.body;
+    if (!firstName || !lastName || !email || !subject || !message) {
+        return res.status(400).json({ message: 'Wszystkie pola są wymagane.' });
+    }
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query(
+            `INSERT INTO contact_messages (first_name, last_name, email, phone, subject, message)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [firstName, lastName, email, phone, subject, message]
+        );
+        const newId = result.rows[0].id;
+        
+        const notificationEmail = await getAdminNotificationEmail(client);
+        if (resend && notificationEmail) {
+            try {
+                const { data, error } = await resend.emails.send({
+                    from: 'Dreamcatcher Films Contact <powiadomienia@dreamcatcherfilms.co.uk>',
+                    to: notificationEmail,
+                    subject: `Nowe zapytanie z formularza: ${subject}`,
+                    reply_to: email,
+                    html: `
+                        <h2>Nowa wiadomość z formularza kontaktowego</h2>
+                        <p><strong>Od:</strong> ${firstName} ${lastName}</p>
+                        <p><strong>Email:</strong> ${email}</p>
+                        <p><strong>Telefon:</strong> ${phone || 'Nie podano'}</p>
+                        <hr>
+                        <p><strong>Temat:</strong> ${subject}</p>
+                        <p><strong>Wiadomość:</strong></p>
+                        <p style="white-space: pre-wrap;">${message}</p>
+                        <hr>
+                        <p>Możesz odpowiedzieć na tę wiadomość bezpośrednio lub zarządzać nią w panelu administratora.</p>
+                    `,
+                });
+                if (error) {
+                    console.error("Resend API error on contact form:", error.message);
+                }
+            } catch (e) {
+                 console.error("Failed to send contact form email:", e);
+            }
+        }
+        
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Wiadomość wysłana pomyślnie.', id: newId });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error saving contact message:', error);
+        res.status(500).json({ message: 'Błąd serwera podczas zapisywania wiadomości.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/contact-details', async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
+        const settings = result.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (error) {
+        console.error('Error fetching contact details:', error);
+        res.status(500).send('Error fetching contact details.');
+    } finally {
+        client.release();
+    }
+});
+
 app.get('/api/homepage-content', async (req, res) => {
+    const client = await getPool().connect();
     try {
         const [slidesRes, aboutRes, testimonialsRes, instagramRes] = await Promise.all([
-            getPool().query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC'),
-            getPool().query("SELECT key, value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')"),
-            getPool().query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC'),
-            getPool().query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC')
+            client.query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC, id DESC'),
+            client.query("SELECT value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')"),
+            client.query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC'),
+            client.query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC, id DESC'),
         ]);
-        
+
         const aboutSection = aboutRes.rows.reduce((acc, row) => {
-            acc[row.key] = row.value;
+            const key = row.key.replace('about_us_', '');
+            acc[key] = row.value;
             return acc;
         }, {});
 
         res.json({
             slides: slidesRes.rows,
             aboutSection: {
-                about_us_title: aboutSection.about_us_title,
-                about_us_text: aboutSection.about_us_text,
-                about_us_image_url: aboutSection.about_us_image_url
+                about_us_title: aboutSection.title,
+                about_us_text: aboutSection.text,
+                about_us_image_url: aboutSection.image_url
             },
             testimonials: testimonialsRes.rows,
-            instagramPosts: instagramRes.rows,
-        });
-    } catch(err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Gallery content
-app.get('/api/gallery', async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch(err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Contact page details
-app.get('/api/contact-details', async (req, res) => {
-    try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
-        const details = result.rows.reduce((acc, row) => {
-            acc[row.key] = row.value;
-            return acc;
-        }, {});
-        res.json(details);
-    } catch(err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Packages & addons for calculator
-app.get('/api/packages', async (req, res) => {
-    try {
-        const [categoriesRes, packagesRes, addonsRes, packageAddonsRes] = await Promise.all([
-            getPool().query('SELECT * FROM package_categories ORDER BY id'),
-            getPool().query('SELECT * FROM packages WHERE is_published = TRUE ORDER BY price'),
-            getPool().query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.price'),
-            getPool().query('SELECT * FROM package_addons')
-        ]);
-
-        const allAddons = addonsRes.rows;
-        
-        const packagesWithAddons = packagesRes.rows.map(p => {
-            const includedAddonIds = packageAddonsRes.rows
-                .filter(pa => pa.package_id === p.id)
-                .map(pa => pa.addon_id);
-            
-            const includedAddons = allAddons
-                .filter(a => includedAddonIds.includes(a.id))
-                .map(a => ({
-                    id: a.id,
-                    name: a.name,
-                    price: parseFloat(a.price),
-                    locked: parseFloat(a.price) === 0
-                }));
-            
-            return {
-                ...p,
-                price: parseFloat(p.price),
-                included: includedAddons
-            };
+            instagramPosts: instagramRes.rows
         });
 
-        res.json({
-            categories: categoriesRes.rows,
-            packages: packagesWithAddons,
-            allAddons: allAddons.map(a => ({...a, price: parseFloat(a.price)})),
-        });
-    } catch(err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Client Login Endpoint
-app.post('/api/login', async (req, res) => {
-    try {
-        const { clientId, password } = req.body;
-        const result = await getPool().query('SELECT * FROM bookings WHERE client_id = $1', [clientId]);
-        if (result.rows.length === 0) {
-            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
-        }
-        
-        const booking = result.rows[0];
-        const isPasswordValid = await bcrypt.compare(password, booking.password_hash);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
-        }
-        
-        const token = jwt.sign({ bookingId: booking.id, clientId: booking.client_id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        res.json({ token });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// --- CLIENT AUTHENTICATED Endpoints ---
-app.get('/api/my-booking', verifyToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]);
-        if (result.rows.length === 0) {
-            return res.status(404).send('Booking not found.');
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/my-booking', verifyToken, async (req, res) => {
-    try {
-        const { bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
-        const result = await getPool().query(
-            `UPDATE bookings SET 
-                bride_address = $1, groom_address = $2, church_location = $3, 
-                venue_location = $4, schedule = $5, additional_info = $6
-             WHERE id = $7 RETURNING *`,
-            [bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.user.bookingId]
-        );
-        res.json({ message: 'Dane zaktualizowane pomyślnie.', booking: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/booking-stages', verifyToken, async (req, res) => {
-     try {
-        const result = await getPool().query(
-            `SELECT bs.id, ps.name, ps.description, bs.status, bs.completed_at
-             FROM booking_stages bs
-             JOIN production_stages ps ON bs.stage_id = ps.id
-             WHERE bs.booking_id = $1
-             ORDER BY ps.id`,
-            [req.user.bookingId]
-        );
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/booking-stages/:stageId/approve', verifyToken, async (req, res) => {
-    try {
-        const result = await getPool().query(
-            `UPDATE booking_stages SET status = 'completed', completed_at = NOW() 
-             WHERE id = $1 AND booking_id = $2 AND status = 'awaiting_approval' RETURNING *`,
-            [req.params.stageId, req.user.bookingId]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).send('Nie znaleziono etapu lub nie można go zatwierdzić.');
-        }
-        res.json({ message: 'Etap został zatwierdzony.' });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/messages', verifyToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.post('/api/messages', verifyToken, async (req, res) => {
-    try {
-        const { content } = req.body;
-        const result = await getPool().query(
-            'INSERT INTO messages (booking_id, sender, content, is_read_by_admin) VALUES ($1, $2, $3, TRUE) RETURNING *',
-            [req.user.bookingId, 'client', content]
-        );
-        
-        // Notify admin via email
-        if (resend) {
-            const bookingRes = await getPool().query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
-            const adminRes = await getPool().query('SELECT notification_email FROM admins ORDER BY id LIMIT 1');
-            const adminEmail = adminRes.rows.length > 0 ? adminRes.rows[0].notification_email : null;
-            const clientName = bookingRes.rows.length > 0 ? `${bookingRes.rows[0].bride_name} & ${bookingRes.rows[0].groom_name}` : `Klient #${req.user.clientId}`;
-
-            if (adminEmail) {
-                const { data, error } = await resend.emails.send({
-                    from: 'Dreamcatcher Films (Powiadomienia) <powiadomienia@dreamcatcherfilms.co.uk>',
-                    to: adminEmail,
-                    subject: `Nowa wiadomość od ${clientName}`,
-                    html: `
-                        <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                            <h2>Otrzymano nową wiadomość w panelu klienta!</h2>
-                            <p><strong>Klient:</strong> ${clientName} (Rezerwacja #${req.user.bookingId})</p>
-                            <p><strong>Treść wiadomości:</strong></p>
-                            <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px;">${content}</div>
-                            <a href="${req.protocol}://${req.get('host')}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 20px; text-decoration: none; border-radius: 8px; margin-top: 20px;">Przejdź do Panelu Administratora</a>
-                        </div>
-                    `,
-                });
-                if (error) {
-                    const errorMessage = error.message || JSON.stringify(error);
-                    console.error(`Client message notification - Resend API error: ${errorMessage}`);
-                } else if (!data || !data.id) {
-                     console.warn("Client message notification - Resend API returned success but no data ID.", data);
-                } else {
-                     console.log("Client message notification email sent:", data.id);
-                }
-            }
-        }
-        
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/messages/unread-count', verifyToken, async (req, res) => {
-    try {
-        const result = await getPool().query(
-            'SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = $2 AND is_read_by_client = FALSE',
-            [req.user.bookingId, 'admin']
-        );
-        res.json({ count: parseInt(result.rows[0].count, 10) });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/messages/mark-as-read', verifyToken, async (req, res) => {
-    try {
-        await getPool().query(
-            'UPDATE messages SET is_read_by_client = TRUE WHERE booking_id = $1 AND sender = $2',
-            [req.user.bookingId, 'admin']
-        );
-        res.status(200).send('Messages marked as read.');
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// --- ADMIN LOGIN ---
-app.post('/api/admin/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const result = await getPool().query('SELECT * FROM admins WHERE email = $1', [email]);
-        if (result.rows.length === 0) {
-            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        }
-        
-        const admin = result.rows[0];
-        const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        }
-        
-        const token = jwt.sign({ adminId: admin.id, email: admin.email }, process.env.ADMIN_JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// --- ADMIN AUTHENTICATED Endpoints ---
-app.get('/api/admin/bookings', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
-        if (result.rows.length === 0) {
-            return res.status(404).send('Rezerwacja nieznaleziona.');
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.delete('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM messages WHERE booking_id = $1', [req.params.id]);
-        await client.query('DELETE FROM booking_stages WHERE booking_id = $1', [req.params.id]);
-        await client.query(`DELETE FROM availability WHERE resource->>'type' = 'booking' AND (resource->>'bookingId')::int = $1`, [req.params.id]);
-        const result = await client.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
-        if (result.rowCount === 0) {
-            return res.status(404).send('Rezerwacja nieznaleziona.');
-        }
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Rezerwacja została pomyślnie usunięta.' });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        console.error('Error fetching homepage content:', error);
+        res.status(500).send('Błąd pobierania zawartości strony głównej.');
     } finally {
         client.release();
     }
 });
 
-app.patch('/api/admin/bookings/:id', verifyAdminToken, async (req, res) => {
+
+// --- CLIENT-AUTHENTICATED API ENDPOINTS ---
+
+app.post('/api/login', async (req, res) => {
+    const { clientId, password } = req.body;
+    if (!clientId || !password) {
+        return res.status(400).json({ message: 'Numer klienta i hasło są wymagane.' });
+    }
+
+    const client = await getPool().connect();
     try {
-        const {
-            bride_name, groom_name, wedding_date, bride_address, groom_address,
-            church_location, venue_location, schedule, email, phone_number, additional_info
-        } = req.body;
-
-        const result = await getPool().query(
-            `UPDATE bookings SET
-                bride_name = $1, groom_name = $2, wedding_date = $3, bride_address = $4,
-                groom_address = $5, church_location = $6, venue_location = $7,
-                schedule = $8, email = $9, phone_number = $10, additional_info = $11
-             WHERE id = $12 RETURNING *`,
-            [
-                bride_name, groom_name, wedding_date, bride_address, groom_address,
-                church_location, venue_location, schedule, email, phone_number,
-                additional_info, req.params.id
-            ]
-        );
-
-        if (result.rowCount === 0) {
-            return res.status(404).send('Rezerwacja nieznaleziona.');
+        const result = await client.query('SELECT id, password_hash FROM bookings WHERE client_id = $1', [clientId]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
         }
-        res.json({ message: 'Dane rezerwacji zaktualizowane.', booking: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        const user = result.rows[0];
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
+        }
+
+        const token = jwt.sign({ bookingId: user.id }, process.env.JWT_CLIENT_SECRET, { expiresIn: '7d' });
+        res.json({ token });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/admin/bookings/:id/resend-credentials', verifyAdminToken, async (req, res) => {
-    if (!resend) {
-        return res.status(503).json({ message: 'Usługa e-mail nie jest skonfigurowana.' });
-    }
+app.get('/api/my-booking', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const bookingRes = await getPool().query('SELECT client_id, bride_name, email FROM bookings WHERE id = $1', [req.params.id]);
+        const result = await client.query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]);
+        if (result.rows.length === 0) {
+            return res.status(404).send('Nie znaleziono rezerwacji.');
+        }
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error fetching booking data:', error);
+        res.status(500).send('Błąd pobierania danych rezerwacji.');
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/my-booking', authenticateClient, async (req, res) => {
+    const { bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
+    const bookingId = req.user.bookingId;
+
+    const client = await getPool().connect();
+    try {
+         const result = await client.query(
+            `UPDATE bookings SET 
+                bride_address = $1, 
+                groom_address = $2, 
+                church_location = $3, 
+                venue_location = $4, 
+                schedule = $5, 
+                additional_info = $6
+             WHERE id = $7 RETURNING bride_address, groom_address, church_location, venue_location, schedule, additional_info`,
+            [bride_address, groom_address, church_location, venue_location, schedule, additional_info, bookingId]
+        );
+        res.json({ message: 'Dane zaktualizowane pomyślnie.', booking: result.rows[0] });
+    } catch (error) {
+        console.error('Error updating booking data:', error);
+        res.status(500).send('Błąd zapisu danych.');
+    } finally {
+        client.release();
+    }
+});
+
+
+app.get('/api/booking-stages', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            `SELECT bs.id, ps.name, ps.description, bs.status, bs.completed_at
+             FROM booking_stages bs
+             JOIN production_stages ps ON bs.stage_id = ps.id
+             WHERE bs.booking_id = $1 ORDER BY ps.id ASC`, [req.user.bookingId]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching booking stages:', error);
+        res.status(500).send('Błąd pobierania etapów projektu.');
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/booking-stages/:id/approve', authenticateClient, async (req, res) => {
+    const stageId = parseInt(req.params.id, 10);
+    const bookingId = req.user.bookingId;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            "UPDATE booking_stages SET status = 'completed', completed_at = NOW() WHERE id = $1 AND booking_id = $2 AND status = 'awaiting_approval' RETURNING id",
+            [stageId, bookingId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).send('Nie znaleziono etapu lub nie można go zatwierdzić.');
+        }
+        res.json({ message: 'Etap zatwierdzony pomyślnie.' });
+    } catch (error) {
+        console.error('Error approving stage:', error);
+        res.status(500).send('Błąd podczas zatwierdzania etapu.');
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/messages', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching messages:', error);
+        res.status(500).send('Błąd pobierania wiadomości.');
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/messages/unread-count', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = $2 AND is_read_by_client = FALSE', 
+            [req.user.bookingId, 'admin']
+        );
+        res.json({ count: parseInt(result.rows[0].count, 10) });
+    } catch (error) {
+        console.error('Error fetching unread messages count:', error);
+        res.status(500).send('Błąd pobierania licznika wiadomości.');
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query(
+            'UPDATE messages SET is_read_by_client = TRUE WHERE booking_id = $1 AND sender = $2',
+            [req.user.bookingId, 'admin']
+        );
+        res.sendStatus(204);
+    } catch (error) {
+        console.error('Error marking messages as read:', error);
+        res.status(500).send('Błąd oznaczania wiadomości jako przeczytane.');
+    } finally {
+        client.release();
+    }
+});
+
+
+app.post('/api/messages', authenticateClient, async (req, res) => {
+    const { content } = req.body;
+    if (!content || typeof content !== 'string' || content.trim() === '') {
+        return res.status(400).send('Treść wiadomości nie może być pusta.');
+    }
+
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const result = await client.query(
+            `INSERT INTO messages (booking_id, sender, content, is_read_by_admin)
+             VALUES ($1, 'client', $2, FALSE) RETURNING *`,
+            [req.user.bookingId, content]
+        );
+        const newMessage = result.rows[0];
+        
+        const notificationEmail = await getAdminNotificationEmail(client);
+        const bookingInfo = await client.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.bookingId]);
+        const senderName = `${bookingInfo.rows[0].bride_name} & ${bookingInfo.rows[0].groom_name}`;
+        
+        if (resend && notificationEmail) {
+            try {
+                const { data, error } = await resend.emails.send({
+                    from: 'Dreamcatcher Films System <powiadomienia@dreamcatcherfilms.co.uk>',
+                    to: notificationEmail,
+                    subject: `Nowa wiadomość od ${senderName} (Rezerwacja #${req.user.bookingId})`,
+                    html: `
+                        <h2>Otrzymano nową wiadomość</h2>
+                        <p><strong>Od:</strong> ${senderName}</p>
+                        <p><strong>Rezerwacja:</strong> #${req.user.bookingId}</p>
+                        <hr>
+                        <p><strong>Wiadomość:</strong></p>
+                        <p style="white-space: pre-wrap;">${content}</p>
+                        <hr>
+                        <p>Zaloguj się do panelu administratora, aby odpowiedzieć.</p>
+                    `,
+                });
+                if (error) {
+                    console.error("Resend error on new client message:", error.message);
+                }
+            } catch (e) {
+                 console.error("Failed to send new message notification:", e);
+            }
+        }
+        
+        await client.query('COMMIT');
+        res.status(201).json(newMessage);
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error sending message:', error);
+        res.status(500).send('Błąd wysyłania wiadomości.');
+    } finally {
+        client.release();
+    }
+});
+
+
+// --- ADMIN-AUTHENTICATED API ENDPOINTS ---
+
+app.post('/api/admin/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: 'E-mail i hasło są wymagane.' });
+    }
+
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT id, password_hash FROM admins WHERE email = $1', [email]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
+        }
+        const admin = result.rows[0];
+        const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
+        }
+        const token = jwt.sign({ adminId: admin.id }, process.env.JWT_ADMIN_SECRET, { expiresIn: '8h' });
+        res.json({ token });
+    } catch (error) {
+        console.error('Admin login error:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/bookings', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(`
+            SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at 
+            FROM bookings ORDER BY created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching admin bookings:', error);
+        res.status(500).send('Błąd pobierania rezerwacji.');
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM bookings WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).send('Nie znaleziono rezerwacji.');
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error(`Error fetching booking #${id}:`, error);
+        res.status(500).send('Błąd pobierania szczegółów rezerwacji.');
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query("DELETE FROM availability WHERE resource->>'type' = 'booking' AND (resource->>'bookingId')::int = $1", [id]);
+        const result = await client.query('DELETE FROM bookings WHERE id = $1 RETURNING id', [id]);
+        if (result.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).send('Nie znaleziono rezerwacji do usunięcia.');
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Rezerwacja usunięta pomyślnie.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`Error deleting booking #${id}:`, error);
+        res.status(500).send('Błąd podczas usuwania rezerwacji.');
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const result = await client.query(
+            `UPDATE bookings SET 
+                bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, 
+                bride_address = $6, groom_address = $7, church_location = $8, venue_location = $9, 
+                schedule = $10, additional_info = $11
+             WHERE id = $12 RETURNING *`,
+            [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info, id]
+        );
+        
+        const title = `Rezerwacja: ${bride_name} & ${groom_name}`;
+        await client.query(
+            "UPDATE availability SET title = $1, start_time = $2, end_time = $2, is_all_day = true WHERE resource->>'type' = 'booking' AND (resource->>'bookingId')::int = $3",
+            [title, wedding_date, id]
+        );
+        
+        await client.query('COMMIT');
+        res.json({ message: 'Dane rezerwacji zaktualizowane pomyślnie.', booking: result.rows[0] });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`Error updating booking #${id}:`, error);
+        res.status(500).send('Błąd zapisu danych.');
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/admin/bookings/:id/payment', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { payment_status, amount_paid } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'UPDATE bookings SET payment_status = $1, amount_paid = $2 WHERE id = $3 RETURNING payment_status, amount_paid',
+            [payment_status, amount_paid, id]
+        );
+        res.json({ message: 'Dane płatności zaktualizowane.', payment_details: result.rows[0] });
+    } catch (error) {
+        console.error(`Error updating payment for booking #${id}:`, error);
+        res.status(500).send('Błąd zapisu danych płatności.');
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/admin/bookings/:id/resend-credentials', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const client = await getPool().connect();
+    try {
+        if (!resend) {
+            return res.status(500).json({ message: 'Usługa e-mail nie jest skonfigurowana.' });
+        }
+        
+        const bookingRes = await client.query('SELECT email, client_id, bride_name, groom_name FROM bookings WHERE id = $1', [id]);
         if (bookingRes.rows.length === 0) {
             return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
         }
-        const { client_id, bride_name, email } = bookingRes.rows[0];
+        const { email, client_id, bride_name, groom_name } = bookingRes.rows[0];
 
         const { data, error } = await resend.emails.send({
             from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
             to: email,
             subject: 'Twoje dane do logowania - Dreamcatcher Films',
             html: `
-                <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                    <h2>Witaj ${bride_name},</h2>
-                    <p>Zgodnie z Twoją prośbą, przesyłamy ponownie Twoje dane do logowania do panelu klienta.</p>
-                    <p><strong>Twój numer klienta (login):</strong> <span style="font-weight: bold; font-size: 1.2em;">${client_id}</span></p>
-                    <p>Hasło zostało ustawione przez Ciebie podczas procesu rezerwacji. Jeśli go nie pamiętasz, skontaktuj się z nami bezpośrednio.</p>
-                    <a href="${req.protocol}://${req.get('host')}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 20px; text-decoration: none; border-radius: 8px; margin-top: 20px;">Przejdź do Panelu Klienta</a>
-                    <p style="margin-top: 30px; font-size: 0.9em; color: #666;">Pozdrawiamy,<br>Zespół Dreamcatcher Films</p>
-                </div>
+                <h1>Cześć ${bride_name}!</h1>
+                <p>Na Twoją prośbę, ponownie wysyłamy dane dostępowe do Twojego panelu klienta w Dreamcatcher Films.</p>
+                <p>Poniżej znajdują się dane do logowania:</p>
+                <ul>
+                    <li><strong>Numer klienta (login):</strong> ${client_id}</li>
+                    <li><strong>Hasło:</strong> [Twoje hasło podane podczas rejestracji]</li>
+                </ul>
+                <p>Możesz zalogować się do panelu, klikając w poniższy link:</p>
+                <a href="https://pwa-git-main-dreamcatcher-films-projects.vercel.app/">Przejdź do Panelu Klienta</a>
+                <br/>
+                <p>Pozdrawiamy,</p>
+                <p>Zespół Dreamcatcher Films</p>
             `,
         });
 
         if (error) {
-            const errorMessage = error.message || JSON.stringify(error);
-            return res.status(500).json({ message: `Błąd API Resend: ${errorMessage}` });
-        }
-        if (!data || !data.id) {
-            return res.status(500).json({ message: "Resend API zwróciło sukces, ale bez ID wiadomości." });
+            console.error("Resend API Error on resend credentials:", error.message);
+            return res.status(500).json({ message: `Błąd API Resend: ${JSON.stringify(error)}`});
         }
 
-        res.status(200).json({ message: 'E-mail został pomyślnie wysłany.' });
-
-    } catch (err) {
-        console.error('Resend credentials error:', err);
-        res.status(500).json({ message: `Błąd serwera: ${err.message}` });
-    }
-});
-
-
-app.patch('/api/admin/bookings/:id/payment', verifyAdminToken, async (req, res) => {
-    try {
-        const { payment_status, amount_paid } = req.body;
-        const result = await getPool().query(
-            `UPDATE bookings SET payment_status = $1, amount_paid = $2 WHERE id = $3 RETURNING payment_status, amount_paid`,
-            [payment_status, amount_paid, req.params.id]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).send('Rezerwacja nieznaleziona.');
-        }
-        res.json({ message: 'Status płatności zaktualizowany.', payment_details: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        res.json({ message: 'E-mail został pomyślnie wysłany.' });
+    } catch (error) {
+        console.error(`Error resending credentials for booking #${id}:`, error);
+        res.status(500).json({ message: error.message || 'Wewnętrzny błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
 // Access Keys
-app.get('/api/admin/access-keys', verifyAdminToken, async (req, res) => {
+app.get('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM access_keys ORDER BY created_at DESC');
+        const result = await client.query('SELECT * FROM access_keys ORDER BY created_at DESC');
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd pobierania kluczy.');
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/admin/access-keys', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
+    const { client_name } = req.body;
+    if (!client_name) return res.status(400).send('Nazwa klienta jest wymagana.');
+    const client = await getPool().connect();
     try {
-        const { client_name } = req.body;
-        const newKey = await generateUniqueKey(4);
-        const result = await getPool().query('INSERT INTO access_keys (key, client_name) VALUES ($1, $2) RETURNING *', [newKey, client_name]);
+        let key;
+        let isUnique = false;
+        while (!isUnique) {
+            key = Math.floor(1000 + Math.random() * 9000).toString();
+            const { rows } = await client.query('SELECT 1 FROM access_keys WHERE key = $1', [key]);
+            if (rows.length === 0) isUnique = true;
+        }
+        
+        const result = await client.query(
+            'INSERT INTO access_keys (key, client_name) VALUES ($1, $2) RETURNING *',
+            [key, client_name]
+        );
         res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd tworzenia klucza.');
+    } finally {
+        client.release();
     }
 });
 
-app.delete('/api/admin/access-keys/:id', verifyAdminToken, async (req, res) => {
+app.delete('/api/admin/access-keys/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        await getPool().query('DELETE FROM access_keys WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        const result = await client.query('DELETE FROM access_keys WHERE id = $1 RETURNING id', [req.params.id]);
+        if (result.rowCount === 0) return res.status(404).send('Nie znaleziono klucza.');
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send('Błąd usuwania klucza.');
+    } finally {
+        client.release();
     }
 });
 
 // Availability
-app.get('/api/admin/availability', verifyAdminToken, async (req, res) => {
+app.get('/api/admin/availability', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT id, title, description, start_time as start, end_time as end, is_all_day as "allDay", resource FROM availability');
+        const result = await client.query('SELECT id, title, description, start_time as "start", end_time as "end", is_all_day as "allDay", resource FROM availability');
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd pobierania wydarzeń.');
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/admin/availability', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/availability', authenticateAdmin, async (req, res) => {
+    const { title, description, start_time, end_time, is_all_day } = req.body;
+    const client = await getPool().connect();
     try {
-        const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await getPool().query(
+        const result = await client.query(
             'INSERT INTO availability (title, description, start_time, end_time, is_all_day, resource) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [title, description, start_time, end_time, is_all_day, JSON.stringify({ type: 'event' })]
+            [title, description, start_time, end_time, is_all_day, { type: 'event' }]
         );
         res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd dodawania wydarzenia.');
+    } finally {
+        client.release();
     }
 });
 
-app.patch('/api/admin/availability/:id', verifyAdminToken, async (req, res) => {
+app.patch('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { title, description, start_time, end_time, is_all_day } = req.body;
+    const client = await getPool().connect();
     try {
-        const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await getPool().query(
-            'UPDATE availability SET title = $1, description = $2, start_time = $3, end_time = $4, is_all_day = $5 WHERE id = $6 AND resource->>\'type\' = \'event\' RETURNING *',
-            [title, description, start_time, end_time, is_all_day, req.params.id]
+        const result = await client.query(
+            "UPDATE availability SET title = $1, description = $2, start_time = $3, end_time = $4, is_all_day = $5 WHERE id = $6 AND (resource->>'type' IS NULL OR resource->>'type' = 'event') RETURNING *",
+            [title, description, start_time, end_time, is_all_day, id]
         );
-         if (result.rowCount === 0) return res.status(404).send('Nie znaleziono wydarzenia lub nie można go edytować (np. jest to rezerwacja).');
+        if (result.rowCount === 0) return res.status(404).send('Nie znaleziono wydarzenia lub jest to rezerwacja, której nie można edytować w ten sposób.');
         res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd aktualizacji wydarzenia.');
+    } finally {
+        client.release();
     }
 });
 
-app.delete('/api/admin/availability/:id', verifyAdminToken, async (req, res) => {
+app.delete('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('DELETE FROM availability WHERE id = $1 AND resource->>\'type\' = \'event\'', [req.params.id]);
-         if (result.rowCount === 0) return res.status(404).send('Nie znaleziono wydarzenia lub nie można go usunąć.');
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        const result = await client.query("DELETE FROM availability WHERE id = $1 AND (resource->>'type' IS NULL OR resource->>'type' = 'event') RETURNING id", [id]);
+        if (result.rowCount === 0) return res.status(404).send('Nie znaleziono wydarzenia lub jest to rezerwacja, której nie można usunąć w ten sposób.');
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send('Błąd usuwania wydarzenia.');
+    } finally {
+        client.release();
     }
 });
 
 // Gallery
-app.get('/api/admin/galleries', verifyAdminToken, async (req, res) => {
+app.get('/api/admin/galleries', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
+        const result = await client.query('SELECT * FROM galleries ORDER BY created_at DESC');
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd pobierania galerii.');
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/admin/galleries/upload', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/galleries/upload', authenticateAdmin, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename header' });
+    if (!filename || typeof filename !== 'string') {
+        return res.status(400).json({ message: 'Filename is required.' });
+    }
     try {
-        const blob = await put(`gallery/${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch(err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
+        const blob = await put(filename, req.body, { access: 'public' });
+        return res.status(200).json(blob);
+    } catch (error) {
+        console.error("Blob upload error:", error)
+        return res.status(500).json({ message: `Error uploading file: ${error.message}` });
     }
 });
 
-app.post('/api/admin/galleries', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/galleries', authenticateAdmin, async (req, res) => {
+    const { title, description, image_url } = req.body;
+    const client = await getPool().connect();
     try {
-        const { title, description, image_url } = req.body;
-        const result = await getPool().query(
+        const result = await client.query(
             'INSERT INTO galleries (title, description, image_url) VALUES ($1, $2, $3) RETURNING *',
             [title, description, image_url]
         );
         res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send('Błąd dodawania do galerii.');
+    } finally {
+        client.release();
     }
 });
 
-app.delete('/api/admin/galleries/:id', verifyAdminToken, async (req, res) => {
+app.delete('/api/admin/galleries/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const itemRes = await getPool().query('SELECT image_url FROM galleries WHERE id = $1', [req.params.id]);
-        if (itemRes.rows.length === 0) return res.status(404).send('Nie znaleziono elementu.');
-        
-        await del(itemRes.rows[0].image_url); // Delete from Vercel Blob
-        await getPool().query('DELETE FROM galleries WHERE id = $1', [req.params.id]); // Delete from DB
-        
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        await client.query('BEGIN');
+        const selectRes = await client.query('SELECT image_url FROM galleries WHERE id = $1', [req.params.id]);
+        if (selectRes.rows.length > 0) {
+            const { image_url } = selectRes.rows[0];
+            if (image_url) {
+                await del(image_url);
+            }
+        }
+        const deleteRes = await client.query('DELETE FROM galleries WHERE id = $1 RETURNING id', [req.params.id]);
+        if (deleteRes.rowCount === 0) return res.status(404).send('Nie znaleziono elementu galerii.');
+        await client.query('COMMIT');
+        res.sendStatus(204);
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).send('Błąd usuwania elementu galerii.');
+    } finally {
+        client.release();
     }
 });
 
-// Offer management
-app.get('/api/admin/offer-data', verifyAdminToken, async (req, res) => {
+
+// Packages & Addons
+app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const [packagesRes, addonsRes, categoriesRes] = await Promise.all([
-             getPool().query(`
-                SELECT p.*, c.name as category_name 
-                FROM packages p 
-                LEFT JOIN package_categories c ON p.category_id = c.id 
-                ORDER BY p.id
-            `),
-            getPool().query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.id'),
-            getPool().query('SELECT * FROM package_categories ORDER BY id')
-        ]);
-        
-        const packagesWithAddons = await Promise.all(packagesRes.rows.map(async (pkg) => {
-            const addonsForPackage = await getPool().query('SELECT addon_id FROM package_addons WHERE package_id = $1', [pkg.id]);
-            return {
-                ...pkg,
-                addons: addonsForPackage.rows.map(r => ({ id: r.addon_id }))
-            };
-        }));
+        const packagesRes = await client.query(`
+            SELECT p.*, c.name as category_name, pa.addons
+            FROM packages p
+            LEFT JOIN package_categories c ON p.category_id = c.id
+            LEFT JOIN (
+                SELECT package_id, json_agg(json_build_object('id', addon_id)) as addons
+                FROM package_addons
+                GROUP BY package_id
+            ) pa ON p.id = pa.package_id
+            ORDER BY p.category_id, p.price;
+        `);
+        const addonsRes = await client.query(`
+            SELECT a.*, ac.category_ids
+            FROM addons a
+            LEFT JOIN (
+                SELECT addon_id, array_agg(category_id) as category_ids
+                FROM addon_categories
+                GROUP BY addon_id
+            ) ac ON a.id = ac.addon_id
+            ORDER BY a.name;
+        `);
+        const categoriesRes = await client.query('SELECT * FROM package_categories ORDER BY name;');
         
         res.json({
-            packages: packagesWithAddons,
-            addons: addonsRes.rows.map(a => ({...a, category_ids: a.category_ids.filter(id => id !== null)})),
+            packages: packagesRes.rows.map(p => ({...p, addons: p.addons || [] })),
+            addons: addonsRes.rows,
             categories: categoriesRes.rows,
         });
-
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Packages
-app.post('/api/admin/packages', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
-        
-        const packageRes = await client.query(
-            `INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
-        );
-        const newPackage = packageRes.rows[0];
-        
-        if (addons && addons.length > 0) {
-            for (const addon of addons) {
-                await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)`, [newPackage.id, addon.id]);
-            }
-        }
-        
-        await client.query('COMMIT');
-        res.status(201).json(newPackage);
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error("Error creating package:", err);
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    } finally {
-        client.release();
-    }
-});
-
-app.patch('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
-        const packageId = req.params.id;
-
-        const updatedPackageRes = await client.query(
-            `UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 
-             WHERE id=$8 RETURNING *`,
-            [name, description, price, category_id, is_published, rich_description, rich_description_image_url, packageId]
-        );
-        
-        await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
-        if (addons && addons.length > 0) {
-             for (const addon of addons) {
-                await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)`, [packageId, addon.id]);
-            }
-        }
-        
-        await client.query('COMMIT');
-        res.status(200).json(updatedPackageRes.rows[0]);
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(`Error updating package:`, err);
-        res.status(500).json({ message: `Error updating package: ${err.message}` });
-    } finally {
-        client.release();
-    }
-});
-
-app.delete('/api/admin/packages/:id', verifyAdminToken, async (req, res) => {
-     const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM package_addons WHERE package_id = $1', [req.params.id]);
-        await client.query('DELETE FROM packages WHERE id = $1', [req.params.id]);
-        await client.query('COMMIT');
-        res.status(204).send();
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    } finally {
-        client.release();
-    }
-});
-
-app.post('/api/admin/packages/upload-image', verifyAdminToken, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename header' });
-    try {
-        const blob = await put(`packages/${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch(err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
-    }
-});
-
-// Addons
-app.post('/api/admin/addons', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const { name, price, category_ids } = req.body;
-        const addonRes = await getPool().query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
-        const newAddonId = addonRes.rows[0].id;
-        
-        if (category_ids && category_ids.length > 0) {
-            const catValues = category_ids.map(catId => `(${newAddonId}, ${catId})`).join(',');
-            await client.query(`INSERT INTO addon_categories (addon_id, category_id) VALUES ${catValues}`);
-        }
-
-        await client.query('COMMIT');
-        res.status(201).json({ id: newAddonId });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    } finally {
-        client.release();
-    }
-});
-
-app.patch('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const { name, price, category_ids } = req.body;
-        const addonId = req.params.id;
-
-        await client.query('UPDATE addons SET name=$1, price=$2 WHERE id=$3', [name, price, addonId]);
-        
-        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [addonId]);
-        if (category_ids && category_ids.length > 0) {
-            const catValues = category_ids.map(catId => `(${addonId}, ${catId})`).join(',');
-            await client.query(`INSERT INTO addon_categories (addon_id, category_id) VALUES ${catValues}`);
-        }
-
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Dodatek zaktualizowany.' });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    } finally {
-        client.release();
-    }
-});
-
-app.delete('/api/admin/addons/:id', verifyAdminToken, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [req.params.id]);
-        await client.query('DELETE FROM package_addons WHERE addon_id = $1', [req.params.id]);
-        await client.query('DELETE FROM addons WHERE id = $1', [req.params.id]);
-        await client.query('COMMIT');
-        res.status(204).send();
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        console.error('Error fetching offer data:', error);
+        res.status(500).send('Błąd pobierania danych oferty.');
     } finally {
         client.release();
     }
 });
 
 // Categories
-app.post('/api/admin/categories', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/categories', authenticateAdmin, async (req, res) => {
+    const { name, description, icon_name } = req.body;
+    const client = await getPool().connect();
     try {
-        const { name, description, icon_name } = req.body;
-        const result = await getPool().query('INSERT INTO package_categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *', [name, description, icon_name]);
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/admin/categories/:id', verifyAdminToken, async (req, res) => {
-    try {
-        const { name, description, icon_name } = req.body;
-        await getPool().query('UPDATE package_categories SET name=$1, description=$2, icon_name=$3 WHERE id=$4', [name, description, icon_name, req.params.id]);
-        res.status(200).json({ message: 'Kategoria zaktualizowana.' });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.delete('/api/admin/categories/:id', verifyAdminToken, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM package_categories WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Discount Codes
-app.get('/api/admin/discounts', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM discount_codes ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.post('/api/admin/discounts', verifyAdminToken, async (req, res) => {
-    try {
-        const { code, type, value, usage_limit, expires_at } = req.body;
-        const result = await getPool().query(
-            'INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [code.toUpperCase(), type, value, usage_limit, expires_at]
+        const result = await client.query(
+            'INSERT INTO package_categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *',
+            [name, description, icon_name]
         );
         res.status(201).json(result.rows[0]);
-    } catch (err) {
-        if (err.code === '23505') { // unique_violation
-            return res.status(409).json({ message: 'Ten kod rabatowy już istnieje.'});
-        }
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
 });
 
-app.delete('/api/admin/discounts/:id', verifyAdminToken, async (req, res) => {
+app.patch('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { name, description, icon_name } = req.body;
+    const client = await getPool().connect();
     try {
-        await getPool().query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Production Stages
-app.get('/api/admin/stages', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM production_stages ORDER BY id');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.post('/api/admin/stages', verifyAdminToken, async (req, res) => {
-    try {
-        const { name, description } = req.body;
-        const result = await getPool().query('INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *', [name, description]);
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.delete('/api/admin/stages/:id', verifyAdminToken, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Booking Stages Management
-app.get('/api/admin/booking-stages/:bookingId', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query(
-            `SELECT bs.id, ps.name, bs.status FROM booking_stages bs
-             JOIN production_stages ps ON bs.stage_id = ps.id
-             WHERE bs.booking_id = $1 ORDER BY ps.id`,
-            [req.params.bookingId]
+        const result = await client.query(
+            'UPDATE package_categories SET name = $1, description = $2, icon_name = $3 WHERE id = $4 RETURNING *',
+            [name, description, icon_name, id]
         );
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
 });
 
-app.post('/api/admin/booking-stages/:bookingId', verifyAdminToken, async (req, res) => {
+app.delete('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const { stage_id } = req.body;
-        await getPool().query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2)', [req.params.bookingId, stage_id]);
-        res.status(201).send();
-    } catch (err) {
-        if (err.code === '23505') return res.status(409).send('Ten etap jest już dodany do projektu.');
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
+        await client.query('DELETE FROM package_categories WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
 });
 
-app.patch('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, res) => {
-    try {
-        const { status } = req.body;
-        await getPool().query('UPDATE booking_stages SET status = $1 WHERE id = $2', [status, req.params.stageId]);
-        res.status(200).json({ message: 'Status etapu zaktualizowany.' });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.delete('/api/admin/booking-stages/:stageId', verifyAdminToken, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Settings
-app.post('/api/admin/setup-database', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await runDbSetup();
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/admin/settings', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT email, notification_email FROM admins WHERE id = $1', [req.user.adminId]);
-        if (result.rows.length === 0) return res.status(404).send('Admin not found.');
-        res.json({ loginEmail: result.rows[0].email, notificationEmail: result.rows[0].notification_email });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/admin/settings', verifyAdminToken, async (req, res) => {
-    try {
-        const { email } = req.body;
-        await getPool().query('UPDATE admins SET notification_email = $1 WHERE id = $2', [email, req.user.adminId]);
-        res.json({ message: 'E-mail for notifications updated.' });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
-        const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-        res.json(settings);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.patch('/api/admin/contact-settings', verifyAdminToken, async (req, res) => {
+// Addons
+app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
+    const { name, price, category_ids = [] } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const settings = req.body;
-        for (const key in settings) {
-            await client.query('UPDATE app_settings SET value = $1 WHERE key = $2', [settings[key], key]);
+        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING *', [name, price]);
+        const newAddon = addonRes.rows[0];
+        
+        if (category_ids.length > 0) {
+            const categoryValues = category_ids.map(catId => `(${newAddon.id}, ${catId})`).join(',');
+            await client.query(`INSERT INTO addon_categories (addon_id, category_id) VALUES ${categoryValues}`);
         }
+        
         await client.query('COMMIT');
-        res.json({ message: 'Contact settings updated.' });
-    } catch (err) {
+        res.status(201).json(newAddon);
+    } catch (error) {
         await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { name, price, category_ids = [] } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const addonRes = await client.query('UPDATE addons SET name = $1, price = $2 WHERE id = $3 RETURNING *', [name, price, id]);
+
+        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [id]);
+        if (category_ids.length > 0) {
+            const categoryValues = category_ids.map(catId => `(${id}, ${catId})`).join(',');
+            await client.query(`INSERT INTO addon_categories (addon_id, category_id) VALUES ${categoryValues}`);
+        }
+
+        await client.query('COMMIT');
+        res.json(addonRes.rows[0]);
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM addons WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+// Packages
+app.post('/api/admin/packages/upload-image', authenticateAdmin, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'];
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename is required.' });
+    try {
+        const blob = await put(filename, req.body, { access: 'public' });
+        return res.status(200).json(blob);
+    } catch (error) {
+        return res.status(500).json({ message: `Error uploading file: ${error.message}` });
+    }
+});
+
+app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        
+        const packageRes = await client.query(
+            `INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+            [name, description, price, category_id, is_published, rich_description, rich_description_image_url]
+        );
+        const newPackageId = packageRes.rows[0].id;
+
+        if (addons && addons.length > 0) {
+            const addonValues = addons.map(a => `(${newPackageId}, ${a.id})`).join(',');
+            await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ${addonValues}`);
+        }
+        
+        await client.query('COMMIT');
+        res.status(201).json({ id: newPackageId });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Error creating package:", error);
+        res.status(500).send(error.message);
     } finally {
         client.release();
     }
 });
 
-app.patch('/api/admin/credentials', verifyAdminToken, async (req, res) => {
+app.patch('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const client = await getPool().connect();
     try {
-        const { currentPassword, newEmail, newPassword } = req.body;
-
-        const adminRes = await getPool().query('SELECT * FROM admins WHERE id = $1', [req.user.adminId]);
-        if (adminRes.rows.length === 0) return res.status(404).json({ message: "Administrator not found." });
+        await client.query('BEGIN');
         
-        const admin = adminRes.rows[0];
-        const isPasswordValid = await bcrypt.compare(currentPassword, admin.password_hash);
-        if (!isPasswordValid) return res.status(401).json({ message: "Bieżące hasło jest nieprawidłowe." });
+        await client.query(
+            `UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7
+             WHERE id=$8`,
+            [name, description, price, category_id, is_published, rich_description, rich_description_image_url, id]
+        );
+        
+        await client.query('DELETE FROM package_addons WHERE package_id = $1', [id]);
+        if (addons && addons.length > 0) {
+            const addonValues = addons.map(a => `(${id}, ${a.id})`).join(',');
+            await client.query(`INSERT INTO package_addons (package_id, addon_id) VALUES ${addonValues}`);
+        }
 
-        let query = 'UPDATE admins SET ';
-        const params = [];
-        let paramIndex = 1;
+        await client.query('COMMIT');
+        res.json({ message: 'Package updated successfully.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`Error updating package #${id}:`, error);
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM packages WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
+    }
+});
+
+// Discounts
+app.get('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM discount_codes ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    const { code, type, value, usage_limit, expires_at } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [code, type, value, usage_limit, expires_at]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') { // unique_violation
+            return res.status(409).json({ message: 'Ten kod już istnieje.' });
+        }
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/discounts/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
+    }
+});
+
+// Production Stages
+app.get('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM production_stages ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.post('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    const { name, description } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *',
+            [name, description]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.delete('/api/admin/stages/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+// Booking Stages
+app.get('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            `SELECT bs.id, ps.name, bs.status 
+             FROM booking_stages bs
+             JOIN production_stages ps ON bs.stage_id = ps.id
+             WHERE bs.booking_id = $1 ORDER BY ps.id ASC`, [req.params.bookingId]);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.post('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
+    const { stage_id } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2) RETURNING *',
+            [req.params.bookingId, stage_id]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+         if (error.code === '23505') { // unique_violation, assuming (booking_id, stage_id) is unique
+            return res.status(409).send('Ten etap jest już dodany do projektu.');
+        }
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.patch('/api/admin/booking-stages/:stageId', authenticateAdmin, async (req, res) => {
+    const { status } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(
+            'UPDATE booking_stages SET status = $1 WHERE id = $2 RETURNING *',
+            [status, req.params.stageId]
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.delete('/api/admin/booking-stages/:stageId', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+// Settings
+app.post('/api/admin/setup-database', authenticateAdmin, async (req, res) => {
+    try {
+        // The middleware already ran the setup, so if we get here, it succeeded.
+        // We can re-run it for good measure if needed, but it might be redundant.
+        console.log("Manual DB setup triggered by admin.");
+        initializationPromise = runDbSetup();
+        await initializationPromise;
+        res.json({ message: 'Schemat bazy danych został pomyślnie zainicjowany/zaktualizowany.' });
+    } catch (error) {
+        console.error("Manual DB setup failed:", error);
+        res.status(500).json({ message: `Błąd inicjalizacji: ${error.message}` });
+    }
+});
+
+app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT email, notification_email FROM admins WHERE id = $1', [req.user.adminId]);
+        if (result.rows.length === 0) return res.status(404).send('Nie znaleziono administratora.');
+        res.json({
+            loginEmail: result.rows[0].email,
+            notificationEmail: result.rows[0].notification_email
+        });
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.patch('/api/admin/settings', authenticateAdmin, async (req, res) => {
+    const { email } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('UPDATE admins SET notification_email = $1 WHERE id = $2', [email, req.user.adminId]);
+        res.json({ message: 'Zaktualizowano e-mail do powiadomień.' });
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.patch('/api/admin/credentials', authenticateAdmin, async (req, res) => {
+    const { currentPassword, newEmail, newPassword } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const result = await client.query('SELECT password_hash, email FROM admins WHERE id = $1', [req.user.adminId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: "Nie znaleziono konta administratora." });
+        }
+        const admin = result.rows[0];
+
+        const isPasswordValid = await bcrypt.compare(currentPassword, admin.password_hash);
+        if (!isPasswordValid) {
+            return res.status(403).json({ message: 'Bieżące hasło jest nieprawidłowe.' });
+        }
 
         if (newEmail && newEmail !== admin.email) {
-            query += `email = $${paramIndex++} `;
-            params.push(newEmail);
+            await client.query('UPDATE admins SET email = $1 WHERE id = $2', [newEmail, req.user.adminId]);
         }
 
         if (newPassword) {
-            if (newPassword.length < 8) return res.status(400).json({ message: "Nowe hasło musi mieć co najmniej 8 znaków." });
+            if (newPassword.length < 8) {
+                return res.status(400).json({ message: 'Nowe hasło musi mieć co najmniej 8 znaków.' });
+            }
             const newHashedPassword = await bcrypt.hash(newPassword, 10);
-            if (params.length > 0) query += ', ';
-            query += `password_hash = $${paramIndex++} `;
-            params.push(newHashedPassword);
+            await client.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [newHashedPassword, req.user.adminId]);
         }
         
-        if (params.length === 0) {
-            return res.status(200).json({ message: "Nie wprowadzono żadnych zmian." });
+        await client.query('COMMIT');
+        res.json({ message: 'Dane logowania zostały pomyślnie zaktualizowane.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        if (error.code === '23505') { // unique_violation
+            return res.status(409).json({ message: 'Ten adres e-mail jest już zajęty.' });
         }
-
-        query += `WHERE id = $${paramIndex++}`;
-        params.push(req.user.adminId);
-
-        await getPool().query(query, params);
-
-        res.json({ message: "Dane logowania zaktualizowane." });
-
-    } catch (err) {
-         if (err.code === '23505') return res.status(409).json({ message: 'Ten adres e-mail jest już zajęty.'});
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        res.status(500).json({ message: error.message });
+    } finally {
+        client.release();
     }
 });
 
-// Inbox
-app.get('/api/admin/inbox', verifyAdminToken, async (req, res) => {
+app.get('/api/admin/contact-settings', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM contact_messages ORDER BY created_at DESC');
+        const result = await client.query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
+        const settings = result.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.patch('/api/admin/contact-settings', authenticateAdmin, async (req, res) => {
+    const settings = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (const key in settings) {
+            await client.query('UPDATE app_settings SET value = $1 WHERE key = $2', [settings[key], key]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: "Zaktualizowano ustawienia." });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+// Admin Messaging
+app.get('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.post('/api/admin/messages/upload', authenticateAdmin, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'];
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
+    try {
+        const blob = await put(filename, req.body, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: `Error uploading file: ${error.message}` });
     }
 });
 
-app.patch('/api/admin/inbox/:id/read', verifyAdminToken, async (req, res) => {
+
+app.post('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) => {
+    const { content, attachment_url, attachment_type } = req.body;
+    if (!content && !attachment_url) return res.status(400).send('Wiadomość nie może być pusta.');
+    
+    const client = await getPool().connect();
     try {
-        await getPool().query('UPDATE contact_messages SET is_read = TRUE WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.delete('/api/admin/inbox/:id', verifyAdminToken, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM contact_messages WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Notifications
-app.get('/api/admin/notifications/count', verifyAdminToken, async (req, res) => {
-    try {
-        const [msgRes, inboxRes] = await Promise.all([
-            getPool().query('SELECT COUNT(*) FROM messages WHERE is_read_by_admin = FALSE AND sender = $1', ['client']),
-            getPool().query('SELECT COUNT(*) FROM contact_messages WHERE is_read = FALSE')
-        ]);
-        const total = parseInt(msgRes.rows[0].count, 10) + parseInt(inboxRes.rows[0].count, 10);
-        res.json({ count: total });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.get('/api/admin/notifications', verifyAdminToken, async (req, res) => {
-    try {
-        // Unread client messages, grouped by booking
-        const msgQuery = `
-            SELECT 'client_message' as type, m.booking_id, b.bride_name || ' & ' || b.groom_name as sender_name,
-                   COUNT(*) as unread_count, (array_agg(m.content ORDER BY m.created_at DESC))[1] as preview
-            FROM messages m
-            JOIN bookings b ON m.booking_id = b.id
-            WHERE m.is_read_by_admin = FALSE AND m.sender = 'client'
-            GROUP BY m.booking_id, sender_name;
-        `;
-        
-        // Unread inbox messages
-        const inboxQuery = `
-            SELECT 'inbox_message' as type, id as message_id, first_name || ' ' || last_name as sender_name,
-                   LEFT(subject, 50) as preview
-            FROM contact_messages
-            WHERE is_read = FALSE
-            ORDER BY created_at DESC;
-        `;
-
-        const [msgRes, inboxRes] = await Promise.all([ getPool().query(msgQuery), getPool().query(inboxQuery) ]);
-
-        const notifications = [...msgRes.rows, ...inboxRes.rows];
-        
-        res.json(notifications);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-// Admin Chat
-app.get('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-
-app.post('/api/admin/messages/:bookingId', verifyAdminToken, async (req, res) => {
-    try {
-        const { content, attachment_url, attachment_type } = req.body;
-        const result = await getPool().query(
-            'INSERT INTO messages (booking_id, sender, content, is_read_by_client, attachment_url, attachment_type) VALUES ($1, $2, $3, FALSE, $4, $5) RETURNING *',
-            [req.params.bookingId, 'admin', content, attachment_url, attachment_type]
+        await client.query('BEGIN');
+        const result = await client.query(
+            `INSERT INTO messages (booking_id, sender, content, is_read_by_client, attachment_url, attachment_type)
+             VALUES ($1, 'admin', $2, FALSE, $3, $4) RETURNING *`,
+            [req.params.bookingId, content || '', attachment_url, attachment_type]
         );
+        const newMessage = result.rows[0];
         
-        if (resend) {
-            const bookingRes = await getPool().query('SELECT bride_name, email FROM bookings WHERE id = $1', [req.params.bookingId]);
-            const clientEmail = bookingRes.rows[0].email;
-            
-            await resend.emails.send({
-                from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
-                to: clientEmail,
-                subject: 'Otrzymałeś nową wiadomość od Dreamcatcher Films',
-                html: `
-                    <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                        <h2>Otrzymałeś nową wiadomość</h2>
-                        <p>Zaloguj się do swojego panelu klienta, aby ją odczytać.</p>
-                        ${content ? `<div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin-top: 10px;">${content}</div>` : ''}
-                        ${attachment_url ? `<p style="margin-top: 10px;">Dołączono załącznik.</p>` : ''}
-                        <a href="${req.protocol}://${req.get('host')}" style="display: inline-block; background-color: #0F3E34; color: white; padding: 12px 20px; text-decoration: none; border-radius: 8px; margin-top: 20px;">Przejdź do Panelu Klienta</a>
-                    </div>
-                `,
-            });
+        const bookingInfo = await client.query('SELECT email, bride_name, groom_name FROM bookings WHERE id = $1', [req.params.bookingId]);
+        if (bookingInfo.rows.length > 0) {
+            const { email, bride_name } = bookingInfo.rows[0];
+            if (resend) {
+                 try {
+                    const { data, error } = await resend.emails.send({
+                        from: 'Dreamcatcher Films <powiadomienia@dreamcatcherfilms.co.uk>',
+                        to: email,
+                        subject: `Nowa wiadomość w Twoim panelu klienta`,
+                        html: `
+                            <h1>Cześć ${bride_name}!</h1>
+                            <p>Otrzymałaś/eś nową wiadomość w panelu klienta dotyczącą Twojej rezerwacji.</p>
+                            <p><strong>Wiadomość:</strong> ${content}</p>
+                             ${attachment_url ? `<p><strong>Załącznik:</strong> <a href="${attachment_url}">Zobacz załącznik</a></p>` : ''}
+                            <p>Zaloguj się do swojego panelu, aby zobaczyć całą konwersację i odpowiedzieć.</p>
+                            <a href="https://pwa-git-main-dreamcatcher-films-projects.vercel.app/">Przejdź do Panelu Klienta</a>
+                        `,
+                    });
+                    if(error) console.error("Resend error sending message to client:", error.message);
+                } catch (e) { console.error("Failed to send notification email to client:", e); }
+            }
         }
-
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
+        
+        await client.query('COMMIT');
+        res.status(201).json(newMessage);
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).send(error.message);
+    } finally { client.release(); }
 });
 
-app.get('/api/admin/bookings/:bookingId/unread-count', verifyAdminToken, async (req, res) => {
+
+app.get('/api/admin/bookings/:bookingId/unread-count', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query(
-            'SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = $2 AND is_read_by_admin = FALSE',
+        const result = await client.query(
+            'SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = $2 AND is_read_by_admin = FALSE', 
             [req.params.bookingId, 'client']
         );
         res.json({ count: parseInt(result.rows[0].count, 10) });
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
     }
 });
 
-app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', verifyAdminToken, async (req, res) => {
+app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        await getPool().query(
+        await client.query(
             'UPDATE messages SET is_read_by_admin = TRUE WHERE booking_id = $1 AND sender = $2',
             [req.params.bookingId, 'client']
         );
-        res.status(200).send('Messages marked as read.');
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/admin/messages/upload', verifyAdminToken, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename header' });
-    try {
-        const blob = await put(`attachments/${Date.now()}-${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch(err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
-    }
-});
-
-
-// Homepage Management
-app.get('/api/admin/homepage/slides', verifyAdminToken, async(req,res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC');
-        res.json(result.rows);
-    } catch(err) {
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    }
-});
-app.post('/api/admin/homepage/slides', verifyAdminToken, async(req,res) => {
-    try {
-        const { image_url, title, subtitle, button_text, button_link } = req.body;
-        await getPool().query(
-            `INSERT INTO homepage_carousel_slides (image_url, title, subtitle, button_text, button_link) VALUES ($1, $2, $3, $4, $5)`,
-            [image_url, title, subtitle, button_text, button_link]
-        );
-        res.status(201).send();
-    } catch(err) {
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    }
-});
-app.patch('/api/admin/homepage/slides/:id', verifyAdminToken, async(req,res) => {
-     try {
-        const { image_url, title, subtitle, button_text, button_link } = req.body;
-        await getPool().query(
-            `UPDATE homepage_carousel_slides SET image_url=$1, title=$2, subtitle=$3, button_text=$4, button_link=$5 WHERE id=$6`,
-            [image_url, title, subtitle, button_text, button_link, req.params.id]
-        );
-        res.status(200).send();
-    } catch(err) {
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    }
-});
-app.delete('/api/admin/homepage/slides/:id', verifyAdminToken, async(req,res) => {
-     try {
-        const slideRes = await getPool().query('SELECT image_url FROM homepage_carousel_slides WHERE id=$1', [req.params.id]);
-        if(slideRes.rows.length > 0) await del(slideRes.rows[0].image_url);
-        await getPool().query('DELETE FROM homepage_carousel_slides WHERE id=$1', [req.params.id]);
-        res.status(204).send();
-    } catch(err) {
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    }
-});
-app.post('/api/admin/homepage/slides/upload', verifyAdminToken, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename' });
-    try {
-        const blob = await put(`homepage/${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch (err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
-    }
-});
-app.post('/api/admin/homepage/slides/order', verifyAdminToken, async (req, res) => {
+// Admin Homepage Content
+app.get('/api/admin/homepage/slides', authenticateAdmin, async(req, res) => {
     const client = await getPool().connect();
     try {
-        const { orderedIds } = req.body; // Array of slide IDs in the new order
+        const result = await client.query('SELECT * FROM homepage_carousel_slides ORDER BY sort_order ASC, id DESC');
+        res.json(result.rows);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.post('/api/admin/homepage/slides/upload', authenticateAdmin, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'];
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
+    try {
+        const blob = await put(filename, req.body, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: `Error uploading file: ${error.message}` });
+    }
+});
+app.post('/api/admin/homepage/slides', authenticateAdmin, async(req, res) => {
+    const { image_url, title, subtitle, button_text, button_link } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('INSERT INTO homepage_carousel_slides (image_url, title, subtitle, button_text, button_link) VALUES ($1, $2, $3, $4, $5) RETURNING *', [image_url, title, subtitle, button_text, button_link]);
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.patch('/api/admin/homepage/slides/:id', authenticateAdmin, async(req, res) => {
+    const { image_url, title, subtitle, button_text, button_link } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('UPDATE homepage_carousel_slides SET image_url=$1, title=$2, subtitle=$3, button_text=$4, button_link=$5 WHERE id=$6 RETURNING *', [image_url, title, subtitle, button_text, button_link, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.delete('/api/admin/homepage/slides/:id', authenticateAdmin, async(req, res) => {
+    const client = await getPool().connect();
+    try {
+        const slide = await client.query('SELECT image_url FROM homepage_carousel_slides WHERE id=$1', [req.params.id]);
+        if (slide.rows.length > 0 && slide.rows[0].image_url) await del(slide.rows[0].image_url);
+        await client.query('DELETE FROM homepage_carousel_slides WHERE id=$1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.post('/api/admin/homepage/slides/order', authenticateAdmin, async(req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
         await client.query('BEGIN');
         for (let i = 0; i < orderedIds.length; i++) {
             await client.query('UPDATE homepage_carousel_slides SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
         }
         await client.query('COMMIT');
-        res.status(200).send('Order updated successfully.');
-    } catch (err) {
+        res.sendStatus(200);
+    } catch(e) {
         await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server Error: ${err.message}` });
-    } finally {
-        client.release();
-    }
+        res.status(500).send(e.message)
+    } finally { client.release() }
 });
 
 
-app.get('/api/admin/homepage/about', verifyAdminToken, async (req,res) => {
-     try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')");
-        const data = result.rows.reduce((acc, row) => ({...acc, [row.key.replace('about_us_','')]: row.value}), {});
-        res.json(data);
-    } catch(err) {
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    }
-});
-app.patch('/api/admin/homepage/about', verifyAdminToken, async (req,res) => {
+app.get('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
     const client = await getPool().connect();
     try {
-        const { title, text, image_url } = req.body;
+        const result = await client.query("SELECT key, value FROM app_settings WHERE key LIKE 'about_us_%'");
+        const settings = result.rows.reduce((acc, row) => {
+            const key = row.key.replace('about_us_', '');
+            acc[key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.post('/api/admin/homepage/about/upload', authenticateAdmin, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'];
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
+    try {
+        const blob = await put(filename, req.body, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: `Error uploading file: ${error.message}` });
+    }
+});
+app.patch('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
+    const { title, text, image_url } = req.body;
+    const client = await getPool().connect();
+    try {
         await client.query('BEGIN');
-        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_title'", [title]);
-        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_text'", [text]);
-        await client.query("UPDATE app_settings SET value=$1 WHERE key='about_us_image_url'", [image_url]);
+        await client.query("UPDATE app_settings SET value = $1 WHERE key = 'about_us_title'", [title]);
+        await client.query("UPDATE app_settings SET value = $1 WHERE key = 'about_us_text'", [text]);
+        await client.query("UPDATE app_settings SET value = $1 WHERE key = 'about_us_image_url'", [image_url]);
         await client.query('COMMIT');
-        res.status(200).send();
-    } catch(err) {
+        res.json({ message: "Updated" });
+    } catch (e) {
         await client.query('ROLLBACK');
-        res.status(500).json({message: `Server Error: ${err.message}`});
-    } finally {
-        client.release();
-    }
-});
-app.post('/api/admin/homepage/about/upload', verifyAdminToken, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename' });
-    try {
-        const oldImageRes = await getPool().query("SELECT value FROM app_settings WHERE key='about_us_image_url'");
-        if(oldImageRes.rows.length > 0 && oldImageRes.rows[0].value) await del(oldImageRes.rows[0].value);
-
-        const blob = await put(`homepage/about/${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch (err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
-    }
+        res.status(500).send(e.message)
+    } finally { client.release() }
 });
 
-app.get('/api/admin/homepage/testimonials', verifyAdminToken, async (req, res) => {
+app.get('/api/admin/homepage/testimonials', authenticateAdmin, async(req, res) => {
+     const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC');
+        const result = await client.query('SELECT * FROM homepage_testimonials ORDER BY created_at DESC');
         res.json(result.rows);
-    } catch(err) { res.status(500).json({message: `Server Error: ${err.message}`}); }
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
 });
-app.post('/api/admin/homepage/testimonials', verifyAdminToken, async (req, res) => {
-    try {
-        const { author, content } = req.body;
-        await getPool().query('INSERT INTO homepage_testimonials (author, content) VALUES ($1, $2)', [author, content]);
-        res.status(201).send();
-    } catch(err) { res.status(500).json({message: `Server Error: ${err.message}`}); }
-});
-app.patch('/api/admin/homepage/testimonials/:id', verifyAdminToken, async (req, res) => {
-     try {
-        const { author, content } = req.body;
-        await getPool().query('UPDATE homepage_testimonials SET author=$1, content=$2 WHERE id=$3', [author, content, req.params.id]);
-        res.status(200).send();
-    } catch(err) { res.status(500).json({message: `Server Error: ${err.message}`}); }
-});
-app.delete('/api/admin/homepage/testimonials/:id', verifyAdminToken, async (req, res) => {
-     try {
-        await getPool().query('DELETE FROM homepage_testimonials WHERE id=$1', [req.params.id]);
-        res.status(204).send();
-    } catch(err) { res.status(500).json({message: `Server Error: ${err.message}`}); }
-});
-
-app.get('/api/admin/homepage/instagram', verifyAdminToken, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC');
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-app.post('/api/admin/homepage/instagram', verifyAdminToken, async (req, res) => {
-    try {
-        const { post_url, image_url, caption } = req.body;
-        await getPool().query(
-            'INSERT INTO homepage_instagram_posts (post_url, image_url, caption) VALUES ($1, $2, $3)',
-            [post_url, image_url, caption]
-        );
-        res.status(201).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-app.delete('/api/admin/homepage/instagram/:id', verifyAdminToken, async (req, res) => {
-    try {
-        const postRes = await getPool().query('SELECT image_url FROM homepage_instagram_posts WHERE id=$1', [req.params.id]);
-        if (postRes.rows.length > 0) await del(postRes.rows[0].image_url);
-        await getPool().query('DELETE FROM homepage_instagram_posts WHERE id=$1', [req.params.id]);
-        res.status(204).send();
-    } catch (err) {
-        res.status(500).json({ message: `Server error: ${err.message}` });
-    }
-});
-app.post('/api/admin/homepage/instagram/upload', verifyAdminToken, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'];
-    if (!filename) return res.status(400).json({ message: 'Missing filename' });
-    try {
-        const blob = await put(`homepage/instagram/${filename}`, req, { access: 'public' });
-        res.json(blob);
-    } catch (err) {
-        res.status(500).json({ message: `Upload error: ${err.message}` });
-    }
-});
-app.post('/api/admin/homepage/instagram/order', verifyAdminToken, async (req, res) => {
+app.post('/api/admin/homepage/testimonials', authenticateAdmin, async(req, res) => {
+    const { author, content } = req.body;
     const client = await getPool().connect();
     try {
-        const { orderedIds } = req.body;
+        const result = await client.query('INSERT INTO homepage_testimonials (author, content) VALUES ($1, $2) RETURNING *', [author, content]);
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.patch('/api/admin/homepage/testimonials/:id', authenticateAdmin, async(req, res) => {
+    const { author, content } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('UPDATE homepage_testimonials SET author=$1, content=$2 WHERE id=$3 RETURNING *', [author, content, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.delete('/api/admin/homepage/testimonials/:id', authenticateAdmin, async(req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM homepage_testimonials WHERE id=$1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+
+app.get('/api/admin/homepage/instagram', authenticateAdmin, async(req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM homepage_instagram_posts ORDER BY sort_order ASC, id DESC');
+        res.json(result.rows);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.post('/api/admin/homepage/instagram/upload', authenticateAdmin, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'];
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
+    try {
+        const blob = await put(filename, req.body, { access: 'public' });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: `Error uploading file: ${error.message}` });
+    }
+});
+app.post('/api/admin/homepage/instagram', authenticateAdmin, async(req, res) => {
+    const { post_url, image_url, caption } = req.body;
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('INSERT INTO homepage_instagram_posts (post_url, image_url, caption) VALUES ($1, $2, $3) RETURNING *', [post_url, image_url, caption]);
+        res.status(201).json(result.rows[0]);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.delete('/api/admin/homepage/instagram/:id', authenticateAdmin, async(req, res) => {
+    const client = await getPool().connect();
+    try {
+        const post = await client.query('SELECT image_url FROM homepage_instagram_posts WHERE id=$1', [req.params.id]);
+        if (post.rows.length > 0 && post.rows[0].image_url) await del(post.rows[0].image_url);
+        await client.query('DELETE FROM homepage_instagram_posts WHERE id=$1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (e) { res.status(500).send(e.message) } finally { client.release() }
+});
+app.post('/api/admin/homepage/instagram/order', authenticateAdmin, async(req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
         await client.query('BEGIN');
         for (let i = 0; i < orderedIds.length; i++) {
             await client.query('UPDATE homepage_instagram_posts SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
         }
         await client.query('COMMIT');
-        res.status(200).send('Order updated successfully.');
-    } catch (err) {
+        res.sendStatus(200);
+    } catch(e) {
         await client.query('ROLLBACK');
-        res.status(500).json({ message: `Server Error: ${err.message}` });
-    } finally {
-        client.release();
-    }
+        res.status(500).send(e.message)
+    } finally { client.release() }
 });
 
-// This is an older, likely unused endpoint. Keeping for safety but should be reviewed.
-app.get('/api/validate-discount-old', async (req, res) => {
-  try {
-    const { code } = req.body;
-    if (!code) {
-      return res.status(400).json({ message: 'Kod rabatowy jest wymagany.' });
-    }
-    const result = await getPool().query('SELECT * FROM discount_codes WHERE code = $1', [code]);
-    if (result.rows.length > 0) {
-      res.json(result.rows[0]);
-    } else {
-      res.status(404).json({ message: 'Nieprawidłowy kod rabatowy.' });
-    }
-  } catch (err) {
-    res.status(500).send(`Server error: ${err.message}`);
-  }
+// Admin Inbox
+app.get('/api/admin/inbox', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query('SELECT * FROM contact_messages ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+app.patch('/api/admin/inbox/:id/read', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('UPDATE contact_messages SET is_read = TRUE WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+app.delete('/api/admin/inbox/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('DELETE FROM contact_messages WHERE id = $1', [req.params.id]);
+        res.sendStatus(204);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+// Admin Notifications
+app.get('/api/admin/notifications', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const unreadClientMessages = await client.query(`
+            SELECT 
+                'client_message' as type,
+                m.booking_id,
+                b.bride_name || ' & ' || b.groom_name as sender_name,
+                COUNT(m.id) as unread_count,
+                (array_agg(m.content ORDER BY m.created_at DESC))[1] as preview
+            FROM messages m
+            JOIN bookings b ON m.booking_id = b.id
+            WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE
+            GROUP BY m.booking_id, sender_name;
+        `);
+        const unreadInboxMessages = await client.query(`
+            SELECT 
+                'inbox_message' as type,
+                id as message_id,
+                first_name || ' ' || last_name as sender_name,
+                message as preview
+            FROM contact_messages
+            WHERE is_read = FALSE
+            ORDER BY created_at DESC;
+        `);
+
+        res.json([...unreadClientMessages.rows, ...unreadInboxMessages.rows]);
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+app.get('/api/admin/notifications/count', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        const result = await client.query(`
+            SELECT SUM(unread) as total_unread
+            FROM (
+                SELECT COUNT(*) as unread FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE
+                UNION ALL
+                SELECT COUNT(*) as unread FROM contact_messages WHERE is_read = FALSE
+            ) as counts;
+        `);
+        res.json({ count: parseInt(result.rows[0].total_unread || '0', 10) });
+    } catch (error) {
+        res.status(500).send(error.message);
+    } finally { client.release(); }
+});
+
+
+// --- Server Start ---
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
 
 export default app;
