@@ -1,5 +1,5 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon } from '../components/Icons.tsx';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, LoadingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import { Page } from '../App.tsx';
@@ -20,14 +20,66 @@ interface Package {
     name: string;
     price: number;
     description: string;
+    type: 'film' | 'photo' | 'combo';
     included: PackageAddon[];
 }
 
 // --- UI COMPONENTS ---
-interface PackageCardProps {
-    packageInfo: Package;
-    onSelect: (packageId: number) => void;
-}
+const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentStep, steps }) => (
+    <nav aria-label="Progress">
+        <ol role="list" className="flex items-center">
+            {steps.map((step, stepIdx) => (
+                <li key={step} className={`relative ${stepIdx !== steps.length - 1 ? 'pr-8 sm:pr-20' : ''}`}>
+                    {stepIdx < currentStep ? (
+                        <>
+                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div className="h-0.5 w-full bg-indigo-600" />
+                            </div>
+                            <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600">
+                                <CheckCircleIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-indigo-600">{step}</span>
+                        </>
+                    ) : stepIdx === currentStep ? (
+                        <>
+                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div className="h-0.5 w-full bg-slate-200" />
+                            </div>
+                            <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-indigo-600 bg-white">
+                                <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />
+                            </div>
+                             <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-indigo-600">{step}</span>
+                        </>
+                    ) : (
+                        <>
+                             <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div className="h-0.5 w-full bg-slate-200" />
+                            </div>
+                            <div className="group relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
+                                <span className="h-2.5 w-2.5 rounded-full bg-transparent" />
+                            </div>
+                             <span className="absolute -bottom-7 w-max text-center text-xs font-semibold text-slate-500">{step}</span>
+                        </>
+                    )}
+                </li>
+            ))}
+        </ol>
+    </nav>
+);
+
+
+const ServiceTypeCard: FC<{ title: string; icon: ReactNode; onClick: () => void }> = ({ title, icon, onClick }) => (
+    <div
+        onClick={onClick}
+        className="group cursor-pointer rounded-2xl border-2 border-slate-200 bg-white p-8 text-center transition-all duration-300 hover:border-indigo-400 hover:shadow-xl hover:-translate-y-2"
+    >
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-indigo-100">
+            {icon}
+        </div>
+        <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{title}</h3>
+    </div>
+);
+
 
 const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
     <div
@@ -47,6 +99,11 @@ const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
         </ul>
     </div>
 );
+interface PackageCardProps {
+    packageInfo: Package;
+    onSelect: (packageId: number) => void;
+}
+
 
 interface CustomizationListItemProps {
     item: PackageAddon;
@@ -198,13 +255,16 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
 };
 
 
-// --- MAIN CALCULATOR APP ---
+// --- MAIN CREATOR APP ---
 interface CalculatorPageProps {
     navigateTo: (page: Page) => void;
 }
 
+const STEPS = ['Usługa', 'Pakiet', 'Dostosowanie', 'Rezerwacja'];
+
 const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
-    const [step, setStep] = useState<'selection' | 'customization' | 'form' | 'booked'>('selection');
+    const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
+    const [serviceType, setServiceType] = useState<'film' | 'photo' | 'combo' | null>(null);
     const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
     const [customizedItems, setCustomizedItems] = useState<number[]>([]);
     const [totalPrice, setTotalPrice] = useState(0);
@@ -219,6 +279,16 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [allAddons, setAllAddons] = useState<Addon[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    
+    const currentStepIndex = () => {
+        switch(step) {
+            case 'serviceType': return 0;
+            case 'selection': return 1;
+            case 'customization': return 2;
+            case 'form': return 3;
+            default: return 0;
+        }
+    };
 
     useEffect(() => {
         const fetchOffer = async () => {
@@ -265,6 +335,11 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
         setTotalPrice(finalPrice);
     }, [selectedPackage, customizedItems, allAddons]);
 
+    const handleSelectServiceType = (type: 'film' | 'photo' | 'combo') => {
+        setServiceType(type);
+        setStep('selection');
+    }
+
     const handleSelectPackage = (packageId: number) => {
         setSelectedPackageId(packageId);
         const pkg = packages.find(p => p.id === packageId);
@@ -300,7 +375,8 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     };
     
     const resetCalculator = () => {
-        setStep('selection');
+        setStep('serviceType');
+        setServiceType(null);
         setSelectedPackageId(null);
         setCustomizedItems([]);
         setTotalPrice(0);
@@ -316,6 +392,8 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             setTimeout(() => setCopySuccess(false), 2000);
         }
     };
+    
+    const filteredPackages = serviceType ? packages.filter(p => p.type === serviceType) : [];
 
     if (isLoading) {
         return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
@@ -326,12 +404,6 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     }
 
     if (step === 'booked') {
-        const addonMap = new Map(allAddons.map(a => [a.id, a]));
-        if (selectedPackage) {
-            selectedPackage.included.forEach(i => addonMap.set(i.id, i));
-        }
-        const selectedItemNames = customizedItems.map(id => addonMap.get(id)?.name).filter(Boolean);
-
         return (
             <div className="max-w-2xl mx-auto text-center py-20">
                  <CheckCircleIcon className="w-24 h-24 text-green-500 mx-auto mb-6" />
@@ -375,45 +447,49 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                     <button 
                         onClick={resetCalculator}
                         className="bg-slate-200 text-slate-800 font-bold py-3 px-6 rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition">
-                        Stwórz nową kalkulację
+                        Stwórz nowy pakiet
                     </button>
                 </div>
             </div>
         );
     }
-
-    if (step === 'form') {
-        const addonMap = new Map(allAddons.map(a => [a.id, a]));
-        if (selectedPackage) {
-            selectedPackage.included.forEach(i => addonMap.set(i.id, i));
-        }
-        const selectedItemNames = customizedItems.map(id => addonMap.get(id)?.name).filter(Boolean);
-
-        return (
-            <BookingForm
-                bookingDetails={{
-                    accessKey: validatedAccessKey,
-                    packageName: selectedPackage?.name || '',
-                    totalPrice: totalPrice,
-                    selectedItems: selectedItemNames,
-                }}
-                onBookingComplete={handleBookingComplete}
-                onBack={() => setStep('customization')}
-            />
-        );
-    }
     
+    const renderServiceTypeScreen = () => (
+        <div>
+             <header className="text-center mb-10">
+                <h1 className="text-4xl font-bold tracking-tight text-slate-900">Stwórz Swój Pakiet</h1>
+                <p className="mt-2 text-lg text-slate-600">Zacznijmy od wyboru usługi, która Cię interesuje.</p>
+            </header>
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+                <ServiceTypeCard title="Film" icon={<FilmIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('film')} />
+                <ServiceTypeCard title="Fotografia" icon={<CameraIcon className="w-8 h-8 text-indigo-500" />} onClick={() => handleSelectServiceType('photo')} />
+                <ServiceTypeCard title="Film + Fotografia" icon={<><FilmIcon className="w-7 h-7 text-indigo-500" /><CameraIcon className="w-7 h-7 text-indigo-500" /></>} onClick={() => handleSelectServiceType('combo')} />
+            </div>
+        </div>
+    );
+
     const renderSelectionScreen = () => (
         <div>
-            <header className="text-center mb-10">
+            <header className="relative text-center mb-10">
+                <button 
+                    onClick={() => setStep('serviceType')} 
+                    className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group">
+                    <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" />
+                     Wróć
+                </button>
                 <h1 className="text-4xl font-bold tracking-tight text-slate-900">Wybierz swój pakiet</h1>
                 <p className="mt-2 text-lg text-slate-600">Zacznij od pakietu bazowego i dostosuj go do swoich potrzeb.</p>
             </header>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {packages.map(pkg => (
+                {filteredPackages.map(pkg => (
                     <PackageCard key={pkg.id} packageInfo={pkg} onSelect={handleSelectPackage} />
                 ))}
             </div>
+            {filteredPackages.length === 0 && (
+                <div className="text-center py-12 text-slate-500">
+                    <p>Brak dostępnych pakietów dla wybranej usługi.</p>
+                </div>
+            )}
         </div>
     );
 
@@ -457,7 +533,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
                         )}
                     </div>
                     <div className="lg:col-span-1 mt-8 lg:mt-0">
-                        <div className="sticky top-8 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
+                        <div className="sticky top-28 bg-white rounded-2xl shadow-lg p-6 lg:p-8">
                             <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
                             <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
                             
@@ -484,10 +560,39 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
             </div>
        );
     };
+    
+    const renderContent = () => {
+        switch(step) {
+            case 'form':
+                return (
+                    <div className="max-w-4xl mx-auto">
+                        <BookingForm
+                            bookingDetails={{
+                                accessKey: validatedAccessKey,
+                                packageName: selectedPackage?.name || '',
+                                totalPrice: totalPrice,
+                                selectedItems: customizedItems.map(id => allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
+                            }}
+                            onBookingComplete={handleBookingComplete}
+                            onBack={() => setStep('customization')}
+                        />
+                    </div>
+                );
+            case 'serviceType': return renderServiceTypeScreen();
+            case 'selection': return renderSelectionScreen();
+            case 'customization': return renderCustomizationScreen();
+            default: return renderServiceTypeScreen();
+        }
+    };
 
     return (
         <>
-            {step === 'selection' ? renderSelectionScreen() : renderCustomizationScreen()}
+            {step !== 'booked' && (
+                <div className="mb-12 pb-4">
+                    <StepIndicator currentStep={currentStepIndex()} steps={STEPS} />
+                </div>
+            )}
+            {renderContent()}
             <BookingModal 
                 isOpen={isBookingModalOpen} 
                 onClose={() => setIsBookingModalOpen(false)}
