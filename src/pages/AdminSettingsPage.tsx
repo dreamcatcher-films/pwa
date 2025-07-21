@@ -1,11 +1,14 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon, TrashIcon } from '../components/Icons.tsx';
 
 const AdminSettingsPage: React.FC = () => {
     const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [dbMessage, setDbMessage] = useState('');
+    
+    const [resetStatus, setResetStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [resetMessage, setResetMessage] = useState('');
 
     const [notificationEmail, setNotificationEmail] = useState('');
     const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -84,6 +87,35 @@ const AdminSettingsPage: React.FC = () => {
         } catch (err) {
             setDbStatus('error');
             setDbMessage(err instanceof Error ? err.message : 'Nie udało się zainicjować bazy danych.');
+        }
+    };
+
+    const handleResetDb = async () => {
+        const confirmation = prompt('To jest operacja nieodwracalna, która usunie WSZYSTKIE dane z bazy. Aby kontynuować, wpisz "RESETUJ".');
+        if (confirmation !== 'RESETUJ') {
+            alert('Resetowanie przerwane.');
+            return;
+        }
+
+        setResetStatus('loading');
+        setResetMessage('');
+
+        try {
+            const response = await fetch('/api/admin/reset-database', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Wystąpił nieznany błąd.');
+            }
+
+            setResetStatus('success');
+            setResetMessage(data.message);
+        } catch (err) {
+            setResetStatus('error');
+            setResetMessage(err instanceof Error ? err.message : 'Nie udało się zresetować bazy danych.');
         }
     };
     
@@ -299,7 +331,7 @@ const AdminSettingsPage: React.FC = () => {
                 <div className="bg-white rounded-2xl shadow p-6">
                     <h3 className="text-lg font-semibold text-slate-900">Zarządzanie Bazą Danych</h3>
                     <p className="mt-1 text-sm text-slate-600">
-                        Jeśli aplikacja nie działa poprawnie lub widzisz błędy, możesz ręcznie uruchomić proces inicjalizacji i migracji schematu bazy danych.
+                        Jeśli aplikacja nie działa poprawnie, możesz ręcznie uruchomić proces aktualizacji schematu bazy danych.
                     </p>
                     <div className="mt-6">
                         <button
@@ -331,6 +363,48 @@ const AdminSettingsPage: React.FC = () => {
                                     <div>
                                         <p className="font-bold">Błąd!</p>
                                         <p>{dbMessage}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-white rounded-2xl shadow p-6 border-2 border-red-200">
+                    <h3 className="text-lg font-semibold text-red-800">Strefa Niebezpieczna</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                        Poniższa operacja jest nieodwracalna. Spowoduje usunięcie **wszystkich danych** z bazy i utworzenie jej na nowo. Używaj tylko w przypadku poważnych błędów lub gdy chcesz zacząć od zera.
+                    </p>
+                    <div className="mt-6">
+                        <button
+                            onClick={handleResetDb}
+                            disabled={resetStatus === 'loading'}
+                            className="flex items-center justify-center gap-2 bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed transition w-full sm:w-auto"
+                        >
+                            {resetStatus === 'loading' ? (
+                                <LoadingSpinner className="w-5 h-5" />
+                            ) : (
+                                <TrashIcon className="w-5 h-5" />
+                            )}
+                            <span>{resetStatus === 'loading' ? 'Resetowanie...' : 'Wyczyść i zresetuj bazę danych'}</span>
+                        </button>
+                    </div>
+                     {resetMessage && (
+                        <div className="mt-4 p-3 rounded-lg text-sm" role="alert">
+                            {resetStatus === 'success' && (
+                                <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg">
+                                    <CheckCircleIcon className="w-5 h-5" />
+                                    <div>
+                                        <p className="font-bold">Sukces!</p>
+                                        <p>{resetMessage}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {resetStatus === 'error' && (
+                                 <div className="flex items-center gap-2 text-red-700 bg-red-50 p-3 rounded-lg">
+                                    <div>
+                                        <p className="font-bold">Błąd!</p>
+                                        <p>{resetMessage}</p>
                                     </div>
                                 </div>
                             )}
