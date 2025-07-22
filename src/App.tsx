@@ -87,10 +87,8 @@ const App = () => {
     const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin' || currentPage === 'login';
     const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
 
-    // This new structure creates a single stacking context, ensuring the SideMenu (with z-50/z-60)
-    // always renders on top of the Header (z-40) and main content.
     return (
-        <div className="relative flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen">
             <Header
                 onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                 onViewDetails={handleViewBookingDetails}
