@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate } from 'react-router-dom';
 import { EngagementRingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
 import { HeroCarousel } from '../components/HeroCarousel.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-interface HomePageProps {
-    navigateTo: (page: Page) => void;
-}
 
 interface Slide {
     id: number;
@@ -44,10 +40,11 @@ interface HomePageContent {
     aboutSection: AboutSection;
 }
 
-const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
+const HomePage: React.FC = () => {
     const [content, setContent] = useState<HomePageContent | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchContent = async () => {
@@ -83,7 +80,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
 
     return (
         <div className="space-y-16 md:space-y-24">
-            {slides.length > 0 && <HeroCarousel slides={slides} navigateTo={navigateTo} />}
+            {slides.length > 0 && <HeroCarousel slides={slides} />}
             
             <section className="max-w-5xl mx-auto text-center py-16 px-4 sm:px-6 lg:px-8">
                 <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Gotowi, by stworzyć własną historię?</h2>
@@ -92,13 +89,13 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo }) => {
                 </p>
                 <div className="mt-10 flex justify-center gap-4 flex-wrap">
                      <button
-                        onClick={() => navigateTo('calculator')}
+                        onClick={() => navigate('/kalkulator')}
                         className="bg-brand-dark-green text-white font-bold py-4 px-8 rounded-lg hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-transform hover:scale-105 shadow-lg"
                     >
                         Stwórz Swój Pakiet
                     </button>
                     <button
-                        onClick={() => navigateTo('contact')}
+                        onClick={() => navigate('/kontakt')}
                         className="bg-slate-200 text-slate-800 font-bold py-4 px-8 rounded-lg hover:bg-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-400 transition"
                     >
                        Skontaktuj się z nami
