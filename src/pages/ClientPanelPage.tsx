@@ -83,9 +83,10 @@ const ClientPanelPage: React.FC = () => {
     useEffect(() => {
         if (error) {
             localStorage.removeItem('authToken');
+            queryClient.clear();
             navigate('/logowanie');
         }
-    }, [error, navigate]);
+    }, [error, navigate, queryClient]);
     
      useEffect(() => {
         if (data?.booking) {
@@ -133,6 +134,7 @@ const ClientPanelPage: React.FC = () => {
     
     const handleLogout = () => {
         localStorage.removeItem('authToken');
+        queryClient.clear();
         navigate('/');
     };
 
@@ -217,7 +219,7 @@ const ClientPanelPage: React.FC = () => {
                             })}
                         </div>
                     </InfoCard>
-
+                    
                      <InfoCard 
                         title="Szczegóły Wydarzenia" 
                         icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500"/>}
@@ -258,6 +260,13 @@ const ClientPanelPage: React.FC = () => {
                                 <InfoItem label="Dodatkowe informacje" value={booking.additional_info} />
                             </>
                         )}
+                    </InfoCard>
+
+                    <InfoCard title="Dane Pary Młodej" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500"/>}>
+                        <InfoItem label="Panna Młoda" value={booking.bride_name} />
+                        <InfoItem label="Pan Młody" value={booking.groom_name} />
+                        <InfoItem label="Adres e-mail" value={booking.email} />
+                        <InfoItem label="Numer telefonu" value={booking.phone_number} />
                     </InfoCard>
 
                     <div className="bg-white rounded-2xl shadow-md">
@@ -313,12 +322,6 @@ const ClientPanelPage: React.FC = () => {
                                 <p className="text-lg font-bold text-slate-900">Suma</p>
                                 <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(booking.total_price))}</p>
                             </div>
-                        </InfoCard>
-                         <InfoCard title="Dane Pary Młodej" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500"/>}>
-                            <InfoItem label="Panna Młoda" value={booking.bride_name} />
-                            <InfoItem label="Pan Młody" value={booking.groom_name} />
-                            <InfoItem label="Adres e-mail" value={booking.email} />
-                            <InfoItem label="Numer telefonu" value={booking.phone_number} />
                         </InfoCard>
                         <InfoCard title="Podsumowanie pakietu">
                             <InfoItem label="Wybrany pakiet" value={booking.package_name} />
