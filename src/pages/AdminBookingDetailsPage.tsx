@@ -1,14 +1,9 @@
 import React, { useState, useEffect, useRef, FC } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate, useParams } from 'react-router-dom';
 import { LoadingSpinner, ArrowLeftIcon, UserGroupIcon, MapPinIcon, CalendarDaysIcon, PencilSquareIcon, CheckCircleIcon, PlusCircleIcon, TrashIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon, ChevronDownIcon, EnvelopeIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
-
-interface AdminBookingDetailsPageProps {
-    navigateTo: (page: Page) => void;
-    bookingId: number;
-}
 
 const AddressWithMapLink: FC<{ address: string | null }> = ({ address }) => {
     if (!address) return <span className="italic text-slate-400">Brak danych</span>;
@@ -80,7 +75,9 @@ interface Message {
 }
 
 
-const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navigateTo, bookingId }) => {
+const AdminBookingDetailsPage: React.FC = () => {
+    const { bookingId } = useParams<{ bookingId: string }>();
+    const navigate = useNavigate();
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -114,7 +111,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const token = localStorage.getItem('adminAuthToken');
 
     const fetchAllData = async () => {
-        if (!token) { navigateTo('adminLogin'); return; }
+        if (!token) { navigate('/admin/logowanie'); return; }
 
         try {
             const [bookingRes, bookingStagesRes, allStagesRes, messagesRes, unreadCountRes] = await Promise.all([
@@ -127,7 +124,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
             
             if (bookingRes.status === 401 || bookingRes.status === 403) {
                  localStorage.removeItem('adminAuthToken');
-                 navigateTo('adminLogin');
+                 navigate('/admin/logowanie');
                  return;
             }
 
@@ -160,7 +157,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
 
     useEffect(() => {
         fetchAllData();
-    }, [navigateTo, bookingId, token]);
+    }, [navigate, bookingId, token]);
 
     useEffect(() => {
         if(isChatOpen) {
@@ -184,7 +181,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         }
     };
 
-    const handleBack = () => navigateTo('adminDashboard');
+    const handleBack = () => navigate('/admin/rezerwacje');
     
     const handleDeleteBooking = async () => {
         if (!window.confirm(`Czy na pewno chcesz usunąć rezerwację #${bookingId}? Tej operacji nie można cofnąć.`)) { return; }
@@ -192,7 +189,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
         try {
             const response = await fetch(`/api/admin/bookings/${bookingId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
             if (!response.ok) throw new Error(await response.text() || 'Nie udało się usunąć rezerwacji.');
-            navigateTo('adminDashboard');
+            navigate('/admin/rezerwacje');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
         }
@@ -399,14 +396,14 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
     const availableStagesToAdd = allStageTemplates.filter(template => !bookingStages.some(bs => bs.name === template.name));
 
     return (
-        <div className="max-w-7xl mx-auto p-6 sm:p-8 lg:p-10">
+        <div>
             <header className="relative mb-10">
                 <div className="flex justify-between items-start">
                     <div>
                         <button onClick={handleBack} className="flex items-center text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group mb-4">
-                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do panelu
+                            <ArrowLeftIcon className="w-5 h-5 mr-2 transition-transform group-hover:-translate-x-1" /> Wróć do listy rezerwacji
                         </button>
-                        <div className="text-center sm:text-left">
+                        <div className="text-left">
                             <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły rezerwacji #{bookingData.id}</h1>
                             <p className="mt-2 text-lg text-slate-600">Klient: {bookingData.bride_name} & {bookingData.groom_name}</p>
                         </div>
@@ -589,7 +586,7 @@ const AdminBookingDetailsPage: React.FC<AdminBookingDetailsPageProps> = ({ navig
                 </div>
 
                  <div className="lg:col-span-1">
-                    <div className="sticky top-8 space-y-8">
+                    <div className="sticky top-28 space-y-8">
                          <InfoCard title="Pakiet i Wycena" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                             <InfoItem label="Wybrany pakiet" value={bookingData.package_name} />
                             <InfoItem label="Wybrane usługi" value={<ul className="list-disc list-inside mt-1 font-medium">{bookingData.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}</ul>} />
