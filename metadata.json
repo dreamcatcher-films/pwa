@@ -1,6 +1,9 @@
+
 {
-  "name": "Backend. Dreamcatcher Films App",
+  "name": "Ver 0.2. Dreamcatcher Films App",
   "description": "An advanced, interactive calculator for clients to select a package and customize it with add-ons to estimate the cost of photo and video services.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "prompt": ""
 }
