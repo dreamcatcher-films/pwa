@@ -97,7 +97,7 @@ const AdminDashboardPage: React.FC = () => {
             )}
 
             {/* Sidebar */}
-            <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`fixed inset-y-0 left-0 z-20 w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="p-4 flex justify-between items-center md:hidden border-b border-slate-200">
                     <h2 className="font-bold text-lg text-slate-800">Menu</h2>
                     <button onClick={() => setIsSidebarOpen(false)} className="p-2">
