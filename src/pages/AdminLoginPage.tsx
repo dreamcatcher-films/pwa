@@ -1,24 +1,20 @@
-
 import React, { useState, useEffect } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate } from 'react-router-dom';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
 
-interface AdminLoginPageProps {
-    navigateTo: (page: Page) => void;
-}
-
-const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
+const AdminLoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const token = localStorage.getItem('adminAuthToken');
         if (token) {
-            navigateTo('adminDashboard');
+            navigate('/admin');
         }
-    }, [navigateTo]);
+    }, [navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,7 +35,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
             
             const data = await response.json();
             localStorage.setItem('adminAuthToken', data.token);
-            navigateTo('adminDashboard');
+            navigate('/admin');
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -49,7 +45,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ navigateTo }) => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center py-12">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center py-12">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Panel Administratora</h1>
