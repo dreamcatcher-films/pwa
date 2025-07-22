@@ -1,5 +1,5 @@
 import React, { useRef, MouseEvent, TouchEvent, useEffect } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate } from 'react-router-dom';
 
 interface Slide {
     id: number;
@@ -12,10 +12,9 @@ interface Slide {
 
 interface HeroCarouselProps {
     slides: Slide[];
-    navigateTo: (page: Page) => void;
 }
 
-export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }) => {
+export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides }) => {
     const carouselRef = useRef<HTMLDivElement>(null);
     const isDragging = useRef(false);
     const isHovering = useRef(false);
@@ -23,6 +22,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }
     const scrollLeft = useRef(0);
     const hasDragged = useRef(false);
     const animationFrameId = useRef<number | null>(null);
+    const navigate = useNavigate();
 
     if (!slides || slides.length === 0) {
         return null;
@@ -97,8 +97,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides, navigateTo }
         }
         if (link.startsWith('/')) {
             e.preventDefault();
-            const page = link.substring(1) as Page;
-            navigateTo(page);
+            navigate(link);
         }
     };
 
