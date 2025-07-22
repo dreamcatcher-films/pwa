@@ -82,6 +82,20 @@ export const updateMyBooking = (data: any) => apiFetch('/api/my-booking', {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getClientToken()}` },
     body: JSON.stringify(data),
 });
+export const uploadCouplePhoto = async (file: File) => {
+    const response = await fetch('/api/my-booking/photo', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${getClientToken()}`,
+            'x-vercel-filename': file.name,
+            'Content-Type': file.type,
+        },
+        body: file,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+};
+
 export const getBookingStages = () => apiFetch('/api/booking-stages', { headers: { 'Authorization': `Bearer ${getClientToken()}` } });
 export const approveBookingStage = (stageId: number) => apiFetch(`/api/booking-stages/${stageId}/approve`, {
     method: 'PATCH',
