@@ -6,7 +6,6 @@ export default {
     "./src/pages/**/*.{js,ts,jsx,tsx}",
     "./src/components/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: false, // Disables Tailwind's automatic dark mode.
   theme: {
     extend: {
       colors: {
