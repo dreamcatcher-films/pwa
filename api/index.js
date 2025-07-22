@@ -46,10 +46,18 @@ const getPool = () => {
     return pool;
 };
 
-const runDbSetup = async () => {
+const runDbSetup = async (shouldDrop = false) => {
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
+
+        if (shouldDrop) {
+            console.log("Dropping all tables...");
+             const tables = ['messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             for (const table of tables) {
+                await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
+             }
+        }
         
         await client.query(`
             CREATE TABLE IF NOT EXISTS access_keys (id SERIAL PRIMARY KEY, key VARCHAR(4) UNIQUE NOT NULL, client_name VARCHAR(255) NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -73,8 +81,6 @@ const runDbSetup = async () => {
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         `);
         
-        await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS couple_photo_url TEXT;');
-        
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
         if (adminRes.rowCount === 0) {
             const defaultEmail = 'admin@dreamcatcher.com';
@@ -95,9 +101,9 @@ const runDbSetup = async () => {
     }
 };
 
-const initialize = async () => {
-    if (!initializationPromise) {
-        initializationPromise = runDbSetup().catch(err => {
+const initialize = async (shouldDrop = false) => {
+    if (!initializationPromise || shouldDrop) {
+        initializationPromise = runDbSetup(shouldDrop).catch(err => {
             initializationPromise = null;
             throw err;
         });
@@ -153,7 +159,7 @@ app.get('/api/homepage-content', async (req, res) => {
         try {
             const [slidesRes, aboutRes, testimonialsRes, instagramRes] = await Promise.all([
                 client.query('SELECT * FROM homepage_slides ORDER BY sort_order ASC'),
-                client.query("SELECT value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')"),
+                client.query("SELECT key, value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')"),
                 client.query('SELECT * FROM homepage_testimonials ORDER BY id ASC'),
                 client.query('SELECT * FROM homepage_instagram ORDER BY sort_order ASC'),
             ]);
@@ -166,9 +172,9 @@ app.get('/api/homepage-content', async (req, res) => {
             res.json({
                 slides: slidesRes.rows,
                 aboutSection: {
-                    about_us_title: aboutSection.about_us_title,
-                    about_us_text: aboutSection.about_us_text,
-                    about_us_image_url: aboutSection.about_us_image_url
+                    about_us_title: aboutSection.about_us_title || 'Dreamcatcher powstał z pasji do opowiadania historii obrazem',
+                    about_us_text: aboutSection.about_us_text || 'Opis domyślny...',
+                    about_us_image_url: aboutSection.about_us_image_url || null
                 },
                 testimonials: testimonialsRes.rows,
                 instagramPosts: instagramRes.rows,
@@ -189,7 +195,7 @@ app.get('/api/packages', async (req, res) => {
             const [categoriesRes, packagesRes, addonsRes, packageAddonsRes] = await Promise.all([
                 client.query('SELECT * FROM categories ORDER BY id'),
                 client.query('SELECT * FROM packages WHERE is_published = TRUE ORDER BY price ASC'),
-                client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.name ASC'),
+                client.query('SELECT * FROM addons ORDER BY name ASC'),
                 client.query('SELECT * FROM package_addons')
             ]);
 
@@ -338,7 +344,6 @@ app.post('/api/contact', async (req, res) => {
             [firstName, lastName, email, phone, subject, message]
         );
 
-        // Send email notification to admin
         const adminSettings = await getPool().query("SELECT value FROM app_settings WHERE key = 'notification_email'");
         const adminEmail = adminSettings.rows[0]?.value;
 
@@ -488,11 +493,11 @@ app.get('/api/messages', authenticateClient, async (req, res) => {
 app.post('/api/messages', authenticateClient, async (req, res) => {
     const { content } = req.body;
     try {
-        await getPool().query(
-            'INSERT INTO messages (booking_id, sender, content, is_read_by_admin) VALUES ($1, $2, $3, $4)',
+        const result = await getPool().query(
+            'INSERT INTO messages (booking_id, sender, content, is_read_by_admin) VALUES ($1, $2, $3, $4) RETURNING *',
             [req.user.bookingId, 'client', content, false]
         );
-        res.status(201).json({ message: 'Wiadomość wysłana.' });
+        res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Error sending message:', error);
         res.status(500).json({ message: 'Błąd serwera.' });
@@ -519,7 +524,7 @@ app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => 
     }
 });
 
-// --- ADMIN-AUTHENTICATED ROUTES (add more here) ---
+// --- ADMIN-AUTHENTICATED ROUTES ---
 
 app.get('/api/admin/notifications/count', authenticateAdmin, async (req, res) => {
     try {
@@ -527,7 +532,6 @@ app.get('/api/admin/notifications/count', authenticateAdmin, async (req, res) =>
         try {
             const clientMessages = await client.query("SELECT COUNT(DISTINCT booking_id) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
             const inboxMessages = await client.query("SELECT COUNT(*) FROM contact_messages WHERE is_read = FALSE");
-
             const totalCount = parseInt(clientMessages.rows[0].count, 10) + parseInt(inboxMessages.rows[0].count, 10);
             res.json({ count: totalCount });
         } finally {
@@ -538,6 +542,40 @@ app.get('/api/admin/notifications/count', authenticateAdmin, async (req, res) =>
         res.status(500).json({ message: 'Błąd serwera.' });
     }
 });
+
+app.get('/api/admin/notifications', authenticateAdmin, async (req, res) => {
+     try {
+        const client = await getPool().connect();
+        try {
+            const clientMessagesRes = await client.query(`
+                SELECT DISTINCT ON (m.booking_id) m.booking_id, b.bride_name || ' & ' || b.groom_name AS sender_name, m.content AS preview, 
+                (SELECT COUNT(*) FROM messages WHERE booking_id = m.booking_id AND sender = 'client' AND is_read_by_admin = FALSE) as unread_count
+                FROM messages m
+                JOIN bookings b ON m.booking_id = b.id
+                WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE
+                ORDER BY m.booking_id, m.created_at DESC;
+            `);
+             const inboxMessagesRes = await client.query(`
+                SELECT id as message_id, first_name || ' ' || last_name AS sender_name, message as preview
+                FROM contact_messages
+                WHERE is_read = FALSE
+                ORDER BY created_at DESC;
+            `);
+
+            const notifications = [
+                ...clientMessagesRes.rows.map(r => ({ ...r, type: 'client_message' })),
+                ...inboxMessagesRes.rows.map(r => ({ ...r, type: 'inbox_message' }))
+            ];
+            res.json(notifications);
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Error fetching notifications:', error);
+        res.status(500).json({ message: 'Błąd serwera.' });
+    }
+});
+
 
 app.get('/api/admin/inbox', authenticateAdmin, async (req, res) => {
     try {
@@ -566,7 +604,344 @@ app.delete('/api/admin/inbox/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Add other admin routes here...
+app.get('/api/admin/bookings', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching bookings.' });
+    }
+});
+
+app.get('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Booking not found' });
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching booking details.' });
+    }
+});
+
+app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+     try {
+        const { id } = req.params;
+        const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
+        const result = await getPool().query(
+            `UPDATE bookings SET bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, bride_address = $6, groom_address = $7, church_location = $8, venue_location = $9, schedule = $10, additional_info = $11 WHERE id = $12 RETURNING *`,
+            [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info, id]
+        );
+        res.json({ message: 'Zaktualizowano pomyślnie.', booking: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji rezerwacji.' });
+    }
+});
+
+app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM availability WHERE resource->>\'type\' = \'booking\' AND (resource->>\'bookingId\')::int = $1', [req.params.id]);
+        await client.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
+        await client.query('COMMIT');
+        res.status(204).send();
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Error deleting booking.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/admin/bookings/:id/payment', authenticateAdmin, async (req, res) => {
+    try {
+        const { payment_status, amount_paid } = req.body;
+        const result = await getPool().query('UPDATE bookings SET payment_status = $1, amount_paid = $2 WHERE id = $3 RETURNING payment_status, amount_paid', [payment_status, amount_paid, req.params.id]);
+        res.json({ message: 'Płatność zaktualizowana.', payment_details: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji płatności.' });
+    }
+});
+
+app.get('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM access_keys ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching access keys.' });
+    }
+});
+
+app.post('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
+     const { client_name } = req.body;
+     const client = await getPool().connect();
+    try {
+        let key;
+        let isUnique = false;
+        while (!isUnique) {
+            key = Math.floor(1000 + Math.random() * 9000).toString();
+            const res = await client.query('SELECT 1 FROM access_keys WHERE key = $1', [key]);
+            if (res.rowCount === 0) isUnique = true;
+        }
+        const result = await client.query('INSERT INTO access_keys (key, client_name) VALUES ($1, $2) RETURNING *', [key, client_name]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error creating access key.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/admin/access-keys/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM access_keys WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting access key.' });
+    }
+});
+
+app.get('/api/admin/availability', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM availability');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching availability.' });
+    }
+});
+
+app.post('/api/admin/availability', authenticateAdmin, async (req, res) => {
+    try {
+        const { title, description, start_time, end_time, is_all_day } = req.body;
+        const result = await getPool().query('INSERT INTO availability (title, description, start_time, end_time, is_all_day, resource) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [title, description, start_time, end_time, is_all_day, { type: 'event' }]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error creating event.' });
+    }
+});
+
+app.patch('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
+    try {
+        const { title, description, start_time, end_time, is_all_day } = req.body;
+        const result = await getPool().query('UPDATE availability SET title = $1, description = $2, start_time = $3, end_time = $4, is_all_day = $5 WHERE id = $6 AND (resource->>\'type\') = \'event\' RETURNING *',
+            [title, description, start_time, end_time, is_all_day, req.params.id]
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating event.' });
+    }
+});
+
+app.delete('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM availability WHERE id = $1 AND (resource->>\'type\') = \'event\'', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting event.' });
+    }
+});
+
+app.get('/api/admin/galleries', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching gallery items.' });
+    }
+});
+
+app.post('/api/admin/galleries/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
+    try {
+        const filename = req.headers['x-vercel-filename'] || 'gallery-image.jpg';
+        const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: 'Error uploading gallery image.' });
+    }
+});
+
+app.post('/api/admin/galleries', authenticateAdmin, async (req, res) => {
+    try {
+        const { title, description, image_url } = req.body;
+        const result = await getPool().query('INSERT INTO galleries (title, description, image_url) VALUES ($1, $2, $3) RETURNING *', [title, description, image_url]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error creating gallery item.' });
+    }
+});
+
+app.delete('/api/admin/galleries/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM galleries WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting gallery item.' });
+    }
+});
+
+app.get('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM production_stages ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching stages.' });
+    }
+});
+
+app.post('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    try {
+        const { name, description } = req.body;
+        const result = await getPool().query('INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *', [name, description]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Error creating stage.' });
+    }
+});
+
+app.delete('/api/admin/stages/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting stage.' });
+    }
+});
+
+app.post('/api/admin/setup-database', authenticateAdmin, async(req, res) => {
+    try {
+        await initialize(false); // run setup without dropping tables
+        res.status(200).json({ message: "Schemat bazy danych został pomyślnie zainicjowany/zaktualizowany." });
+    } catch (error) {
+        console.error("Manual DB setup failed:", error);
+        res.status(500).json({ message: "Wystąpił błąd podczas inicjalizacji bazy danych." });
+    }
+});
+
+app.post('/api/admin/reset-database', authenticateAdmin, async(req, res) => {
+    try {
+        await initialize(true); // run setup WITH dropping tables
+        res.status(200).json({ message: "Baza danych została pomyślnie zresetowana. Utworzono domyślnego administratora." });
+    } catch (error) {
+        console.error("Manual DB reset failed:", error);
+        res.status(500).json({ message: "Wystąpił błąd podczas resetowania bazy danych." });
+    }
+});
+
+app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
+    try {
+        const [adminRes, settingsRes] = await Promise.all([
+             getPool().query('SELECT email FROM admins WHERE id = $1', [req.admin.adminId]),
+             getPool().query("SELECT value FROM app_settings WHERE key = 'notification_email'")
+        ]);
+        res.json({
+            loginEmail: adminRes.rows[0]?.email,
+            notificationEmail: settingsRes.rows[0]?.value,
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching admin settings.' });
+    }
+});
+
+app.patch('/api/admin/settings', authenticateAdmin, async (req, res) => {
+    try {
+        const { email } = req.body;
+        await getPool().query("INSERT INTO app_settings (key, value) VALUES ('notification_email', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [email]);
+        res.json({ message: 'Ustawienia zapisane.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error saving admin settings.' });
+    }
+});
+
+app.get('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
+    try {
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
+        const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ message: "Błąd pobierania ustawień" });
+    }
+});
+
+app.patch('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (const [key, value] of Object.entries(req.body)) {
+            await client.query("INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, value]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Ustawienia zapisane.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: "Błąd zapisu ustawień" });
+    } finally {
+        client.release();
+    }
+});
+
+app.patch('/api/admin/credentials', authenticateAdmin, async (req, res) => {
+    const { currentPassword, newEmail, newPassword } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const adminRes = await client.query('SELECT * FROM admins WHERE id = $1', [req.admin.adminId]);
+        if (adminRes.rowCount === 0) return res.status(404).json({ message: 'Admin not found.' });
+
+        const admin = adminRes.rows[0];
+        const isPasswordValid = await bcrypt.compare(currentPassword, admin.password_hash);
+        if (!isPasswordValid) return res.status(401).json({ message: 'Bieżące hasło jest nieprawidłowe.' });
+
+        if (newEmail && newEmail !== admin.email) {
+            await client.query('UPDATE admins SET email = $1 WHERE id = $2', [newEmail, req.admin.adminId]);
+        }
+        if (newPassword) {
+            const newPasswordHash = await bcrypt.hash(newPassword, 10);
+            await client.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [newPasswordHash, req.admin.adminId]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Dane logowania zaktualizowane.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd zapisu danych logowania.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM discount_codes ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania kodów rabatowych.' });
+    }
+});
+
+app.post('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    try {
+        const { code, type, value, usage_limit, expires_at } = req.body;
+        const result = await getPool().query('INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [code, type, value, usage_limit, expires_at]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') return res.status(409).json({ message: 'Kod o tej nazwie już istnieje.' });
+        res.status(500).json({ message: 'Błąd tworzenia kodu rabatowego.' });
+    }
+});
+
+app.delete('/api/admin/discounts/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd usuwania kodu rabatowego.' });
+    }
+});
+
+// All other admin endpoints would go here following the same pattern...
 
 // --- CATCH-ALL ---
 app.use((req, res) => {
