@@ -1,17 +1,12 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { MenuIcon, BellIcon } from './Icons.tsx';
 import NotificationPanel from './NotificationPanel.tsx';
-import { Page } from '../App.tsx';
 
 interface HeaderProps {
     onMenuToggle: () => void;
-    onViewDetails: (bookingId: number) => void;
-    navigateTo: (page: Page) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuToggle, onViewDetails, navigateTo }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -102,8 +97,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle, onViewDetails, navigateTo
                                 </button>
                                 {isPanelOpen && (
                                     <NotificationPanel 
-                                        navigateTo={navigateTo}
-                                        onViewDetails={onViewDetails}
                                         onClose={() => setIsPanelOpen(false)}
                                         onActionTaken={fetchUnreadCount}
                                     />
