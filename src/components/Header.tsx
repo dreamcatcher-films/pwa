@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MenuIcon, BellIcon } from './Icons.tsx';
 import NotificationPanel from './NotificationPanel.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { getNotificationCount } from '../api.ts';
 
 interface HeaderProps {
     onMenuToggle: () => void;
@@ -9,47 +11,22 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
     const { isAdmin } = useAuth();
-    const [unreadCount, setUnreadCount] = useState(0);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
 
-    const fetchUnreadCount = async () => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (!token) {
-            if (unreadCount > 0) setUnreadCount(0);
-            return;
-        }
-        
-        try {
-            const response = await fetch('/api/admin/notifications/count', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setUnreadCount(data.count);
-            } else {
-                setUnreadCount(0);
-            }
-        } catch (error) {
-            console.error('Failed to fetch notification count:', error);
-            setUnreadCount(0);
-        }
-    };
-
-    useEffect(() => {
-        if (isAdmin) {
-            fetchUnreadCount();
-            const interval = setInterval(fetchUnreadCount, 15000);
-            return () => clearInterval(interval);
-        } else {
-            setUnreadCount(0);
-            setIsPanelOpen(false);
-        }
-    }, [isAdmin]);
+    const { data: unreadCount, refetch } = useQuery({
+      queryKey: ['notificationCount'],
+      queryFn: getNotificationCount,
+      enabled: isAdmin,
+      refetchInterval: 15000, // Refetch every 15 seconds
+      select: (data) => data.count,
+      initialData: { count: 0 },
+    });
 
     const handleBellClick = () => {
-      setIsPanelOpen(prev => !prev);
-      if(!isPanelOpen) {
-          fetchUnreadCount();
+      const newPanelState = !isPanelOpen;
+      setIsPanelOpen(newPanelState);
+      if(newPanelState) {
+          refetch(); // Manually refetch when opening the panel
       }
     };
 
@@ -87,7 +64,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                                 {isPanelOpen && (
                                     <NotificationPanel 
                                         onClose={() => setIsPanelOpen(false)}
-                                        onActionTaken={fetchUnreadCount}
+                                        onActionTaken={() => refetch()}
                                     />
                                 )}
                             </div>
