@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -89,21 +87,23 @@ const App = () => {
     const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
 
     return (
-        <div className="min-h-screen font-sans flex flex-col">
-            <Header
-                onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
-                onViewDetails={handleViewBookingDetails}
-                navigateTo={navigateTo}
-            />
-            <main className={`flex-grow ${isPublicPage ? 'pb-64' : ''}`}>
-                <div className={hasAppContainer ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}>
-                    {renderCurrentPage()}
-                </div>
-            </main>
-            {isPublicPage && <Footer />}
-            <InstallPrompt />
+        <>
+            <div className="min-h-screen font-sans flex flex-col">
+                <Header
+                    onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
+                    onViewDetails={handleViewBookingDetails}
+                    navigateTo={navigateTo}
+                />
+                <main className={`flex-grow ${isPublicPage ? 'pb-64' : ''}`}>
+                    <div className={hasAppContainer ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}>
+                        {renderCurrentPage()}
+                    </div>
+                </main>
+                {isPublicPage && <Footer />}
+                <InstallPrompt />
+            </div>
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-        </div>
+        </>
     );
 };
 
