@@ -2,7 +2,7 @@ import React, { useState, useEffect, FC, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, ChatBubbleLeftRightIcon, ChevronDownIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -99,7 +99,7 @@ const ClientPanelPage: React.FC = () => {
             };
             reset(defaultValues);
         }
-    }, [data?.booking, reset]);
+    }, [data?.booking, reset, isEditing]);
 
     const updateBookingMutation = useMutation({
         mutationFn: updateMyBooking,
@@ -138,7 +138,6 @@ const ClientPanelPage: React.FC = () => {
 
     const handleCancelEdit = () => {
         setIsEditing(false);
-        if (data?.booking) reset(); // Reset form to default values
     };
     
     const onSave: SubmitHandler<EditableBookingData> = (formData) => {
@@ -219,7 +218,49 @@ const ClientPanelPage: React.FC = () => {
                         </div>
                     </InfoCard>
 
-                     <div className="bg-white rounded-2xl shadow-md">
+                     <InfoCard 
+                        title="Szczegóły Wydarzenia" 
+                        icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500"/>}
+                        actionButton={
+                            !isEditing && (
+                                <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50">
+                                    <PencilSquareIcon className="w-5 h-5" /> Edytuj
+                                </button>
+                            )
+                        }
+                    >
+                        {isEditing ? (
+                            <form onSubmit={handleSubmit(onSave)}>
+                                <div className="space-y-4">
+                                    <InputField id="bride_address" label="Adres przygotowań Panny Młodej" register={register('bride_address', { required: true })} error={errors.bride_address} />
+                                    <InputField id="groom_address" label="Adres przygotowań Pana Młodego" register={register('groom_address', { required: true })} error={errors.groom_address} />
+                                    <InputField id="church_location" label="Adres ceremonii" register={register('church_location', { required: true })} error={errors.church_location} />
+                                    <InputField id="venue_location" label="Adres przyjęcia" register={register('venue_location', { required: true })} error={errors.venue_location} />
+                                    <TextAreaField id="schedule" label="Harmonogram dnia" register={register('schedule', { required: true })} error={errors.schedule} rows={4}/>
+                                    <TextAreaField id="additional_info" label="Dodatkowe informacje" register={register('additional_info')} error={errors.additional_info} required={false} rows={3}/>
+                                </div>
+                                <div className="flex justify-end items-center gap-4 mt-6 pt-4 border-t">
+                                     {updateBookingMutation.isSuccess && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano!</div>}
+                                     {updateBookingMutation.isError && <p className="text-red-500 text-sm mr-auto">{updateBookingMutation.error.message}</p>}
+                                    <button type="button" onClick={handleCancelEdit} disabled={updateBookingMutation.isPending} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
+                                    <button type="submit" disabled={updateBookingMutation.isPending} className="bg-indigo-600 w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex justify-center items-center">
+                                        {updateBookingMutation.isPending ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zapisz'}
+                                    </button>
+                                </div>
+                            </form>
+                        ) : (
+                            <>
+                                <InfoItem label="Adres przygotowań Panny Młodej" value={booking.bride_address} />
+                                <InfoItem label="Adres przygotowań Pana Młodego" value={booking.groom_address} />
+                                <InfoItem label="Adres ceremonii" value={booking.church_location} />
+                                <InfoItem label="Adres przyjęcia" value={booking.venue_location} />
+                                <InfoItem label="Harmonogram dnia" value={booking.schedule} />
+                                <InfoItem label="Dodatkowe informacje" value={booking.additional_info} />
+                            </>
+                        )}
+                    </InfoCard>
+
+                    <div className="bg-white rounded-2xl shadow-md">
                         <button onClick={handleToggleChat} className="w-full flex items-center justify-between p-6 cursor-pointer">
                             <div className="flex items-center">
                                 <ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />
