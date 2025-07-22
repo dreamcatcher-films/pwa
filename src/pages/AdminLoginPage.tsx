@@ -1,15 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
+import { InputField } from '../components/FormControls.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { loginAdmin } from '../api.ts';
 
+type FormValues = {
+    email: string;
+    password: string;
+};
+
 const AdminLoginPage: React.FC = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const { isAdmin, login } = useAuth();
     const navigate = useNavigate();
+    const { register, handleSubmit, formState: { errors } } = useForm<FormValues>();
 
     useEffect(() => {
         if (isAdmin) {
@@ -24,9 +30,8 @@ const AdminLoginPage: React.FC = () => {
         },
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        loginMutation.mutate({ email, password });
+    const onSubmit: SubmitHandler<FormValues> = (data) => {
+        loginMutation.mutate(data);
     };
 
     return (
@@ -37,48 +42,32 @@ const AdminLoginPage: React.FC = () => {
                     <p className="mt-2 text-lg text-slate-600">Zaloguj się, aby zarządzać aplikacją.</p>
                 </div>
                 
-                <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
+                <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
                     {loginMutation.isError && (
                         <div className="p-3 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg text-sm">
                             <p>{loginMutation.error.message}</p>
                         </div>
                     )}
                     
-                    <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-slate-700">Adres e-mail</label>
-                        <div className="relative mt-1">
-                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <UserIcon className="h-5 w-5 text-slate-400" />
-                            </div>
-                             <input
-                                type="email"
-                                id="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="admin@example.com"
-                                required
-                                className="block w-full py-2 pl-10 pr-3 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
+                     <InputField
+                        id="email"
+                        label="Adres e-mail"
+                        type="email"
+                        placeholder="admin@example.com"
+                        register={register('email', { required: 'Adres e-mail jest wymagany' })}
+                        error={errors.email}
+                        icon={<UserIcon className="h-5 w-5 text-slate-400" />}
+                    />
                     
-                    <div>
-                        <label htmlFor="password"  className="block text-sm font-medium text-slate-700">Hasło</label>
-                         <div className="relative mt-1">
-                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <LockClosedIcon className="h-5 w-5 text-slate-400" />
-                            </div>
-                            <input
-                                type="password"
-                                id="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                required
-                                className="block w-full py-2 pl-10 pr-3 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
+                    <InputField
+                        id="password"
+                        label="Hasło"
+                        type="password"
+                        placeholder="••••••••"
+                        register={register('password', { required: 'Hasło jest wymagane' })}
+                        error={errors.password}
+                        icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />}
+                    />
 
                     <button
                         type="submit"
