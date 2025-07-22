@@ -1,4 +1,5 @@
 import React, { useState, useEffect, FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { XMarkIcon, LoadingSpinner, TrashIcon } from './Icons.tsx';
 
 interface CalendarEvent {
@@ -18,10 +19,9 @@ interface EventModalProps {
     event: Partial<CalendarEvent> | null;
     onClose: () => void;
     onSave: (deleted?: boolean) => void;
-    onViewBookingDetails: (bookingId: number) => void;
 }
 
-const EventModal: FC<EventModalProps> = ({ event, onClose, onSave, onViewBookingDetails }) => {
+const EventModal: FC<EventModalProps> = ({ event, onClose, onSave }) => {
     const [formData, setFormData] = useState({
         title: '',
         start_time: '',
@@ -31,14 +31,17 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave, onViewBooking
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const navigate = useNavigate();
     
     const isBookingEvent = event?.resource?.type === 'booking';
 
     useEffect(() => {
-        if (event && !isBookingEvent) {
+        if (event) {
             const formatDateTimeLocal = (date: Date) => {
                 const pad = (num: number) => num.toString().padStart(2, '0');
-                return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                const timezoneOffset = date.getTimezoneOffset() * 60000;
+                const localDate = new Date(date.getTime() - timezoneOffset);
+                return localDate.toISOString().slice(0, 16);
             };
             setFormData({
                 title: event.title || '',
@@ -48,7 +51,7 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave, onViewBooking
                 description: event.description || '',
             });
         }
-    }, [event, isBookingEvent]);
+    }, [event]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const target = e.target;
@@ -157,7 +160,7 @@ const EventModal: FC<EventModalProps> = ({ event, onClose, onSave, onViewBooking
                 </button>
                 <div className="flex gap-3">
                     <button type="button" onClick={onClose} disabled={isLoading} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-200 transition">Anuluj</button>
-                    <button type="button" onClick={() => onViewBookingDetails(event!.resource!.bookingId!)} disabled={isLoading} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                    <button type="button" onClick={() => navigate(`/admin/rezerwacje/${event!.resource!.bookingId!}`)} disabled={isLoading} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
                         Zobacz szczegóły
                     </button>
                 </div>
