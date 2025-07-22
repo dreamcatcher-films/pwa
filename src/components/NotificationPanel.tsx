@@ -1,8 +1,6 @@
-
-
 import React, { useState, useEffect, FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LoadingSpinner, BellIcon, EnvelopeIcon } from './Icons.tsx';
-import { Page } from '../App.tsx';
 
 interface ClientMessageNotification {
     type: 'client_message';
@@ -22,16 +20,15 @@ interface InboxNotification {
 type Notification = ClientMessageNotification | InboxNotification;
 
 interface NotificationPanelProps {
-    navigateTo: (page: Page) => void;
-    onViewDetails: (bookingId: number) => void;
     onClose: () => void;
     onActionTaken: () => void;
 }
 
-const NotificationPanel: FC<NotificationPanelProps> = ({ navigateTo, onViewDetails, onClose, onActionTaken }) => {
+const NotificationPanel: FC<NotificationPanelProps> = ({ onClose, onActionTaken }) => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchNotifications = async () => {
@@ -58,9 +55,9 @@ const NotificationPanel: FC<NotificationPanelProps> = ({ navigateTo, onViewDetai
 
     const handleNotificationClick = (notification: Notification) => {
         if (notification.type === 'client_message') {
-            onViewDetails(notification.booking_id);
+            navigate(`/admin/rezerwacje/${notification.booking_id}`);
         } else {
-            navigateTo('adminInbox');
+            navigate('/admin/inbox');
         }
         onClose();
         setTimeout(onActionTaken, 1200); // Give time for the read status to update on backend
