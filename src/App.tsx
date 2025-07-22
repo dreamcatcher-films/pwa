@@ -88,8 +88,8 @@ const App = () => {
     const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
 
     return (
-        <>
-            <div className="relative z-10 min-h-screen font-sans flex flex-col">
+        <div className="relative min-h-screen font-sans">
+            <div className="flex flex-col min-h-screen">
                 <Header
                     onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                     onViewDetails={handleViewBookingDetails}
@@ -104,7 +104,7 @@ const App = () => {
                 <InstallPrompt />
             </div>
             <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
-        </>
+        </div>
     );
 };
 
