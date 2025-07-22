@@ -10,7 +10,7 @@ import { Resend } from 'resend';
 
 // --- Environment Variable Validation ---
 // Ensure all critical environment variables are set before proceeding.
-const requiredEnvVars = ['DATABASE_URL', 'ADMIN_JWT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY'];
+const requiredEnvVars = ['DATABASE_URL', 'ADMIN_JWT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY', 'BLOB_READ_WRITE_TOKEN'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingEnvVars.length > 0) {
@@ -347,7 +347,10 @@ const authenticateAdmin = (req, res, next) => {
     if (token == null) return res.sendStatus(401);
 
     jwt.verify(token, process.env.ADMIN_JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            console.error('Admin JWT Verification Error:', err.message);
+            return res.sendStatus(403);
+        }
         req.user = user;
         next();
     });
@@ -359,7 +362,10 @@ const authenticateClient = (req, res, next) => {
     if (token == null) return res.sendStatus(401);
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            console.error('Client JWT Verification Error:', err.message);
+            return res.sendStatus(403);
+        }
         req.user = user;
         next();
     });
