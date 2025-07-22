@@ -1,17 +1,13 @@
-
 import React, { useState } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate } from 'react-router-dom';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
 
-interface LoginPageProps {
-    navigateTo: (page: Page) => void;
-}
-
-const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
+const LoginPage: React.FC = () => {
     const [clientId, setClientId] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,7 +28,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
             
             const data = await response.json();
             localStorage.setItem('authToken', data.token);
-            navigateTo('clientPanel');
+            navigate('/panel-klienta');
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
@@ -42,7 +38,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center py-12">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center py-12">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Panel Klienta</h1>
@@ -101,7 +97,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ navigateTo }) => {
                     </button>
                 </form>
                  <p className="text-center text-sm text-slate-500 mt-6">
-                    Nie pamiętasz danych? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
+                    Nie pamiętasz danych? <a href="/kontakt" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
                 </p>
             </div>
         </div>
