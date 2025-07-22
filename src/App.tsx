@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
@@ -88,7 +89,7 @@ const App = () => {
 
     return (
         <>
-            <div className="min-h-screen font-sans flex flex-col">
+            <div className="relative z-10 min-h-screen font-sans flex flex-col">
                 <Header
                     onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
                     onViewDetails={handleViewBookingDetails}
