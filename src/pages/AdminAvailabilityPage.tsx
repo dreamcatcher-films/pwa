@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer, Views, EventProps } from 'react-big-calendar';
 import { format } from 'date-fns/format';
 import { parse } from 'date-fns/parse';
@@ -19,10 +20,6 @@ interface CalendarEvent {
         type: 'event' | 'booking';
         bookingId?: number;
     };
-}
-
-interface AdminAvailabilityPageProps {
-    onViewBookingDetails: (bookingId: number) => void;
 }
 
 const locales = {
@@ -63,7 +60,7 @@ const CustomEvent: FC<EventProps<CalendarEvent>> = ({ event, title }) => {
     );
 };
 
-const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBookingDetails }) => {
+const AdminAvailabilityPage: React.FC = () => {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -154,7 +151,6 @@ const AdminAvailabilityPage: React.FC<AdminAvailabilityPageProps> = ({ onViewBoo
                     event={selectedEvent}
                     onClose={handleModalClose}
                     onSave={handleModalSave}
-                    onViewBookingDetails={onViewBookingDetails}
                 />
             )}
         </div>
