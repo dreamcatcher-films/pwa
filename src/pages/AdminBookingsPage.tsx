@@ -1,10 +1,7 @@
 import React, { useEffect, useState, FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../utils.ts';
 import { LoadingSpinner, InboxStackIcon, TrashIcon } from '../components/Icons.tsx';
-
-interface AdminBookingsPageProps {
-    onViewDetails: (bookingId: number) => void;
-}
 
 interface BookingSummary {
     id: number;
@@ -28,10 +25,11 @@ const StatCard: FC<{ title: string; value: string | number; icon: React.ReactNod
     </div>
 );
 
-const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
+const AdminBookingsPage: FC = () => {
     const [bookings, setBookings] = useState<BookingSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const navigate = useNavigate();
 
      useEffect(() => {
         const fetchBookings = async () => {
@@ -119,7 +117,7 @@ const AdminBookingsPage: FC<AdminBookingsPageProps> = ({ onViewDetails }) => {
                                         <td className="px-6 py-4">{formatDate(booking.created_at)}</td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => onViewDetails(booking.id)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button>
+                                                <button onClick={() => navigate(`/admin/rezerwacje/${booking.id}`)} className="font-medium text-indigo-600 hover:underline">Szczegóły</button>
                                                 <button onClick={() => handleDeleteBooking(booking.id)} className="p-2 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50" aria-label="Usuń rezerwację">
                                                     <TrashIcon className="w-5 h-5" />
                                                 </button>
