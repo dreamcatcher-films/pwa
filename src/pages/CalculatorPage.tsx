@@ -1,10 +1,12 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, EngagementRingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { getPackages } from '../api.ts';
 
 // --- DATA STRUCTURE ---
 interface Addon {
@@ -33,6 +35,12 @@ interface Package {
     included: PackageAddon[];
     rich_description: string;
     rich_description_image_url: string;
+}
+
+interface OfferData {
+    categories: Category[];
+    packages: Package[];
+    allAddons: Addon[];
 }
 
 const iconMap: { [key: string]: React.ReactNode } = {
@@ -304,12 +312,9 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
 
 
 // --- MAIN CREATOR APP ---
-interface CalculatorPageProps {
-}
-
 const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
-const CalculatorPage: FC<CalculatorPageProps> = () => {
+const CalculatorPage: FC = () => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -321,15 +326,13 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
     const [finalClientId, setFinalClientId] = useState<string | null>(null);
     const [copySuccess, setCopySuccess] = useState(false);
     const [marketingModalPkg, setMarketingModalPkg] = useState<Package | null>(null);
-
-    // Dynamic offer state
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [packages, setPackages] = useState<Package[]>([]);
-    const [allAddons, setAllAddons] = useState<Addon[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
     
     const navigate = useNavigate();
+    
+    const { data: offerData, isLoading, error } = useQuery<OfferData, Error>({
+        queryKey: ['packages'],
+        queryFn: getPackages
+    });
     
     const currentStepIndex = () => {
         switch(step) {
@@ -340,39 +343,17 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
             default: return 0;
         }
     };
-
-    useEffect(() => {
-        const fetchOffer = async () => {
-            setIsLoading(true);
-            setError('');
-            try {
-                const response = await fetch('/api/packages');
-                if (!response.ok) {
-                    throw new Error(await response.text() || `Błąd ładowania oferty.`);
-                }
-                const data = await response.json();
-                setCategories(data.categories);
-                setPackages(data.packages);
-                setAllAddons(data.allAddons);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Nie można załadować oferty. Spróbuj ponownie później.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchOffer();
-    }, []);
     
 
     useEffect(() => {
-        if (!selectedPackage) {
+        if (!selectedPackage || !offerData) {
             setTotalPrice(0);
             return;
         }
 
         let finalPrice = Number(selectedPackage.price);
 
-        const addonMap = new Map(allAddons.map(a => [a.id, { ...a, locked: false }]));
+        const addonMap: Map<number, PackageAddon> = new Map(offerData.allAddons.map(a => [a.id, { ...a, locked: false }]));
         selectedPackage.included.forEach(i => addonMap.set(i.id, i));
 
         customizedItems.forEach(itemId => {
@@ -383,7 +364,7 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
         });
 
         setTotalPrice(finalPrice);
-    }, [selectedPackage, customizedItems, allAddons]);
+    }, [selectedPackage, customizedItems, offerData]);
 
     const handleSelectServiceType = (categoryId: number) => {
         setSelectedCategoryId(categoryId);
@@ -423,9 +404,9 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
     };
 
     const getAvailableAddons = (): PackageAddon[] => {
-        if (!selectedPackage) return [];
+        if (!selectedPackage || !offerData) return [];
         const packageItemIds = new Set(selectedPackage.included.map(i => i.id));
-        return allAddons
+        return offerData.allAddons
             .filter(addon => !packageItemIds.has(addon.id))
             .map(addon => ({ ...addon, locked: false }));
     };
@@ -449,14 +430,18 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
         }
     };
     
-    const filteredPackages = selectedCategoryId ? packages.filter(p => p.category_id === selectedCategoryId) : [];
+    const filteredPackages = selectedCategoryId && offerData ? offerData.packages.filter(p => p.category_id === selectedCategoryId) : [];
 
     if (isLoading) {
         return <div className="flex justify-center items-center py-20"><EngagementRingSpinner /></div>;
     }
 
     if (error) {
-         return <div className="text-center py-20"><p className="text-red-500">{error}</p></div>;
+         return <div className="text-center py-20"><p className="text-red-500">{error.message}</p></div>;
+    }
+
+    if (!offerData) {
+        return <div className="text-center py-20">Brak oferty do wyświetlenia.</div>;
     }
 
     if (step === 'booked') {
@@ -522,7 +507,7 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
             );
             mainContent = (
                 <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {categories.map(cat => (
+                    {offerData.categories.map(cat => (
                         <ServiceTypeCard key={cat.id} title={cat.name} icon={iconMap[cat.icon_name] || iconMap.default} onClick={() => handleSelectServiceType(cat.id)} />
                     ))}
                 </div>
@@ -645,7 +630,7 @@ const CalculatorPage: FC<CalculatorPageProps> = () => {
                             accessKey: validatedAccessKey,
                             packageName: selectedPackage?.name || '',
                             totalPrice: totalPrice,
-                            selectedItems: customizedItems.map(id => allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
+                            selectedItems: customizedItems.map(id => offerData.allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
                         }}
                         onBookingComplete={handleBookingComplete}
                     />
