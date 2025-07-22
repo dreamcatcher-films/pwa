@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 const AdminLoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const { isAdmin, login } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (token) {
+        if (isAdmin) {
             navigate('/admin');
         }
-    }, [navigate]);
+    }, [isAdmin, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,8 +35,7 @@ const AdminLoginPage: React.FC = () => {
             }
             
             const data = await response.json();
-            localStorage.setItem('adminAuthToken', data.token);
-            navigate('/admin');
+            login(data.token);
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
