@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
+import { InputField } from '../components/FormControls.tsx';
 import { loginClient } from '../api.ts';
 
+type FormValues = {
+    clientId: string;
+    password: string;
+};
+
 const LoginPage: React.FC = () => {
-    const [clientId, setClientId] = useState('');
-    const [password, setPassword] = useState('');
     const navigate = useNavigate();
+    const { register, handleSubmit, formState: { errors } } = useForm<FormValues>();
 
     const loginMutation = useMutation({
         mutationFn: loginClient,
@@ -17,9 +23,8 @@ const LoginPage: React.FC = () => {
         },
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        loginMutation.mutate({ clientId, password });
+    const onSubmit: SubmitHandler<FormValues> = (data) => {
+        loginMutation.mutate(data);
     };
 
     return (
@@ -30,48 +35,31 @@ const LoginPage: React.FC = () => {
                     <p className="mt-2 text-lg text-slate-600">Zaloguj się, aby zobaczyć szczegóły swojej rezerwacji.</p>
                 </div>
                 
-                <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
+                <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
                     {loginMutation.isError && (
                         <div className="p-3 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg text-sm">
                             <p>{loginMutation.error.message}</p>
                         </div>
                     )}
                     
-                    <div>
-                        <label htmlFor="clientId" className="block text-sm font-medium text-slate-700">Numer Klienta</label>
-                        <div className="relative mt-1">
-                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <UserIcon className="h-5 w-5 text-slate-400" />
-                            </div>
-                             <input
-                                type="text"
-                                id="clientId"
-                                value={clientId}
-                                onChange={(e) => setClientId(e.target.value.trim())}
-                                placeholder="np. 1234"
-                                required
-                                className="block w-full py-2 pl-10 pr-3 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
+                    <InputField
+                        id="clientId"
+                        label="Numer Klienta"
+                        placeholder="np. 1234"
+                        register={register('clientId', { required: 'Numer klienta jest wymagany' })}
+                        error={errors.clientId}
+                        icon={<UserIcon className="h-5 w-5 text-slate-400" />}
+                    />
                     
-                    <div>
-                        <label htmlFor="password"  className="block text-sm font-medium text-slate-700">Hasło</label>
-                         <div className="relative mt-1">
-                             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <LockClosedIcon className="h-5 w-5 text-slate-400" />
-                            </div>
-                            <input
-                                type="password"
-                                id="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                required
-                                className="block w-full py-2 pl-10 pr-3 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                            />
-                        </div>
-                    </div>
+                     <InputField
+                        id="password"
+                        label="Hasło"
+                        type="password"
+                        placeholder="••••••••"
+                        register={register('password', { required: 'Hasło jest wymagane' })}
+                        error={errors.password}
+                        icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />}
+                    />
 
                     <button
                         type="submit"
