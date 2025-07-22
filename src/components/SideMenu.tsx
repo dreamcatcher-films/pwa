@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { XMarkIcon, Cog6ToothIcon, PhotoIcon, EnvelopeIcon } from './Icons.tsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface SideMenuProps {
     isOpen: boolean;
@@ -9,11 +10,11 @@ interface SideMenuProps {
 
 const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
     const navigate = useNavigate();
+    const { isAdmin } = useAuth();
 
     const handleAdminClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
-        const token = localStorage.getItem('adminAuthToken');
-        if (token) {
+        if (isAdmin) {
             navigate('/admin');
         } else {
             navigate('/admin/logowanie');
@@ -25,14 +26,14 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
         <>
             {/* Overlay */}
             <div 
-                className={`fixed inset-0 bg-black z-120 transition-opacity duration-300 ${isOpen ? 'bg-opacity-50' : 'bg-opacity-0 pointer-events-none'}`}
+                className={`fixed inset-0 bg-black z-40 transition-opacity duration-300 ${isOpen ? 'bg-opacity-50' : 'bg-opacity-0 pointer-events-none'}`}
                 onClick={onClose}
                 aria-hidden="true"
             ></div>
 
             {/* Side Menu */}
             <div 
-                className={`fixed top-0 left-0 h-full bg-[#0F3E34] w-72 shadow-xl z-120 flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                className={`fixed top-0 left-0 h-full bg-[#0F3E34] w-72 shadow-xl z-50 flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 role="dialog"
                 aria-modal="true"
             >
