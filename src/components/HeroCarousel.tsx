@@ -125,7 +125,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ slides }) => {
                         onClick={(e) => slide.button_link && handleLinkClick(e, slide.button_link)}
                         target={slide.button_link && !slide.button_link.startsWith('/') ? '_blank' : '_self'}
                         rel="noopener noreferrer"
-                        className="flex-shrink-0 h-full w-auto mx-4 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl transition-transform duration-300 ease-in-out hover:scale-105 hover:z-20"
+                        className="flex-shrink-0 h-full w-auto mx-4 focus:outline-none focus:ring-4 focus:ring-indigo-300 focus:ring-offset-2 rounded-2xl transition-transform duration-300 ease-in-out hover:scale-105 hover:z-10"
                         aria-label={`Zobacz realizację: ${slide.title}`}
                         draggable="false"
                     >
