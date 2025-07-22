@@ -1,30 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { MenuIcon, BellIcon } from './Icons.tsx';
 import NotificationPanel from './NotificationPanel.tsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface HeaderProps {
     onMenuToggle: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
-    const [isAdmin, setIsAdmin] = useState(false);
+    const { isAdmin } = useAuth();
     const [unreadCount, setUnreadCount] = useState(0);
     const [isPanelOpen, setIsPanelOpen] = useState(false);
-
-    const checkAdminStatus = () => {
-        const token = localStorage.getItem('adminAuthToken');
-        setIsAdmin(!!token);
-        if (!token) {
-            setUnreadCount(0);
-            setIsPanelOpen(false);
-        }
-    };
-
-    useEffect(() => {
-        checkAdminStatus();
-        const interval = setInterval(checkAdminStatus, 2000); // Check login status periodically
-        return () => clearInterval(interval);
-    }, []);
 
     const fetchUnreadCount = async () => {
         const token = localStorage.getItem('adminAuthToken');
@@ -54,6 +40,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
             fetchUnreadCount();
             const interval = setInterval(fetchUnreadCount, 15000);
             return () => clearInterval(interval);
+        } else {
+            setUnreadCount(0);
+            setIsPanelOpen(false);
         }
     }, [isAdmin]);
 
@@ -65,7 +54,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
     };
 
     return (
-        <header className="bg-white shadow-md sticky top-0 z-15">
+        <header className="bg-white shadow-md sticky top-0 z-30">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center">
