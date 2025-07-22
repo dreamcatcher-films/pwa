@@ -1,8 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { EngagementRingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from './FormControls.tsx';
+import { validateDiscount, createBooking } from '../api.ts';
 
 interface BookingDetails {
     accessKey: string;
@@ -29,24 +30,31 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
         phoneNumber: '', additionalInfo: '', password: '', confirmPassword: ''
     });
     const [discountCode, setDiscountCode] = useState('');
-    const [appliedDiscount, setAppliedDiscount] = useState<Discount>(null);
-    const [discountStatus, setDiscountStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-    const [discountError, setDiscountError] = useState('');
-    
-    const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-    const [error, setError] = useState('');
     const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
+
+    const discountMutation = useMutation<Discount, Error, string>({
+        mutationFn: validateDiscount,
+    });
+
+    const bookingMutation = useMutation({
+        mutationFn: createBooking,
+        onSuccess: (data) => {
+            onBookingComplete({ bookingId: data.bookingId, clientId: data.clientId });
+        }
+    });
 
     const initialPrice = bookingDetails.totalPrice;
     const [finalPrice, setFinalPrice] = useState(initialPrice);
+    
+    const appliedDiscount = discountMutation.data;
 
     useEffect(() => {
         let newPrice = initialPrice;
         if (appliedDiscount) {
             if (appliedDiscount.type === 'percentage') {
-                newPrice = newPrice * (1 - appliedDiscount.value / 100);
+                newPrice = newPrice * (1 - Number(appliedDiscount.value) / 100);
             } else {
-                newPrice = newPrice - appliedDiscount.value;
+                newPrice = newPrice - Number(appliedDiscount.value);
             }
         }
         setFinalPrice(Math.max(0, newPrice));
@@ -61,27 +69,9 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
         }
     };
 
-    const handleApplyDiscount = async () => {
+    const handleApplyDiscount = () => {
         if (!discountCode) return;
-        setDiscountStatus('loading');
-        setDiscountError('');
-        setAppliedDiscount(null);
-        try {
-            const response = await fetch('/api/validate-discount', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: discountCode })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || 'Nieprawidłowy kod rabatowy.');
-            }
-            setAppliedDiscount(data);
-            setDiscountStatus('success');
-        } catch(err) {
-            setDiscountError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            setDiscountStatus('error');
-        }
+        discountMutation.mutate(discountCode);
     }
 
     const validateForm = () => {
@@ -94,10 +84,8 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
         if (!validateForm()) return;
 
-        setStatus('loading');
         const { confirmPassword, ...dataToSend } = formData;
         const fullBookingData = {
             ...bookingDetails,
@@ -105,25 +93,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
             totalPrice: finalPrice,
             discountCode: appliedDiscount?.code || null,
         };
-
-        try {
-            const response = await fetch('/api/bookings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(fullBookingData),
-            });
-            if (!response.ok) {
-                 const errorText = await response.text();
-                 throw new Error(errorText || 'Nie udało się zapisać rezerwacji.');
-            }
-            const result = await response.json();
-            onBookingComplete({bookingId: result.bookingId, clientId: result.clientId});
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            setStatus('error');
-        } finally {
-            if (status !== 'idle') setStatus('idle');
-        }
+        bookingMutation.mutate(fullBookingData);
     };
 
     return (
@@ -151,7 +121,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
             </div>
 
             <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
-                {error && <div className="p-4 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg"><p className="font-bold">Wystąpił błąd</p><p>{error}</p></div>}
+                {bookingMutation.isError && <div className="p-4 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg"><p className="font-bold">Wystąpił błąd</p><p>{bookingMutation.error.message}</p></div>}
                 
                 <section className="pb-6 border-b"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane Pary Młodej</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideName" label="Imię i nazwisko Panny Młodej" placeholder="Anna Nowak" value={formData.brideName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /><InputField id="groomName" label="Imię i nazwisko Pana Młodego" placeholder="Piotr Kowalski" value={formData.groomName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /></div></section>
                 <InputField id="weddingDate" label="Data ślubu" type="date" value={formData.weddingDate} onChange={handleChange} placeholder="" />
@@ -181,17 +151,17 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                             placeholder="np. LATO2024"
                             className="block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                         />
-                        <button type="button" onClick={handleApplyDiscount} disabled={discountStatus === 'loading' || !discountCode} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 w-32 flex justify-center items-center">
-                            {discountStatus === 'loading' ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zastosuj'}
+                        <button type="button" onClick={handleApplyDiscount} disabled={discountMutation.isPending || !discountCode} className="bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed flex-shrink-0 w-32 flex justify-center items-center">
+                            {discountMutation.isPending ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zastosuj'}
                         </button>
                     </div>
-                    {discountStatus === 'success' && <p className="mt-2 text-sm text-green-600 flex items-center gap-2"><CheckCircleIcon className="w-5 h-5"/>Rabat został pomyślnie naliczony!</p>}
-                    {discountStatus === 'error' && <p className="mt-2 text-sm text-red-600">{discountError}</p>}
+                    {discountMutation.isSuccess && <p className="mt-2 text-sm text-green-600 flex items-center gap-2"><CheckCircleIcon className="w-5 h-5"/>Rabat został pomyślnie naliczony!</p>}
+                    {discountMutation.isError && <p className="mt-2 text-sm text-red-600">{discountMutation.error.message}</p>}
                 </section>
 
                 <div className="pt-6 border-t">
-                     <button type="submit" disabled={status === 'loading'} className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed">
-                        {status === 'loading' ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zarezerwuj i utwórz konto'}
+                     <button type="submit" disabled={bookingMutation.isPending} className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed">
+                        {bookingMutation.isPending ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zarezerwuj i utwórz konto'}
                     </button>
                 </div>
             </form>
