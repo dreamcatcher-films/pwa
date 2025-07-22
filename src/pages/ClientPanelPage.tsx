@@ -1,9 +1,11 @@
 import React, { useState, useEffect, FC, ReactNode, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, ChevronDownIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
+import { getClientPanelData, updateMyBooking, approveBookingStage, sendClientMessage, markMessagesAsRead } from '../api.ts';
 
 interface BookingData {
     id: number;
@@ -73,93 +75,88 @@ const AddressWithMapLink: FC<{ address: string | null }> = ({ address }) => {
 
 
 const ClientPanelPage: React.FC = () => {
-    const [bookingData, setBookingData] = useState<BookingData | null>(null);
-    const [stages, setStages] = useState<ProductionStage[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
     const [showWelcome, setShowWelcome] = useState(true);
-
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<EditableBookingData>({ bride_address: '', groom_address: '', church_location: '', venue_location: '', schedule: '', additional_info: '' });
-    const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-    const [updateError, setUpdateError] = useState('');
-
     const [newMessage, setNewMessage] = useState('');
-    const [isSendingMessage, setIsSendingMessage] = useState(false);
-    const [messageError, setMessageError] = useState('');
     const [isChatOpen, setIsChatOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
+    
     const chatEndRef = useRef<HTMLDivElement>(null);
-
     const navigate = useNavigate();
-    const token = localStorage.getItem('authToken');
-
-    const fetchAllData = async () => {
-        if (!token) {
-            navigate('/logowanie');
-            return;
-        }
-        
-        if (!bookingData) setIsLoading(true);
-
-        try {
-            const [bookingRes, stagesRes, messagesRes, unreadRes] = await Promise.all([
-                fetch('/api/my-booking', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/booking-stages', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/messages', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/messages/unread-count', { headers: { 'Authorization': `Bearer ${token}` } })
-            ]);
-
-            if (bookingRes.status === 401 || bookingRes.status === 403) {
-                 localStorage.removeItem('authToken');
-                 navigate('/logowanie');
-                 return;
+    const queryClient = useQueryClient();
+    
+    const { data, isLoading, error } = useQuery({
+        queryKey: ['clientPanel'],
+        queryFn: getClientPanelData,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        retry: (failureCount, error: any) => {
+            if (error.message.includes('401') || error.message.includes('403')) {
+                return false;
             }
-
-            if (!bookingRes.ok) throw new Error(await bookingRes.text() || 'Błąd pobierania rezerwacji.');
-            if (!stagesRes.ok) throw new Error(await stagesRes.text() || 'Błąd pobierania etapów.');
-            if (!messagesRes.ok) throw new Error(await messagesRes.text() || 'Błąd pobierania wiadomości.');
-            if (!unreadRes.ok) throw new Error('Błąd pobierania licznika wiadomości.');
-            
-            const bookingDataResult = await bookingRes.json();
-            const stagesData = await stagesRes.json();
-            const messagesData = await messagesRes.json();
-            const unreadData = await unreadRes.json();
-            
-            setBookingData(bookingDataResult);
-            setStages(stagesData);
-            setMessages(messagesData);
-            setUnreadCount(unreadData.count);
-
-            if (!isEditing) {
-                setFormData({
-                    bride_address: bookingDataResult.bride_address || '',
-                    groom_address: bookingDataResult.groom_address || '',
-                    church_location: bookingDataResult.church_location || '',
-                    venue_location: bookingDataResult.venue_location || '',
-                    schedule: bookingDataResult.schedule || '',
-                    additional_info: bookingDataResult.additional_info || '',
-                });
-            }
-
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        } finally {
-            setIsLoading(false);
-            setTimeout(() => setShowWelcome(false), 2500);
+            return failureCount < 3;
         }
-    };
+    });
     
     useEffect(() => {
-        fetchAllData();
-    }, [navigate, token]);
-
+        if (error) {
+            localStorage.removeItem('authToken');
+            navigate('/logowanie');
+        }
+    }, [error, navigate]);
+    
      useEffect(() => {
+        if (data?.booking) {
+            setFormData({
+                bride_address: data.booking.bride_address || '',
+                groom_address: data.booking.groom_address || '',
+                church_location: data.booking.church_location || '',
+                venue_location: data.booking.venue_location || '',
+                schedule: data.booking.schedule || '',
+                additional_info: data.booking.additional_info || '',
+            });
+            setTimeout(() => setShowWelcome(false), 2500);
+        }
+    }, [data?.booking]);
+
+    const updateBookingMutation = useMutation({
+        mutationFn: updateMyBooking,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['clientPanel'] });
+             setTimeout(() => {
+                setIsEditing(false);
+            }, 2000);
+        }
+    });
+
+    const approveStageMutation = useMutation({
+        mutationFn: approveBookingStage,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['clientPanel'] });
+        },
+        onError: (err) => {
+             alert(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        }
+    });
+
+    const sendMessageMutation = useMutation({
+        mutationFn: sendClientMessage,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['clientPanel'] });
+        },
+    });
+    
+    const markAsReadMutation = useMutation({
+        mutationFn: markMessagesAsRead,
+        onSuccess: () => {
+             queryClient.invalidateQueries({ queryKey: ['clientPanel'] });
+        }
+    });
+
+    useEffect(() => {
         if (isChatOpen) {
             chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages, isChatOpen]);
+    }, [data?.messages, isChatOpen]);
     
     const handleLogout = () => {
         localStorage.removeItem('authToken');
@@ -172,133 +169,58 @@ const ClientPanelPage: React.FC = () => {
 
     const handleCancelEdit = () => {
         setIsEditing(false);
-        if (bookingData) {
+        if (data?.booking) {
              setFormData({
-                bride_address: bookingData.bride_address || '',
-                groom_address: bookingData.groom_address || '',
-                church_location: bookingData.church_location || '',
-                venue_location: bookingData.venue_location || '',
-                schedule: bookingData.schedule || '',
-                additional_info: bookingData.additional_info || '',
+                bride_address: data.booking.bride_address || '',
+                groom_address: data.booking.groom_address || '',
+                church_location: data.booking.church_location || '',
+                venue_location: data.booking.venue_location || '',
+                schedule: data.booking.schedule || '',
+                additional_info: data.booking.additional_info || '',
             });
-        }
-        setUpdateError('');
-        setUpdateStatus('idle');
-    };
-
-    const handleSave = async () => {
-        setUpdateStatus('loading');
-        setUpdateError('');
-
-        try {
-            const response = await fetch('/api/my-booking', {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(formData),
-            });
-            
-            if(!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Błąd zapisu danych.');
-            }
-            const result = await response.json();
-            setBookingData(prev => prev ? {...prev, ...result.booking} : null);
-            setUpdateStatus('success');
-            setTimeout(() => {
-                setIsEditing(false);
-                setUpdateStatus('idle');
-            }, 2000);
-        } catch(err) {
-            setUpdateError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            setUpdateStatus('error');
         }
     };
     
-    const handleApproveStage = async (stageId: number) => {
-        try {
-            const response = await fetch(`/api/booking-stages/${stageId}/approve`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) throw new Error(await response.text() || 'Błąd zatwierdzania etapu.');
-            await fetchAllData();
-        } catch (err) {
-            alert(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        }
+    const handleSave = () => {
+        updateBookingMutation.mutate(formData);
     };
 
-    const handleSendMessage = async (e: React.FormEvent) => {
+    const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
         const content = newMessage.trim();
-        if (!content || isSendingMessage) return;
-
-        const tempId = `temp-${Date.now()}`;
-        const optimisticMessage: Message = { id: tempId, sender: 'client', content, created_at: new Date().toISOString(), status: 'sending' };
-
-        setMessages(prev => [...prev, optimisticMessage]);
+        if (!content || sendMessageMutation.isPending) return;
+        sendMessageMutation.mutate(content);
         setNewMessage('');
-        setMessageError('');
-        setIsSendingMessage(true);
-        
-        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
-
-        try {
-            const response = await fetch('/api/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ content }),
-            });
-
-            if (!response.ok) throw new Error(await response.text() || 'Błąd wysyłania wiadomości.');
-            
-            const savedMessage = await response.json();
-            setMessages(prev => prev.map(msg => msg.id === tempId ? savedMessage : msg));
-
-        } catch (err) {
-            setMessageError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            setMessages(prev => prev.map(msg => msg.id === tempId ? { ...msg, status: 'error' } : msg));
-        } finally {
-            setIsSendingMessage(false);
-        }
     };
 
-    const handleToggleChat = async () => {
+    const handleToggleChat = () => {
         const newChatState = !isChatOpen;
         setIsChatOpen(newChatState);
-        if (newChatState && unreadCount > 0) {
-            try {
-                await fetch('/api/messages/mark-as-read', {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                setUnreadCount(0);
-            } catch (err) {
-                console.error("Failed to mark messages as read", err);
-            }
+        if (newChatState && data?.unreadCount?.count > 0) {
+            markAsReadMutation.mutate();
         }
     };
-
-    if (isLoading || !bookingData) {
+    
+    if (isLoading || !data) {
         return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     }
-    
-    if (showWelcome) {
+
+    if (showWelcome && data?.booking) {
         return (
             <div className="fixed inset-0 bg-slate-50 z-50 flex items-center justify-center animate-modal-in">
                 <h1 className="text-4xl md:text-6xl font-bold font-cinzel text-slate-800 text-center tracking-wide">
-                    Witaj,<br/>{bookingData.bride_name} & {bookingData.groom_name}
+                    Witaj,<br/>{data.booking.bride_name} & {data.booking.groom_name}
                 </h1>
             </div>
         );
     }
     
-    if (error) {
-        return (
+    const { booking, stages, messages, unreadCount } = data;
+    
+    if (!booking) {
+         return (
              <div className="text-center py-20 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-                <p className="text-red-500">{error}</p>
+                <p className="text-red-500">Błąd: Nie znaleziono danych rezerwacji.</p>
                 <button onClick={() => navigate('/logowanie')} className="mt-4 bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button>
             </div>
         );
@@ -338,8 +260,8 @@ const ClientPanelPage: React.FC = () => {
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
              <header className="flex flex-col sm:flex-row justify-between items-center mb-10">
                 <div className="text-center sm:text-left">
-                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły rezerwacji #{bookingData.id}</h1>
-                    <p className="mt-2 text-lg text-slate-600">Witaj, {bookingData.bride_name}!</p>
+                    <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły rezerwacji #{booking.id}</h1>
+                    <p className="mt-2 text-lg text-slate-600">Witaj, {booking.bride_name}!</p>
                 </div>
                 <button 
                     onClick={handleLogout}
@@ -365,8 +287,8 @@ const ClientPanelPage: React.FC = () => {
                                 </div>
                                 <p className="text-sm text-slate-600 mt-3 flex-grow">{stage.description}</p>
                                 {stage.status === 'awaiting_approval' && (
-                                    <button onClick={() => handleApproveStage(stage.id)} className="mt-4 w-full inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-brand-dark-green rounded-lg hover:bg-brand-dark-green/90">
-                                        <CheckCircleIcon className="w-4 h-4 mr-2" /> Zatwierdź etap
+                                    <button onClick={() => approveStageMutation.mutate(stage.id)} disabled={approveStageMutation.isPending} className="mt-4 w-full inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-brand-dark-green rounded-lg hover:bg-brand-dark-green/90 disabled:opacity-50">
+                                        <CheckCircleIcon className="w-4 h-4 mr-2" /> {approveStageMutation.isPending ? 'Zatwierdzanie...' : 'Zatwierdź etap'}
                                     </button>
                                 )}
                             </div>
@@ -380,10 +302,10 @@ const ClientPanelPage: React.FC = () => {
                 <div className="lg:col-span-2 space-y-8">
                     <InfoCard title="Dane Pary Młodej" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InfoItem label="Panna Młoda" value={bookingData.bride_name} />
-                            <InfoItem label="Pan Młody" value={bookingData.groom_name} />
-                            <InfoItem label="Adres e-mail" value={bookingData.email} />
-                            <InfoItem label="Numer telefonu" value={bookingData.phone_number} />
+                            <InfoItem label="Panna Młoda" value={booking.bride_name} />
+                            <InfoItem label="Pan Młody" value={booking.groom_name} />
+                            <InfoItem label="Adres e-mail" value={booking.email} />
+                            <InfoItem label="Numer telefonu" value={booking.phone_number} />
                         </div>
                     </InfoCard>
 
@@ -392,7 +314,7 @@ const ClientPanelPage: React.FC = () => {
                             <div className="flex items-center">
                                 <ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />
                                 <h2 className="text-xl font-bold text-slate-800">Komunikacja z nami</h2>
-                                {unreadCount > 0 && <span className="ml-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{unreadCount} nowa</span>}
+                                {unreadCount?.count > 0 && <span className="ml-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{unreadCount.count} nowa</span>}
                             </div>
                             <ChevronDownIcon className={`w-6 h-6 text-slate-500 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -401,12 +323,10 @@ const ClientPanelPage: React.FC = () => {
                                 <div className="space-y-4 pr-2 max-h-96 overflow-y-auto border-t pt-4">
                                     {messages.map(msg => (
                                         <div key={msg.id} className={`flex ${msg.sender === 'client' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'client' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
+                                            <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'client' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'}`}>
                                                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                                                 <p className={`text-xs mt-1 ${msg.sender === 'client' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                                                    {msg.status === 'sending' && 'Wysyłanie...'}
-                                                    {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
-                                                    {!msg.status && formatMessageDate(msg.created_at)}
+                                                    {formatMessageDate(msg.created_at)}
                                                 </p>
                                             </div>
                                         </div>
@@ -414,11 +334,11 @@ const ClientPanelPage: React.FC = () => {
                                     <div ref={chatEndRef} />
                                 </div>
                                 <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t">
-                                    {messageError && <p className="text-red-500 text-sm mb-2">{messageError}</p>}
-                                    <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz wiadomość..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={isSendingMessage} />
+                                    {sendMessageMutation.isError && <p className="text-red-500 text-sm mb-2">{sendMessageMutation.error.message}</p>}
+                                    <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz wiadomość..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={sendMessageMutation.isPending} />
                                     <div className="text-right mt-2">
-                                        <button type="submit" disabled={isSendingMessage || !newMessage.trim()} className="bg-brand-dark-green text-white font-bold py-2 px-5 rounded-lg hover:bg-brand-dark-green/90 disabled:opacity-50 transition-colors flex items-center justify-center w-28 ml-auto">
-                                            {isSendingMessage ? <EngagementRingSpinner className="w-5 h-5" /> : 'Wyślij'}
+                                        <button type="submit" disabled={sendMessageMutation.isPending || !newMessage.trim()} className="bg-brand-dark-green text-white font-bold py-2 px-5 rounded-lg hover:bg-brand-dark-green/90 disabled:opacity-50 transition-colors flex items-center justify-center w-28 ml-auto">
+                                            {sendMessageMutation.isPending ? <EngagementRingSpinner className="w-5 h-5" /> : 'Wyślij'}
                                         </button>
                                     </div>
                                 </form>
@@ -430,15 +350,15 @@ const ClientPanelPage: React.FC = () => {
                         {!isEditing ? (
                              <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <InfoItem label="Data ślubu" value={formatDate(bookingData.wedding_date)} />
+                                    <InfoItem label="Data ślubu" value={formatDate(booking.wedding_date)} />
                                     <div></div>
-                                    <InfoItem label="Adres przygotowań Panny Młodej" value={<AddressWithMapLink address={bookingData.bride_address} />} />
-                                    <InfoItem label="Adres przygotowań Pana Młodego" value={<AddressWithMapLink address={bookingData.groom_address} />} />
-                                    <InfoItem label="Adres ceremonii" value={<AddressWithMapLink address={bookingData.church_location} />} />
-                                    <InfoItem label="Adres przyjęcia" value={<AddressWithMapLink address={bookingData.venue_location} />} />
+                                    <InfoItem label="Adres przygotowań Panny Młodej" value={<AddressWithMapLink address={booking.bride_address} />} />
+                                    <InfoItem label="Adres przygotowań Pana Młodego" value={<AddressWithMapLink address={booking.groom_address} />} />
+                                    <InfoItem label="Adres ceremonii" value={<AddressWithMapLink address={booking.church_location} />} />
+                                    <InfoItem label="Adres przyjęcia" value={<AddressWithMapLink address={booking.venue_location} />} />
                                 </div>
-                                <InfoItem label="Przybliżony harmonogram dnia" value={bookingData.schedule} />
-                                <InfoItem label="Dodatkowe informacje" value={bookingData.additional_info} />
+                                <InfoItem label="Przybliżony harmonogram dnia" value={booking.schedule} />
+                                <InfoItem label="Dodatkowe informacje" value={booking.additional_info} />
                             </>
                         ) : (
                             <div className="space-y-6">
@@ -453,13 +373,13 @@ const ClientPanelPage: React.FC = () => {
                                 <TextAreaField id="schedule" name="schedule" label="Przybliżony harmonogram dnia" placeholder="12:00 - Przygotowania..." value={formData.schedule} onChange={handleFormChange} />
                                 <TextAreaField id="additional_info" name="additional_info" label="Dodatkowe informacje" placeholder="np. specjalne prośby..." value={formData.additional_info} onChange={handleFormChange} required={false} />
 
-                                {updateStatus === 'error' && <p className="text-red-600 text-sm">{updateError}</p>}
+                                {updateBookingMutation.isError && <p className="text-red-600 text-sm">{updateBookingMutation.error.message}</p>}
                                 
                                 <div className="flex items-center justify-end gap-3 pt-4 border-t">
-                                    {updateStatus === 'success' && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano pomyślnie!</div>}
-                                    <button onClick={handleCancelEdit} disabled={updateStatus==='loading'} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-200 transition">Anuluj</button>
-                                    <button onClick={handleSave} disabled={updateStatus==='loading'} className="bg-brand-dark-green w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-dark-green/90 transition flex justify-center items-center">
-                                        {updateStatus === 'loading' ? <EngagementRingSpinner className="w-5 h-5" /> : 'Zapisz zmiany'}
+                                    {updateBookingMutation.isSuccess && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano pomyślnie!</div>}
+                                    <button onClick={handleCancelEdit} disabled={updateBookingMutation.isPending} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg hover:bg-slate-200 transition">Anuluj</button>
+                                    <button onClick={handleSave} disabled={updateBookingMutation.isPending} className="bg-brand-dark-green w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-dark-green/90 transition flex justify-center items-center">
+                                        {updateBookingMutation.isPending ? <EngagementRingSpinner className="w-5 h-5" /> : 'Zapisz zmiany'}
                                     </button>
                                 </div>
                             </div>
@@ -469,24 +389,24 @@ const ClientPanelPage: React.FC = () => {
                 <div className="lg:col-span-1">
                     <div className="sticky top-28 space-y-8">
                          <InfoCard title="Podsumowanie pakietu" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
-                            <InfoItem label="Wybrany pakiet" value={bookingData.package_name} />
+                            <InfoItem label="Wybrany pakiet" value={booking.package_name} />
                             <div>
                                 <p className="text-sm text-slate-500">Wybrane usługi</p>
                                 <ul className="list-disc list-inside mt-1 font-medium">
-                                    {bookingData.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}
+                                    {booking.selected_items.map((item, index) => <li key={index} className="capitalize">{item.replace(/_/g, ' ')}</li>)}
                                </ul>
                             </div>
                          </InfoCard>
                          <InfoCard title="Rozliczenie" icon={<CurrencyDollarIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
-                            <InfoItem label="Status płatności" value={<span className="font-bold">{getPaymentStatusText(bookingData.payment_status)}</span>} />
+                            <InfoItem label="Status płatności" value={<span className="font-bold">{getPaymentStatusText(booking.payment_status)}</span>} />
                             <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-2">
-                                <InfoItem label="Wpłacono" value={formatCurrency(Number(bookingData.amount_paid))} />
-                                <InfoItem label="Pozostało" value={formatCurrency(Number(bookingData.total_price) - Number(bookingData.amount_paid))} />
+                                <InfoItem label="Wpłacono" value={formatCurrency(Number(booking.amount_paid))} />
+                                <InfoItem label="Pozostało" value={formatCurrency(Number(booking.total_price) - Number(booking.amount_paid))} />
                             </div>
                              <div className="border-t pt-4 mt-2">
                                 <div className="flex justify-between items-baseline">
                                     <p className="text-lg font-bold text-slate-900">Suma</p>
-                                    <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(bookingData.total_price))}</p>
+                                    <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(booking.total_price))}</p>
                                 </div>
                             </div>
                          </InfoCard>
