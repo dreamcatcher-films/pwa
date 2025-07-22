@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, FC, ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, EngagementRingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
-import { Page } from '../App.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -306,12 +305,11 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
 
 // --- MAIN CREATOR APP ---
 interface CalculatorPageProps {
-    navigateTo: (page: Page) => void;
 }
 
 const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
-const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
+const CalculatorPage: FC<CalculatorPageProps> = () => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -330,6 +328,8 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
     const [allAddons, setAllAddons] = useState<Addon[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    
+    const navigate = useNavigate();
     
     const currentStepIndex = () => {
         switch(step) {
@@ -496,7 +496,7 @@ const CalculatorPage: FC<CalculatorPageProps> = ({ navigateTo }) => {
 
                  <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
                      <button 
-                        onClick={() => navigateTo('login')}
+                        onClick={() => navigate('/logowanie')}
                         className="bg-brand-dark-green text-white font-bold py-3 px-6 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-transform hover:scale-105">
                         Przejdź do Panelu Klienta
                     </button>
