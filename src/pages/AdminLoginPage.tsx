@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { loginAdmin } from '../api.ts';
 
 const AdminLoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const { isAdmin, login } = useAuth();
     const navigate = useNavigate();
 
@@ -17,31 +17,16 @@ const AdminLoginPage: React.FC = () => {
         }
     }, [isAdmin, navigate]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
-
-        try {
-            const response = await fetch('/api/admin/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Logowanie nie powiodło się.' }));
-                throw new Error(errorData.message);
-            }
-            
-            const data = await response.json();
+    const loginMutation = useMutation({
+        mutationFn: loginAdmin,
+        onSuccess: (data) => {
             login(data.token);
+        },
+    });
 
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-        } finally {
-            setIsLoading(false);
-        }
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        loginMutation.mutate({ email, password });
     };
 
     return (
@@ -53,9 +38,9 @@ const AdminLoginPage: React.FC = () => {
                 </div>
                 
                 <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
-                    {error && (
+                    {loginMutation.isError && (
                         <div className="p-3 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg text-sm">
-                            <p>{error}</p>
+                            <p>{loginMutation.error.message}</p>
                         </div>
                     )}
                     
@@ -97,10 +82,10 @@ const AdminLoginPage: React.FC = () => {
 
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={loginMutation.isPending}
                         className="w-full bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-800 transition-all flex justify-center items-center h-12 disabled:bg-opacity-50 disabled:cursor-not-allowed"
                     >
-                        {isLoading ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zaloguj się'}
+                        {loginMutation.isPending ? <EngagementRingSpinner className="w-6 h-6" /> : 'Zaloguj się'}
                     </button>
                 </form>
             </div>
