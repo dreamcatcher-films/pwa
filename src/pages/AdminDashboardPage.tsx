@@ -1,6 +1,7 @@
 import React, { useEffect, FC, ReactNode, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon } from '../components/Icons.tsx';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 // --- TYPES ---
 interface NavItem {
@@ -69,22 +70,25 @@ const AdminDashboardPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const { isAdmin, logout } = useAuth();
     
     useEffect(() => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (!token) {
-            navigate('/admin/logowanie');
+        if (!isAdmin) {
+            navigate('/admin/logowanie', { replace: true });
         }
-    }, [navigate]);
+    }, [isAdmin, navigate]);
 
     const handleLogout = () => {
-        localStorage.removeItem('adminAuthToken');
-        navigate('/');
+        logout();
     };
 
     const currentNavItem = navConfig
         .flatMap(g => g.items)
         .find(item => location.pathname.startsWith(`/admin/${item.path}`));
+
+    if (!isAdmin) {
+        return null; // Render nothing while redirecting
+    }
 
     return (
         <div className="flex" style={{ minHeight: 'calc(100vh - 64px)' }}>
