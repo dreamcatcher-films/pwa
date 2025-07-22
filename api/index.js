@@ -1,5 +1,6 @@
 
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -322,7 +323,7 @@ const authenticateAdmin = (req, res, next) => {
 
 // --- CLIENT-AUTHENTICATED ROUTES ---
 
-app.post('/api/my-booking/photo', authenticateClient, rawBodyParser, async (req, res) => {
+app.post('/my-booking/photo', authenticateClient, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'] || `photo-${req.user.bookingId}.jpg`;
     if (!req.body || req.body.length === 0) {
         return res.status(400).json({ message: 'No file content provided.' });
