@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { EngagementRingSpinner, UserIcon, LockClosedIcon, CheckCircleIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from './FormControls.tsx';
@@ -23,14 +24,25 @@ type Discount = {
     value: number;
 } | null;
 
+type FormValues = {
+    brideName: string;
+    groomName: string;
+    weddingDate: string;
+    brideAddress: string;
+    groomAddress: string;
+    churchLocation: string;
+    venueLocation: string;
+    schedule: string;
+    email: string;
+    phoneNumber: string;
+    additionalInfo: string;
+    password: string;
+    confirmPassword: string;
+};
+
 const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComplete }) => {
-    const [formData, setFormData] = useState({
-        brideName: '', groomName: '', weddingDate: '', brideAddress: '',
-        groomAddress: '', churchLocation: '', venueLocation: '', schedule: '', email: '',
-        phoneNumber: '', additionalInfo: '', password: '', confirmPassword: ''
-    });
+    const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>();
     const [discountCode, setDiscountCode] = useState('');
-    const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
     const discountMutation = useMutation<Discount, Error, string>({
         mutationFn: validateDiscount,
@@ -60,32 +72,12 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
         setFinalPrice(Math.max(0, newPrice));
     }, [initialPrice, appliedDiscount]);
 
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
-        if (validationErrors[id]) {
-             setValidationErrors(prev => ({ ...prev, [id]: '' }));
-        }
-    };
-
     const handleApplyDiscount = () => {
         if (!discountCode) return;
         discountMutation.mutate(discountCode);
     }
 
-    const validateForm = () => {
-        const errors: { [key: string]: string } = {};
-        if (formData.password.length < 8) errors.password = "Hasło musi mieć co najmniej 8 znaków.";
-        if (formData.password !== formData.confirmPassword) errors.confirmPassword = "Hasła nie są identyczne.";
-        setValidationErrors(errors);
-        return Object.keys(errors).length === 0;
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-
+    const onSubmit: SubmitHandler<FormValues> = (formData) => {
         const { confirmPassword, ...dataToSend } = formData;
         const fullBookingData = {
             ...bookingDetails,
@@ -95,6 +87,8 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
         };
         bookingMutation.mutate(fullBookingData);
     };
+
+    const password = watch('password');
 
     return (
         <>
@@ -120,25 +114,25 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-8 rounded-2xl shadow-lg space-y-6">
                 {bookingMutation.isError && <div className="p-4 mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-r-lg"><p className="font-bold">Wystąpił błąd</p><p>{bookingMutation.error.message}</p></div>}
                 
-                <section className="pb-6 border-b"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane Pary Młodej</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideName" label="Imię i nazwisko Panny Młodej" placeholder="Anna Nowak" value={formData.brideName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /><InputField id="groomName" label="Imię i nazwisko Pana Młodego" placeholder="Piotr Kowalski" value={formData.groomName} onChange={handleChange} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /></div></section>
-                <InputField id="weddingDate" label="Data ślubu" type="date" value={formData.weddingDate} onChange={handleChange} placeholder="" />
-                <section className="pt-6 mt-6 border-t"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane kontaktowe i logowania</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="email" label="Adres e-mail" type="email" placeholder="anna.nowak@example.com" value={formData.email} onChange={handleChange} /><InputField id="phoneNumber" label="Numer telefonu" type="tel" placeholder="123-456-789" value={formData.phoneNumber} onChange={handleChange} /><InputField id="password" label="Ustaw hasło do panelu klienta" type="password" placeholder="Minimum 8 znaków" value={formData.password} onChange={handleChange} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} error={validationErrors.password} /><InputField id="confirmPassword" label="Potwierdź hasło" type="password" placeholder="Powtórz hasło" value={formData.confirmPassword} onChange={handleChange} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} error={validationErrors.confirmPassword} /></div></section>
+                <section className="pb-6 border-b"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane Pary Młodej</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="brideName" label="Imię i nazwisko Panny Młodej" placeholder="Anna Nowak" register={register('brideName', { required: 'To pole jest wymagane.' })} error={errors.brideName} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /><InputField id="groomName" label="Imię i nazwisko Pana Młodego" placeholder="Piotr Kowalski" register={register('groomName', { required: 'To pole jest wymagane.' })} error={errors.groomName} icon={<UserIcon className="h-5 w-5 text-slate-400" />} /></div></section>
+                <InputField id="weddingDate" label="Data ślubu" type="date" register={register('weddingDate', { required: 'To pole jest wymagane.' })} error={errors.weddingDate} />
+                <section className="pt-6 mt-6 border-t"><h3 className="text-lg font-semibold text-slate-800 mb-4">Dane kontaktowe i logowania</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField id="email" label="Adres e-mail" type="email" placeholder="anna.nowak@example.com" register={register('email', { required: 'Adres e-mail jest wymagany.' })} error={errors.email} /><InputField id="phoneNumber" label="Numer telefonu" type="tel" placeholder="123-456-789" register={register('phoneNumber', { required: 'Numer telefonu jest wymagany.' })} error={errors.phoneNumber} /><InputField id="password" label="Ustaw hasło do panelu klienta" type="password" placeholder="Minimum 8 znaków" register={register('password', { required: 'Hasło jest wymagane.', minLength: { value: 8, message: 'Hasło musi mieć co najmniej 8 znaków.' } })} error={errors.password} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} /><InputField id="confirmPassword" label="Potwierdź hasło" type="password" placeholder="Powtórz hasło" register={register('confirmPassword', { required: 'Potwierdzenie hasła jest wymagane.', validate: value => value === password || 'Hasła nie są identyczne.' })} error={errors.confirmPassword} icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />} /></div></section>
                 <section className="pt-6 mt-6 border-t">
                     <h3 className="text-lg font-semibold text-slate-800 mb-4">Szczegóły wydarzenia</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InputField id="brideAddress" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" value={formData.brideAddress} onChange={handleChange} />
-                        <InputField id="groomAddress" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" value={formData.groomAddress} onChange={handleChange} />
-                        <InputField id="churchLocation" label="Adres ceremonii (np. kościół)" placeholder="Parafia Św. Anny, Warszawa" value={formData.churchLocation} onChange={handleChange} />
-                        <InputField id="venueLocation" label="Adres przyjęcia (np. sala weselna)" placeholder="Hotel Bristol, Warszawa" value={formData.venueLocation} onChange={handleChange} />
+                        <InputField id="brideAddress" label="Adres przygotowań Panny Młodej" placeholder="ul. Przykładowa 1, Warszawa" register={register('brideAddress', { required: 'To pole jest wymagane.' })} error={errors.brideAddress} />
+                        <InputField id="groomAddress" label="Adres przygotowań Pana Młodego" placeholder="ul. Inna 2, Kraków" register={register('groomAddress', { required: 'To pole jest wymagane.' })} error={errors.groomAddress} />
+                        <InputField id="churchLocation" label="Adres ceremonii (np. kościół)" placeholder="Parafia Św. Anny, Warszawa" register={register('churchLocation', { required: 'To pole jest wymagane.' })} error={errors.churchLocation} />
+                        <InputField id="venueLocation" label="Adres przyjęcia (np. sala weselna)" placeholder="Hotel Bristol, Warszawa" register={register('venueLocation', { required: 'To pole jest wymagane.' })} error={errors.venueLocation} />
                     </div>
                     <div className="mt-6">
-                        <TextAreaField id="schedule" label="Przybliżony harmonogram dnia ślubu" placeholder="12:00 - Przygotowania Panny Młodej&#10;14:00 - Ceremonia&#10;16:00 - Wesele" value={formData.schedule} onChange={handleChange} />
+                        <TextAreaField id="schedule" label="Przybliżony harmonogram dnia ślubu" placeholder="12:00 - Przygotowania Panny Młodej&#10;14:00 - Ceremonia&#10;16:00 - Wesele" register={register('schedule', { required: 'To pole jest wymagane.' })} error={errors.schedule} />
                     </div>
                 </section>
-                <section className="pt-6 mt-6 border-t"><TextAreaField id="additionalInfo" label="Dodatkowe informacje (opcjonalnie)" rows={4} placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" value={formData.additionalInfo} onChange={handleChange} required={false} /></section>
+                <section className="pt-6 mt-6 border-t"><TextAreaField id="additionalInfo" label="Dodatkowe informacje (opcjonalnie)" rows={4} placeholder="np. specjalne prośby, nietypowe elementy dnia, informacje o gościach" register={register('additionalInfo')} error={errors.additionalInfo} required={false} /></section>
                 
                 <section className="pt-6 mt-6 border-t">
                     <label htmlFor="discountCode" className="block text-sm font-medium text-slate-700">Kod rabatowy (opcjonalnie)</label>
