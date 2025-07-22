@@ -1,14 +1,9 @@
-
 import React, { useState, useEffect, FC, ReactNode, useRef } from 'react';
-import { Page } from '../App.tsx';
+import { useNavigate } from 'react-router-dom';
 import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CalendarDaysIcon, MapPinIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, CurrencyDollarIcon, ChatBubbleLeftRightIcon, ChevronDownIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
-
-interface ClientPanelPageProps {
-    navigateTo: (page: Page) => void;
-}
 
 interface BookingData {
     id: number;
@@ -77,7 +72,7 @@ const AddressWithMapLink: FC<{ address: string | null }> = ({ address }) => {
 };
 
 
-const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
+const ClientPanelPage: React.FC = () => {
     const [bookingData, setBookingData] = useState<BookingData | null>(null);
     const [stages, setStages] = useState<ProductionStage[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -97,11 +92,12 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
+    const navigate = useNavigate();
     const token = localStorage.getItem('authToken');
 
     const fetchAllData = async () => {
         if (!token) {
-            navigateTo('login');
+            navigate('/logowanie');
             return;
         }
         
@@ -117,7 +113,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
 
             if (bookingRes.status === 401 || bookingRes.status === 403) {
                  localStorage.removeItem('authToken');
-                 navigateTo('login');
+                 navigate('/logowanie');
                  return;
             }
 
@@ -157,7 +153,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     
     useEffect(() => {
         fetchAllData();
-    }, [navigateTo, token]);
+    }, [navigate, token]);
 
      useEffect(() => {
         if (isChatOpen) {
@@ -167,7 +163,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     
     const handleLogout = () => {
         localStorage.removeItem('authToken');
-        navigateTo('home');
+        navigate('/');
     };
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -301,9 +297,9 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     
     if (error) {
         return (
-             <div className="text-center py-20">
+             <div className="text-center py-20 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
                 <p className="text-red-500">{error}</p>
-                <button onClick={() => navigateTo('login')} className="mt-4 bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button>
+                <button onClick={() => navigate('/logowanie')} className="mt-4 bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button>
             </div>
         );
     }
@@ -339,7 +335,7 @@ const ClientPanelPage: React.FC<ClientPanelPageProps> = ({ navigateTo }) => {
     };
 
     return (
-        <div>
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
              <header className="flex flex-col sm:flex-row justify-between items-center mb-10">
                 <div className="text-center sm:text-left">
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900">Szczegóły rezerwacji #{bookingData.id}</h1>
