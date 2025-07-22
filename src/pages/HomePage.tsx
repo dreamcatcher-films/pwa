@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { EngagementRingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
 import { HeroCarousel } from '../components/HeroCarousel.tsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { getHomepageContent } from '../api.ts';
 
 interface Slide {
     id: number;
@@ -41,35 +43,18 @@ interface HomePageContent {
 }
 
 const HomePage: React.FC = () => {
-    const [content, setContent] = useState<HomePageContent | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
     const navigate = useNavigate();
-
-    useEffect(() => {
-        const fetchContent = async () => {
-            try {
-                const response = await fetch('/api/homepage-content');
-                if (!response.ok) {
-                    throw new Error('Nie udało się załadować zawartości strony.');
-                }
-                const data = await response.json();
-                setContent(data);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchContent();
-    }, []);
+    const { data: content, isLoading, error } = useQuery<HomePageContent, Error>({
+      queryKey: ['homepageContent'],
+      queryFn: getHomepageContent
+    });
 
     if (isLoading) {
         return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     }
 
     if (error) {
-        return <div className="text-center py-20"><p className="text-red-500">{error}</p></div>;
+        return <div className="text-center py-20"><p className="text-red-500">{error.message}</p></div>;
     }
 
     if (!content) {
