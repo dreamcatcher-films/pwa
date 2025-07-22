@@ -1,6 +1,5 @@
-
-
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
 import CalculatorPage from './pages/CalculatorPage.tsx';
 import Header from './components/Header.tsx';
@@ -9,99 +8,63 @@ import LoginPage from './pages/LoginPage.tsx';
 import ClientPanelPage from './pages/ClientPanelPage.tsx';
 import AdminLoginPage from './pages/AdminLoginPage.tsx';
 import AdminDashboardPage from './pages/AdminDashboardPage.tsx';
-import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 import GalleryPage from './pages/GalleryPage.tsx';
 import InstallPrompt from './components/InstallPrompt.tsx';
 import ContactPage from './pages/ContactPage.tsx';
 import Footer from './components/Footer.tsx';
-
-export type Page = 
-  'home' | 'calculator' | 'gallery' | 'contact' |
-  'login' | 'clientPanel' | 
-  'adminLogin' | 'adminDashboard' | 'adminBookingDetails' |
-  'adminAccessKeys' | 'adminAvailability' | 'adminGallery' | 'adminPackages' | 'adminDiscounts' | 'adminStages' | 'adminSettings' | 'adminHomepage' | 'adminInstagram' | 'adminInbox';
+import AdminBookingsPage from './pages/AdminBookingsPage.tsx';
+import AdminAccessKeysPage from './pages/AdminAccessKeysPage.tsx';
+import AdminAvailabilityPage from './pages/AdminAvailabilityPage.tsx';
+import AdminGalleryPage from './pages/AdminGalleryPage.tsx';
+import AdminPackagesPage from './pages/AdminPackagesPage.tsx';
+import AdminDiscountsPage from './pages/AdminDiscountsPage.tsx';
+import AdminStagesPage from './pages/AdminStagesPage.tsx';
+import AdminSettingsPage from './pages/AdminSettingsPage.tsx';
+import AdminHomepagePage from './pages/AdminHomepagePage.tsx';
+import AdminInboxPage from './pages/AdminInboxPage.tsx';
+import AdminBookingDetailsPage from './pages/AdminBookingDetailsPage.tsx';
 
 const App = () => {
-    const [currentPage, setCurrentPage] = useState<Page>('home');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [viewingBookingId, setViewingBookingId] = useState<number | null>(null);
+    const location = useLocation();
 
-    const navigateTo = useCallback((page: Page) => {
-        setCurrentPage(page);
-        setIsMenuOpen(false);
-        if (page !== 'adminBookingDetails') {
-            setViewingBookingId(null);
-        }
-    }, []);
-
-    const handleViewBookingDetails = useCallback((bookingId: number) => {
-        setViewingBookingId(bookingId);
-        navigateTo('adminBookingDetails');
-    }, [navigateTo]);
-
-    const renderCurrentPage = () => {
-        switch (currentPage) {
-            case 'home':
-                return <HomePage navigateTo={navigateTo} />;
-            case 'calculator':
-                return <CalculatorPage navigateTo={navigateTo} />;
-            case 'gallery':
-                return <GalleryPage />;
-            case 'contact':
-                return <ContactPage />;
-            case 'login':
-                return <LoginPage navigateTo={navigateTo} />;
-            case 'clientPanel':
-                return <ClientPanelPage navigateTo={navigateTo} />;
-            case 'adminLogin':
-                return <AdminLoginPage navigateTo={navigateTo} />;
-            case 'adminDashboard':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='bookings' />;
-             case 'adminAccessKeys':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='accessKeys' />;
-             case 'adminAvailability':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='availability' />;
-            case 'adminGallery':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='gallery' />;
-            case 'adminPackages':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='packages' />;
-            case 'adminDiscounts':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='discounts' />;
-            case 'adminStages':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='stages' />;
-            case 'adminSettings':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='settings' />;
-            case 'adminHomepage':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='homepage' />;
-            case 'adminInbox':
-                return <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='inbox' />;
-            case 'adminBookingDetails':
-                 return viewingBookingId 
-                    ? <AdminBookingDetailsPage navigateTo={navigateTo} bookingId={viewingBookingId} /> 
-                    : <AdminDashboardPage navigateTo={navigateTo} onViewDetails={handleViewBookingDetails} currentPage='bookings' />;
-            default:
-                return <HomePage navigateTo={navigateTo} />;
-        }
-    };
-    
-    const hasAppContainer = currentPage === 'clientPanel' || currentPage === 'adminLogin' || currentPage === 'login';
-    const isPublicPage = ['home', 'calculator', 'gallery', 'contact'].includes(currentPage);
+    const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt'];
+    const isPublicPage = publicPaths.includes(location.pathname);
 
     return (
         <div className="flex flex-col min-h-screen">
-            <Header
-                onMenuToggle={() => setIsMenuOpen(!isMenuOpen)}
-                onViewDetails={handleViewBookingDetails}
-                navigateTo={navigateTo}
-            />
-            <main className={`flex-grow ${isPublicPage ? 'pb-64' : ''}`}>
-                <div className={hasAppContainer ? 'max-w-7xl mx-auto p-4 sm:p-6 lg:p-8' : ''}>
-                    {renderCurrentPage()}
-                </div>
+            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
+            <main className="flex-grow">
+                <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/kalkulator" element={<CalculatorPage />} />
+                    <Route path="/galeria" element={<GalleryPage />} />
+                    <Route path="/kontakt" element={<ContactPage />} />
+                    <Route path="/logowanie" element={<LoginPage />} />
+                    <Route path="/panel-klienta" element={<ClientPanelPage />} />
+                    <Route path="/admin/logowanie" element={<AdminLoginPage />} />
+                    
+                    <Route path="/admin" element={<AdminDashboardPage />}>
+                        <Route index element={<Navigate to="/admin/inbox" replace />} />
+                        <Route path="inbox" element={<AdminInboxPage />} />
+                        <Route path="rezerwacje" element={<AdminBookingsPage />} />
+                        <Route path="rezerwacje/:bookingId" element={<AdminBookingDetailsPage />} />
+                        <Route path="klucze-dostepu" element={<AdminAccessKeysPage />} />
+                        <Route path="dostepnosc" element={<AdminAvailabilityPage />} />
+                        <Route path="galeria" element={<AdminGalleryPage />} />
+                        <Route path="oferta" element={<AdminPackagesPage />} />
+                        <Route path="kody-rabatowe" element={<AdminDiscountsPage />} />
+                        <Route path="etapy-produkcji" element={<AdminStagesPage />} />
+                        <Route path="ustawienia" element={<AdminSettingsPage />} />
+                        <Route path="strona-glowna" element={<AdminHomepagePage />} />
+                    </Route>
+
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
             </main>
             {isPublicPage && <Footer />}
             <InstallPrompt />
-            <SideMenu isOpen={isMenuOpen} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
+            <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
         </div>
     );
 };
