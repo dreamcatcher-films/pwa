@@ -25,8 +25,11 @@ const app = express();
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json({ limit: '6mb' })); // Increase limit for file uploads
+// JSON and URL-encoded parsers for most routes
+app.use(express.json({ limit: '6mb' }));
 app.use(express.urlencoded({ extended: true, limit: '6mb' }));
+// Special raw body parser for file uploads
+const rawBodyParser = express.raw({ type: '*/*', limit: '6mb' });
 
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -1219,7 +1222,7 @@ app.get('/api/admin/galleries', authenticateAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/admin/galleries/upload', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/galleries/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') {
         return res.status(400).json({ message: 'Filename is required.' });
@@ -1410,7 +1413,7 @@ app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
 });
 
 // Packages
-app.post('/api/admin/packages/upload-image', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/packages/upload-image', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename is required.' });
     try {
@@ -1790,7 +1793,7 @@ app.get('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) =>
     } finally { client.release(); }
 });
 
-app.post('/api/admin/messages/upload', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/messages/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
     try {
@@ -1886,7 +1889,7 @@ app.get('/api/admin/homepage/slides', authenticateAdmin, async(req, res) => {
         res.json(result.rows);
     } catch (e) { res.status(500).send(e.message) } finally { client.release() }
 });
-app.post('/api/admin/homepage/slides/upload', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/homepage/slides/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
     try {
@@ -1949,7 +1952,7 @@ app.get('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
         res.json(settings);
     } catch (e) { res.status(500).send(e.message) } finally { client.release() }
 });
-app.post('/api/admin/homepage/about/upload', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/homepage/about/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
     try {
@@ -2013,7 +2016,7 @@ app.get('/api/admin/homepage/instagram', authenticateAdmin, async(req, res) => {
         res.json(result.rows);
     } catch (e) { res.status(500).send(e.message) } finally { client.release() }
 });
-app.post('/api/admin/homepage/instagram/upload', authenticateAdmin, async (req, res) => {
+app.post('/api/admin/homepage/instagram/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'];
     if (!filename || typeof filename !== 'string') return res.status(400).json({ message: 'Filename required' });
     try {
