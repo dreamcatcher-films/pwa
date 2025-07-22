@@ -32,40 +32,42 @@ const App = () => {
     const isPublicPage = publicPaths.includes(location.pathname);
 
     return (
-        <div className="flex flex-col min-h-screen">
-            <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
-            <main className="flex-grow">
-                <Routes>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/kalkulator" element={<CalculatorPage />} />
-                    <Route path="/galeria" element={<GalleryPage />} />
-                    <Route path="/kontakt" element={<ContactPage />} />
-                    <Route path="/logowanie" element={<LoginPage />} />
-                    <Route path="/panel-klienta" element={<ClientPanelPage />} />
-                    <Route path="/admin/logowanie" element={<AdminLoginPage />} />
-                    
-                    <Route path="/admin" element={<AdminDashboardPage />}>
-                        <Route index element={<Navigate to="/admin/inbox" replace />} />
-                        <Route path="inbox" element={<AdminInboxPage />} />
-                        <Route path="rezerwacje" element={<AdminBookingsPage />} />
-                        <Route path="rezerwacje/:bookingId" element={<AdminBookingDetailsPage />} />
-                        <Route path="klucze-dostepu" element={<AdminAccessKeysPage />} />
-                        <Route path="dostepnosc" element={<AdminAvailabilityPage />} />
-                        <Route path="galeria" element={<AdminGalleryPage />} />
-                        <Route path="oferta" element={<AdminPackagesPage />} />
-                        <Route path="kody-rabatowe" element={<AdminDiscountsPage />} />
-                        <Route path="etapy-produkcji" element={<AdminStagesPage />} />
-                        <Route path="ustawienia" element={<AdminSettingsPage />} />
-                        <Route path="strona-glowna" element={<AdminHomepagePage />} />
-                    </Route>
+        <>
+            <div className="relative z-10 flex flex-col min-h-screen">
+                <Header onMenuToggle={() => setIsMenuOpen(!isMenuOpen)} />
+                <main className="flex-grow">
+                    <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/kalkulator" element={<CalculatorPage />} />
+                        <Route path="/galeria" element={<GalleryPage />} />
+                        <Route path="/kontakt" element={<ContactPage />} />
+                        <Route path="/logowanie" element={<LoginPage />} />
+                        <Route path="/panel-klienta" element={<ClientPanelPage />} />
+                        <Route path="/admin/logowanie" element={<AdminLoginPage />} />
+                        
+                        <Route path="/admin" element={<AdminDashboardPage />}>
+                            <Route index element={<Navigate to="/admin/inbox" replace />} />
+                            <Route path="inbox" element={<AdminInboxPage />} />
+                            <Route path="rezerwacje" element={<AdminBookingsPage />} />
+                            <Route path="rezerwacje/:bookingId" element={<AdminBookingDetailsPage />} />
+                            <Route path="klucze-dostepu" element={<AdminAccessKeysPage />} />
+                            <Route path="dostepnosc" element={<AdminAvailabilityPage />} />
+                            <Route path="galeria" element={<AdminGalleryPage />} />
+                            <Route path="oferta" element={<AdminPackagesPage />} />
+                            <Route path="kody-rabatowe" element={<AdminDiscountsPage />} />
+                            <Route path="etapy-produkcji" element={<AdminStagesPage />} />
+                            <Route path="ustawienia" element={<AdminSettingsPage />} />
+                            <Route path="strona-glowna" element={<AdminHomepagePage />} />
+                        </Route>
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            </main>
-            {isPublicPage && <Footer />}
-            <InstallPrompt />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </main>
+                {isPublicPage && <Footer />}
+                <InstallPrompt />
+            </div>
             <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
-        </div>
+        </>
     );
 };
 
