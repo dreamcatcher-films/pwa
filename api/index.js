@@ -1022,7 +1022,7 @@ app.patch('/api/admin/settings', authenticateAdmin, async (req, res) => {
 
 app.get('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
     try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key LIKE 'films_page_%' OR key LIKE 'client_panel_%' OR key = 'google_maps_api_key'");
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key LIKE 'client_panel_%' OR key = 'google_maps_api_key'");
         const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
         res.json(settings);
     } catch (err) {
@@ -1047,7 +1047,36 @@ app.patch('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
     }
 });
 
-app.post('/api/admin/settings/upload-films-hero', authenticateAdmin, rawBodyParser, async (req, res) => {
+app.get('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'films_page_%'");
+        const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ message: "Błąd pobierania ustawień strony filmów" });
+    }
+});
+
+app.patch('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (const [key, value] of Object.entries(req.body)) {
+            if (key.startsWith('films_page_')) {
+                await client.query("INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, value]);
+            }
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Ustawienia zapisane.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: "Błąd zapisu ustawień strony filmów" });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/admin/films-settings/upload-hero', authenticateAdmin, rawBodyParser, async (req, res) => {
     const filename = req.headers['x-vercel-filename'] || 'films-hero.jpg';
     try {
         const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
@@ -1056,6 +1085,7 @@ app.post('/api/admin/settings/upload-films-hero', authenticateAdmin, rawBodyPars
         res.status(500).json({ message: 'Błąd wysyłania grafiki.' });
     }
 });
+
 
 app.patch('/api/admin/credentials', authenticateAdmin, async (req, res) => {
     const { currentPassword, newEmail, newPassword } = req.body;
