@@ -1,3 +1,4 @@
+
 // --- HELPER FUNCTIONS ---
 
 const getAdminToken = () => localStorage.getItem('adminAuthToken');
@@ -58,6 +59,7 @@ export const submitContactForm = (formData: any) => apiFetch('/api/contact', {
 });
 export const getContactDetails = () => apiFetch('/api/contact-details');
 export const getHomepageContent = () => apiFetch('/api/homepage-content');
+export const getFilms = () => apiFetch('/api/films');
 
 // --- AUTHENTICATION API ---
 
@@ -181,6 +183,14 @@ export const createGalleryItem = (data: { title: string, description: string, im
     body: JSON.stringify(data),
 });
 export const deleteGalleryItem = (id: number) => apiFetchNoJson(`/api/admin/galleries/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+
+// Films
+export const getAdminFilms = () => apiFetch('/api/admin/films', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const createFilm = (data: any) => apiFetch('/api/admin/films', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const updateFilm = ({ id, data }: { id: number, data: any }) => apiFetch(`/api/admin/films/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const deleteFilm = (id: number) => apiFetchNoJson(`/api/admin/films/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const reorderFilms = (orderedIds: number[]) => apiFetch('/api/admin/films/order', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify({ orderedIds }) });
+
 
 // Offer Data (Packages, Addons, Categories)
 export const getOfferData = () => apiFetch('/api/admin/offer-data', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
