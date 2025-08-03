@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -96,19 +97,22 @@ export const BellIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6'
 
 export const Cog6ToothIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-1.007 1.11-1.226.55-.22 1.156-.22 1.706 0 .55.22 1.02.684 1.11 1.226M12 21.75l-3.75-1.5-3.75 1.5M12 21.75l3.75-1.5 3.75 1.5M12 21.75V16.5M12 16.5l-3.75-1.5L12 13.5l3.75-1.5L12 16.5m-3.75-1.5l-3.75 1.5V13.5m0-3l3.75-1.5L12 9l3.75-1.5L12 6V3.75m-3.75 1.5L12 3.75l3.75 1.5M4.5 13.5V18m15-4.5V18" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5M12 4.5v-3m0 18v-3m3.75-12.75l-2.122 2.122M6.354 17.646l-2.122 2.122m13.414 0l-2.122-2.122m-9.17-9.17l-2.122-2.122" />
     </svg>
 );
 
 export const PhotoIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.75h-8.25a2.25 2.25 0 00-2.25 2.25v8.25a2.25 2.25 0 002.25 2.25h8.25a2.25 2.25 0 002.25-2.25v-8.25a2.25 2.25 0 00-2.25-2.25z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 6.75h.75c1.24 0 2.25 1.01 2.25 2.25v8.25c0 1.24-1.01 2.25-2.25 2.25h-.75" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 12.75a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 15l2.25-3a1.5 1.5 0 012.2-.14l1.2 1.02" />
     </svg>
 );
 
 export const EnvelopeIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25-2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8.25V18a2.25 2.25 0 002.25 2.25h13.5A2.25 2.25 0 0021 18V8.25m-18 0V6a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 6v2.25m-18 0l7.5 4.286c.64.364 1.46.364 2.1 0l7.5-4.286" />
     </svg>
 );
 
@@ -275,7 +279,8 @@ export const InstagramIcon: React.FC<{className?: string}> = ({ className = 'w-6
 
 export const FilmIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 3.75a2.25 2.25 0 012.25-2.25h7.5a2.25 2.25 0 012.25 2.25v16.5a2.25 2.25 0 01-2.25 2.25h-7.5a2.25 2.25 0 01-2.25-2.25V3.75z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 3.75V2.25m6 1.5V2.25m0 18v-1.5m-6 1.5v-1.5M6 8.25h12M6 15.75h12" />
     </svg>
 );
 
