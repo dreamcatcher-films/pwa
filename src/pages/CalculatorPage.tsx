@@ -6,7 +6,7 @@ import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { getPackages } from '../api.ts';
+import { getPackages, getContactDetails } from '../api.ts';
 
 // --- DATA STRUCTURE ---
 interface Addon {
@@ -185,8 +185,9 @@ interface BookingModalProps {
     isOpen: boolean;
     onClose: () => void;
     onKeyValidated: (accessKey: string) => void;
+    onHelpClick: () => void;
 }
-const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }) => {
+const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated, onHelpClick }) => {
     const [accessKey, setAccessKey] = useState('');
     const [error, setError] = useState('');
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -245,7 +246,9 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
         return (
             <>
                 <h2 className="text-2xl font-bold text-slate-900 text-center">Potwierdzenie Rezerwacji</h2>
-                <p className="text-slate-600 text-center mt-2">Aby kontynuować, wprowadź swój klucz dostępu.</p>
+                <p className="text-slate-600 text-center mt-2">
+                    Twój 4-cyfrowy klucz dostępu jest potwierdzeniem naszej wcześniejszej rozmowy. Powinieneś/aś go otrzymać w wiadomości e-mail lub SMS.
+                </p>
                 <div className="mt-6">
                     <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700">Klucz dostępu</label>
                     <input
@@ -269,7 +272,7 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
                     </button>
                 </div>
                 <p className="text-xs text-slate-500 text-center mt-4">
-                    Nie masz klucza? <a href="#" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
+                    Nie masz klucza? <button type="button" onClick={onHelpClick} className="font-medium text-indigo-600 hover:underline focus:outline-none">Skontaktuj się z nami</button>.
                 </p>
             </>
         );
@@ -278,6 +281,45 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated }
     return (
         <Modal isOpen={isOpen} onClose={handleClose}>
             {renderContent()}
+        </Modal>
+    );
+};
+
+interface HelpModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    contactPhone?: string;
+}
+const HelpModal: FC<HelpModalProps> = ({ isOpen, onClose, contactPhone }) => {
+    const navigate = useNavigate();
+
+    const goToContactForm = () => {
+        onClose();
+        navigate('/kontakt');
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose}>
+            <h2 className="text-2xl font-bold text-slate-900 text-center">Jak uzyskać klucz dostępu?</h2>
+            <p className="text-slate-600 text-center mt-4">
+                Jeśli nie otrzymałeś/aś od nas klucza, skontaktuj się z nami w najwygodniejszy dla Ciebie sposób.
+            </p>
+            <div className="mt-6 flex flex-col gap-4">
+                <button
+                    onClick={goToContactForm}
+                    className="w-full bg-slate-100 text-slate-800 font-bold py-3 px-4 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                    Przejdź do formularza
+                </button>
+                {contactPhone && (
+                    <a
+                        href={`tel:${contactPhone.replace(/\s/g, '')}`}
+                        className="w-full text-center bg-brand-dark-green text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-dark-green/90 transition-colors"
+                    >
+                        Zadzwoń do nas ({contactPhone})
+                    </a>
+                )}
+            </div>
         </Modal>
     );
 };
@@ -321,6 +363,7 @@ const CalculatorPage: FC = () => {
     const [customizedItems, setCustomizedItems] = useState<number[]>([]);
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+    const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [validatedAccessKey, setValidatedAccessKey] = useState('');
     const [finalBookingId, setFinalBookingId] = useState<number | null>(null);
     const [finalClientId, setFinalClientId] = useState<string | null>(null);
@@ -332,6 +375,11 @@ const CalculatorPage: FC = () => {
     const { data: offerData, isLoading, error } = useQuery<OfferData, Error>({
         queryKey: ['packages'],
         queryFn: getPackages
+    });
+    
+    const { data: contactDetails } = useQuery({
+        queryKey: ['contactDetails'],
+        queryFn: getContactDetails,
     });
     
     const currentStepIndex = () => {
@@ -651,6 +699,15 @@ const CalculatorPage: FC = () => {
                 isOpen={isBookingModalOpen} 
                 onClose={() => setIsBookingModalOpen(false)}
                 onKeyValidated={handleKeyValidated}
+                onHelpClick={() => {
+                    setIsBookingModalOpen(false);
+                    setIsHelpModalOpen(true);
+                }}
+            />
+             <HelpModal
+                isOpen={isHelpModalOpen}
+                onClose={() => setIsHelpModalOpen(false)}
+                contactPhone={contactDetails?.contact_phone}
             />
             <MarketingModal
                 pkg={marketingModalPkg}
