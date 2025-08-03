@@ -97,7 +97,7 @@ const AdminDashboardPage: React.FC = () => {
             {/* Overlay for mobile */}
             {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+                    className="fixed inset-0 bg-black bg-opacity-50 z-21 md:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 ></div>
             )}
