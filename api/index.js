@@ -430,15 +430,27 @@ app.post('/api/admin/login', async (req, res) => {
 // --- CLIENT-AUTHENTICATED ROUTES ---
 
 app.get('/api/my-booking', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]);
-        if (result.rowCount === 0) {
+        const [bookingRes, settingsRes] = await Promise.all([
+             client.query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]),
+             client.query("SELECT key, value FROM app_settings WHERE key IN ('client_panel_welcome_text', 'client_panel_hero_url')")
+        ]);
+        if (bookingRes.rowCount === 0) {
             return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
         }
-        res.json(result.rows[0]);
+        
+        const settings = settingsRes.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+        
+        res.json({
+            ...bookingRes.rows[0],
+            settings
+        });
     } catch (error) {
         console.error('Error fetching my-booking:', error);
         res.status(500).json({ message: 'Błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -548,12 +560,19 @@ app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => 
 // --- FILMS API ---
 
 app.get('/api/films', async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC');
-        res.json(result.rows);
+        const [filmsRes, settingsRes] = await Promise.all([
+             client.query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC'),
+             client.query("SELECT key, value FROM app_settings WHERE key IN ('films_page_title', 'films_page_subtitle', 'films_page_hero_url')")
+        ]);
+        const settings = settingsRes.rows.reduce((acc, row) => ({ ...acc, [row.key.replace('films_page_', '')]: row.value }), {});
+        res.json({ films: filmsRes.rows, settings });
     } catch (error) {
         console.error('Error fetching films:', error);
         res.status(500).json({ message: 'Błąd pobierania filmów.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -1003,7 +1022,7 @@ app.patch('/api/admin/settings', authenticateAdmin, async (req, res) => {
 
 app.get('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
     try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key = 'google_maps_api_key'");
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key LIKE 'films_page_%' OR key LIKE 'client_panel_%' OR key = 'google_maps_api_key'");
         const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
         res.json(settings);
     } catch (err) {
@@ -1025,6 +1044,16 @@ app.patch('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
         res.status(500).json({ message: "Błąd zapisu ustawień" });
     } finally {
         client.release();
+    }
+});
+
+app.post('/api/admin/settings/upload-films-hero', authenticateAdmin, rawBodyParser, async (req, res) => {
+    const filename = req.headers['x-vercel-filename'] || 'films-hero.jpg';
+    try {
+        const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
+        res.status(200).json(blob);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd wysyłania grafiki.' });
     }
 });
 
