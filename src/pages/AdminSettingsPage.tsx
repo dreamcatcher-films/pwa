@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon, TrashIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon, TrashIcon, FilmIcon } from '../components/Icons.tsx';
 
 const AdminSettingsPage: React.FC = () => {
     const [dbStatus, setDbStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -18,7 +18,10 @@ const AdminSettingsPage: React.FC = () => {
         contact_email: '',
         contact_phone: '',
         contact_address: '',
-        google_maps_api_key: ''
+        google_maps_api_key: '',
+        films_page_title: '',
+        films_page_subtitle: '',
+        films_page_hero_url: ''
     });
     const [contactStatus, setContactStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [contactMessage, setContactMessage] = useState('');
@@ -32,6 +35,7 @@ const AdminSettingsPage: React.FC = () => {
     const [credentialsStatus, setCredentialsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [credentialsMessage, setCredentialsMessage] = useState('');
 
+    const [filmsHeroFile, setFilmsHeroFile] = useState<File | null>(null);
 
     const token = localStorage.getItem('adminAuthToken');
     
@@ -52,7 +56,7 @@ const AdminSettingsPage: React.FC = () => {
 
                 if (!contactRes.ok) throw new Error('Nie udało się pobrać ustawień kontaktowych.');
                 const contactData = await contactRes.json();
-                setContactSettings(contactData);
+                setContactSettings(prev => ({ ...prev, ...contactData }));
 
             } catch (err) {
                 // Set a general error message
@@ -141,7 +145,7 @@ const AdminSettingsPage: React.FC = () => {
         }
     };
     
-    const handleContactSettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleContactSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setContactSettings(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
     
@@ -154,16 +158,32 @@ const AdminSettingsPage: React.FC = () => {
         setContactStatus('loading');
         setContactMessage('');
         try {
+            let heroUrl = contactSettings.films_page_hero_url;
+            if (filmsHeroFile) {
+                const uploadRes = await fetch('/api/admin/settings/upload-films-hero', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'x-vercel-filename': filmsHeroFile.name },
+                    body: filmsHeroFile
+                });
+                if (!uploadRes.ok) throw new Error('Błąd wysyłania grafiki Hero.');
+                const blob = await uploadRes.json();
+                heroUrl = blob.url;
+            }
+
+            const settingsToSave = { ...contactSettings, films_page_hero_url: heroUrl };
+            
             const response = await fetch('/api/admin/contact-settings', {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(contactSettings),
+                body: JSON.stringify(settingsToSave),
             });
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać ustawień kontaktowych.');
+            if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać ustawień.');
 
             setContactStatus('success');
-            setContactMessage('Ustawienia strony kontaktowej zostały zaktualizowane.');
+            setContactMessage('Ustawienia zostały zaktualizowane.');
+            setContactSettings(prev => ({ ...prev, films_page_hero_url: heroUrl }));
+            setFilmsHeroFile(null);
             setTimeout(() => setContactStatus('idle'), 3000);
         } catch (err) {
             setContactStatus('error');
@@ -205,7 +225,6 @@ const AdminSettingsPage: React.FC = () => {
             setCredentialsMessage(err instanceof Error ? err.message : 'Błąd zapisu.');
         }
     };
-
 
     return (
         <div>
@@ -291,42 +310,62 @@ const AdminSettingsPage: React.FC = () => {
                     </form>
                 </div>
                 
-                <div className="bg-white rounded-2xl shadow p-6">
-                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><IdentificationIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Strony Kontaktowej</h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                        Zarządzaj informacjami wyświetlanymi na publicznej stronie kontaktowej.
-                    </p>
-                    <form onSubmit={handleSaveContactSettings} className="mt-6 space-y-4">
-                        <div>
-                             <label htmlFor="contact_email" className="block text-sm font-medium text-slate-700">Kontaktowy adres e-mail</label>
-                             <input type="email" id="contact_email" name="contact_email" value={contactSettings.contact_email} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                 <form onSubmit={handleSaveContactSettings} className="bg-white rounded-2xl shadow p-6 space-y-8">
+                    <div>
+                         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><IdentificationIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Strony Kontaktowej</h3>
+                        <p className="mt-1 text-sm text-slate-600">Zarządzaj informacjami wyświetlanymi na publicznej stronie kontaktowej.</p>
+                        <div className="mt-6 space-y-4">
+                            <div>
+                                 <label htmlFor="contact_email" className="block text-sm font-medium text-slate-700">Kontaktowy adres e-mail</label>
+                                 <input type="email" id="contact_email" name="contact_email" value={contactSettings.contact_email} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                 <label htmlFor="contact_phone" className="block text-sm font-medium text-slate-700">Kontaktowy numer telefonu</label>
+                                 <input type="text" id="contact_phone" name="contact_phone" value={contactSettings.contact_phone} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                 <label htmlFor="contact_address" className="block text-sm font-medium text-slate-700">Adres firmy</label>
+                                 <input type="text" id="contact_address" name="contact_address" value={contactSettings.contact_address} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                            </div>
+                             <div>
+                                 <label htmlFor="google_maps_api_key" className="block text-sm font-medium text-slate-700">Klucz API Google Maps (do statycznej mapy)</label>
+                                 <input type="text" id="google_maps_api_key" name="google_maps_api_key" value={contactSettings.google_maps_api_key} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                            </div>
                         </div>
-                        <div>
-                             <label htmlFor="contact_phone" className="block text-sm font-medium text-slate-700">Kontaktowy numer telefonu</label>
-                             <input type="text" id="contact_phone" name="contact_phone" value={contactSettings.contact_phone} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                        </div>
-                        <div>
-                             <label htmlFor="contact_address" className="block text-sm font-medium text-slate-700">Adres firmy</label>
-                             <input type="text" id="contact_address" name="contact_address" value={contactSettings.contact_address} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                        </div>
-                         <div>
-                             <label htmlFor="google_maps_api_key" className="block text-sm font-medium text-slate-700">Klucz API Google Maps (do statycznej mapy)</label>
-                             <input type="text" id="google_maps_api_key" name="google_maps_api_key" value={contactSettings.google_maps_api_key} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                        </div>
-
-                         <div className="mt-4 flex items-center justify-between">
-                             <button type="submit" disabled={contactStatus === 'loading'} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
-                                {contactStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
-                            </button>
-                             {contactMessage && (
-                                <div className="text-sm">
-                                    {contactStatus === 'success' && <p className="flex items-center gap-2 text-green-600"><CheckCircleIcon className="w-5 h-5"/> {contactMessage}</p>}
-                                    {contactStatus === 'error' && <p className="text-red-600">{contactMessage}</p>}
+                    </div>
+                     <div>
+                        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><FilmIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Strony 'Filmy'</h3>
+                        <p className="mt-1 text-sm text-slate-600">Zarządzaj nagłówkiem na publicznej stronie z filmami.</p>
+                        <div className="mt-6 space-y-4">
+                            <div>
+                                <label htmlFor="films_page_title" className="block text-sm font-medium text-slate-700">Tytuł nagłówka</label>
+                                <input type="text" id="films_page_title" name="films_page_title" value={contactSettings.films_page_title} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm" />
+                            </div>
+                            <div>
+                                <label htmlFor="films_page_subtitle" className="block text-sm font-medium text-slate-700">Podtytuł</label>
+                                <textarea id="films_page_subtitle" name="films_page_subtitle" value={contactSettings.films_page_subtitle} onChange={handleContactSettingsChange} rows={2} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm" />
+                            </div>
+                             <div>
+                                <label htmlFor="films_page_hero_url" className="block text-sm font-medium text-slate-700">Grafika tła nagłówka</label>
+                                <div className="flex items-center gap-4 mt-1">
+                                    {contactSettings.films_page_hero_url && <img src={contactSettings.films_page_hero_url} alt="Podgląd" className="w-24 h-16 object-cover rounded-md" />}
+                                    <input type="file" onChange={(e) => setFilmsHeroFile(e.target.files ? e.target.files[0] : null)} accept="image/*" className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
                                 </div>
-                            )}
-                         </div>
-                    </form>
-                </div>
+                            </div>
+                        </div>
+                    </div>
+                     <div className="mt-4 flex items-center justify-between">
+                         <button type="submit" disabled={contactStatus === 'loading'} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
+                            {contactStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
+                        </button>
+                         {contactMessage && (
+                            <div className="text-sm">
+                                {contactStatus === 'success' && <p className="flex items-center gap-2 text-green-600"><CheckCircleIcon className="w-5 h-5"/> {contactMessage}</p>}
+                                {contactStatus === 'error' && <p className="text-red-600">{contactMessage}</p>}
+                            </div>
+                        )}
+                     </div>
+                </form>
 
                 <div className="bg-white rounded-2xl shadow p-6">
                     <h3 className="text-lg font-semibold text-slate-900">Zarządzanie Bazą Danych</h3>
