@@ -1,3 +1,4 @@
+
 import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
@@ -26,12 +27,14 @@ const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage.tsx'));
 const AdminHomepagePage = lazy(() => import('./pages/AdminHomepagePage.tsx'));
 const AdminInboxPage = lazy(() => import('./pages/AdminInboxPage.tsx'));
 const AdminBookingDetailsPage = lazy(() => import('./pages/AdminBookingDetailsPage.tsx'));
+const FilmsPage = lazy(() => import('./pages/FilmsPage.tsx'));
+const AdminFilmsPage = lazy(() => import('./pages/AdminFilmsPage.tsx'));
 
 const App = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const location = useLocation();
 
-    const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt'];
+    const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt', '/filmy'];
     const isPublicPage = publicPaths.includes(location.pathname);
 
     return (
@@ -44,6 +47,7 @@ const App = () => {
                             <Route path="/" element={<HomePage />} />
                             <Route path="/kalkulator" element={<CalculatorPage />} />
                             <Route path="/galeria" element={<GalleryPage />} />
+                            <Route path="/filmy" element={<FilmsPage />} />
                             <Route path="/kontakt" element={<ContactPage />} />
                             <Route path="/logowanie" element={<LoginPage />} />
                             <Route path="/panel-klienta" element={<ClientPanelPage />} />
@@ -57,6 +61,7 @@ const App = () => {
                                 <Route path="klucze-dostepu" element={<AdminAccessKeysPage />} />
                                 <Route path="dostepnosc" element={<AdminAvailabilityPage />} />
                                 <Route path="galeria" element={<AdminGalleryPage />} />
+                                <Route path="filmy" element={<AdminFilmsPage />} />
                                 <Route path="oferta" element={<AdminPackagesPage />} />
                                 <Route path="kody-rabatowe" element={<AdminDiscountsPage />} />
                                 <Route path="etapy-produkcji" element={<AdminStagesPage />} />
