@@ -1,6 +1,7 @@
+
 import React, { useEffect, FC, ReactNode, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon } from '../components/Icons.tsx';
+import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon } from '../components/Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 // --- TYPES ---
@@ -30,6 +31,7 @@ const navConfig: NavGroup[] = [
         title: 'Zarządzanie Treścią i Ofertą',
         items: [
             { path: 'strona-glowna', label: 'Strona Główna', icon: <HomeModernIcon className="w-5 h-5" />, subtitle: 'Edytuj karuzelę, sekcję "O nas" i opinie.' },
+            { path: 'filmy', label: 'Filmy', icon: <FilmIcon className="w-5 h-5" />, subtitle: 'Zarządzaj realizacjami wideo z YouTube.' },
             { path: 'galeria', label: 'Galeria', icon: <PhotoIcon className="w-5 h-5" />, subtitle: 'Zarządzaj publiczną galerią realizacji.' },
             { path: 'oferta', label: 'Oferta', icon: <TagIcon className="w-5 h-5" />, subtitle: 'Konfiguruj pakiety i dostępne dodatki.' },
             { path: 'kody-rabatowe', label: 'Kody Rabatowe', icon: <TicketIcon className="w-5 h-5" />, subtitle: 'Twórz i zarządzaj kodami rabatowymi.' },
