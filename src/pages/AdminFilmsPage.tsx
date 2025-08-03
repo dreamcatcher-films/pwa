@@ -1,10 +1,14 @@
 
-import React, { FC, useState } from 'react';
+import React, { FC, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { getAdminFilms, createFilm, updateFilm, deleteFilm, reorderFilms } from '../api.ts';
-import { LoadingSpinner, FilmIcon, PlusCircleIcon, TrashIcon, PencilSquareIcon, ArrowUpIcon, ArrowDownIcon, XMarkIcon } from '../components/Icons.tsx';
+import { 
+    getAdminFilms, createFilm, updateFilm, deleteFilm, reorderFilms,
+    getAdminFilmsPageSettings, updateAdminFilmsPageSettings, uploadFilmsPageHeroImage
+} from '../api.ts';
+import { LoadingSpinner, FilmIcon, PlusCircleIcon, TrashIcon, PencilSquareIcon, ArrowUpIcon, ArrowDownIcon, XMarkIcon, CheckCircleIcon } from '../components/Icons.tsx';
 
+// --- TYPES ---
 interface Film {
     id: number;
     youtube_url: string;
@@ -14,17 +18,88 @@ interface Film {
     sort_order: number;
 }
 
-type FormValues = {
+type FilmFormValues = {
     youtube_url: string;
     title: string;
     description: string;
 };
 
+type SettingsFormValues = {
+    films_page_title: string;
+    films_page_subtitle: string;
+    films_page_hero_url: string;
+};
+
 const inputClasses = "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
 
+
+// --- SETTINGS MANAGER ---
+const FilmsPageSettingsManager: FC = () => {
+    const { data: settings, isLoading } = useQuery<SettingsFormValues, Error>({
+        queryKey: ['adminFilmsPageSettings'],
+        queryFn: getAdminFilmsPageSettings,
+    });
+    
+    const { register, handleSubmit, reset, watch } = useForm<SettingsFormValues>();
+    const [heroFile, setHeroFile] = useState<File | null>(null);
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (settings) {
+            reset(settings);
+        }
+    }, [settings, reset]);
+
+    const uploadMutation = useMutation({ mutationFn: uploadFilmsPageHeroImage });
+    const updateMutation = useMutation({
+        mutationFn: updateAdminFilmsPageSettings,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminFilmsPageSettings'] });
+        },
+    });
+
+    const onSubmit: SubmitHandler<SettingsFormValues> = async (formData) => {
+        let heroUrl = formData.films_page_hero_url;
+        if (heroFile) {
+            const uploadedImage = await uploadMutation.mutateAsync(heroFile);
+            heroUrl = uploadedImage.url;
+        }
+        updateMutation.mutate({ ...formData, films_page_hero_url: heroUrl });
+    };
+
+    const currentHeroUrl = watch('films_page_hero_url');
+    
+    if (isLoading) return <div className="p-6 bg-white rounded-2xl shadow"><LoadingSpinner /></div>;
+
+    return (
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white p-6 rounded-2xl shadow space-y-4">
+            <h2 className="text-xl font-bold text-slate-800">Ustawienia Nagłówka Strony Filmów</h2>
+            
+            <input {...register('films_page_title')} placeholder="Tytuł nagłówka" className={inputClasses} />
+            <textarea {...register('films_page_subtitle')} placeholder="Podtytuł" className={inputClasses} rows={2} />
+            <div>
+                <label htmlFor="films_page_hero_url" className="block text-sm font-medium text-slate-700">Grafika tła nagłówka</label>
+                <div className="flex items-center gap-4 mt-1">
+                    {currentHeroUrl && <img src={currentHeroUrl} alt="Podgląd" className="w-24 h-16 object-cover rounded-md" />}
+                    <input type="file" onChange={(e) => setHeroFile(e.target.files ? e.target.files[0] : null)} accept="image/*" className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+                <button type="submit" disabled={updateMutation.isPending || uploadMutation.isPending} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
+                    {updateMutation.isPending || uploadMutation.isPending ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
+                </button>
+                {updateMutation.isSuccess && <p className="text-green-600 text-sm flex items-center gap-2"><CheckCircleIcon className="w-5 h-5"/> Zapisano pomyślnie!</p>}
+                {updateMutation.isError && <p className="text-red-600 text-sm">{updateMutation.error.message}</p>}
+            </div>
+        </form>
+    );
+};
+
+// --- FILM EDITOR MODAL ---
 const FilmEditorModal: FC<{ film: Partial<Film> | null; onClose: () => void; }> = ({ film, onClose }) => {
     const queryClient = useQueryClient();
-    const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+    const { register, handleSubmit, formState: { errors } } = useForm<FilmFormValues>({
         defaultValues: {
             youtube_url: film?.youtube_url || '',
             title: film?.title || '',
@@ -41,7 +116,7 @@ const FilmEditorModal: FC<{ film: Partial<Film> | null; onClose: () => void; }> 
     });
 
     const updateMutation = useMutation({
-        mutationFn: (data: FormValues) => updateFilm({ id: film!.id!, data }),
+        mutationFn: (data: FilmFormValues) => updateFilm({ id: film!.id!, data }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminFilms'] });
             onClose();
@@ -50,7 +125,7 @@ const FilmEditorModal: FC<{ film: Partial<Film> | null; onClose: () => void; }> 
 
     const mutation = film?.id ? updateMutation : createMutation;
 
-    const onSubmit: SubmitHandler<FormValues> = (data) => {
+    const onSubmit: SubmitHandler<FilmFormValues> = (data) => {
         mutation.mutate(data);
     };
     
@@ -91,6 +166,7 @@ const FilmEditorModal: FC<{ film: Partial<Film> | null; onClose: () => void; }> 
     );
 };
 
+// --- MAIN PAGE COMPONENT ---
 const AdminFilmsPage: FC = () => {
     const [editingFilm, setEditingFilm] = useState<Partial<Film> | null>(null);
     const queryClient = useQueryClient();
@@ -136,35 +212,38 @@ const AdminFilmsPage: FC = () => {
     if (error) return <p className="text-red-500 bg-red-50 p-3 rounded-lg text-center">{error.message}</p>;
 
     return (
-        <div className="bg-white p-6 rounded-2xl shadow">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><FilmIcon className="w-6 h-6 text-indigo-500" /> Zarządzanie Filmami</h2>
-                <button onClick={() => setEditingFilm({})} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
-                    <PlusCircleIcon className="w-5 h-5"/> Dodaj Film
-                </button>
-            </div>
-            
-            {(deleteMutation.isError || reorderMutation.isError) && <p className="text-red-500 bg-red-50 p-2 rounded-md text-sm mb-4">Wystąpił błąd. Spróbuj ponownie.</p>}
+        <div className="space-y-8">
+            <FilmsPageSettingsManager />
+            <div className="bg-white p-6 rounded-2xl shadow">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">Zarządzanie Filmami</h2>
+                    <button onClick={() => setEditingFilm({})} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                        <PlusCircleIcon className="w-5 h-5"/> Dodaj Film
+                    </button>
+                </div>
+                
+                {(deleteMutation.isError || reorderMutation.isError) && <p className="text-red-500 bg-red-50 p-2 rounded-md text-sm mb-4">Wystąpił błąd. Spróbuj ponownie.</p>}
 
-            <ul className="space-y-3">
-                {films && films.map((film, index) => (
-                    <li key={film.id} className="flex items-center gap-4 p-2 rounded-lg bg-slate-50">
-                        <img src={film.thumbnail_url} alt={film.title} className="w-32 h-20 object-cover rounded-md" />
-                        <div className="flex-grow">
-                            <p className="font-bold text-slate-800">{film.title}</p>
-                            <p className="text-sm text-slate-500">{film.description}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => handleReorder(film.id, 'up')} disabled={index === 0 || reorderMutation.isPending} className="p-1 disabled:opacity-30"><ArrowUpIcon className="w-5 h-5"/></button>
-                            <button onClick={() => handleReorder(film.id, 'down')} disabled={index === films.length - 1 || reorderMutation.isPending} className="p-1 disabled:opacity-30"><ArrowDownIcon className="w-5 h-5"/></button>
-                            <button onClick={() => setEditingFilm(film)} className="p-2 text-slate-500 hover:text-indigo-600"><PencilSquareIcon className="w-5 h-5"/></button>
-                            <button onClick={() => handleDelete(film.id)} className="p-2 text-slate-500 hover:text-red-600"><TrashIcon className="w-5 h-5"/></button>
-                        </div>
-                    </li>
-                ))}
-                {films && films.length === 0 && <p className="text-center text-slate-400 py-4">Brak filmów. Dodaj nowy, aby go tu wyświetlić.</p>}
-            </ul>
-            {editingFilm && <FilmEditorModal film={editingFilm} onClose={() => setEditingFilm(null)} />}
+                <ul className="space-y-3">
+                    {films && films.map((film, index) => (
+                        <li key={film.id} className="flex items-center gap-4 p-2 rounded-lg bg-slate-50">
+                            <img src={film.thumbnail_url} alt={film.title} className="w-32 h-20 object-cover rounded-md" />
+                            <div className="flex-grow">
+                                <p className="font-bold text-slate-800">{film.title}</p>
+                                <p className="text-sm text-slate-500">{film.description}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => handleReorder(film.id, 'up')} disabled={index === 0 || reorderMutation.isPending} className="p-1 disabled:opacity-30"><ArrowUpIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleReorder(film.id, 'down')} disabled={index === films.length - 1 || reorderMutation.isPending} className="p-1 disabled:opacity-30"><ArrowDownIcon className="w-5 h-5"/></button>
+                                <button onClick={() => setEditingFilm(film)} className="p-2 text-slate-500 hover:text-indigo-600"><PencilSquareIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDelete(film.id)} className="p-2 text-slate-500 hover:text-red-600"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </li>
+                    ))}
+                    {films && films.length === 0 && <p className="text-center text-slate-400 py-4">Brak filmów. Dodaj nowy, aby go tu wyświetlić.</p>}
+                </ul>
+                {editingFilm && <FilmEditorModal film={editingFilm} onClose={() => setEditingFilm(null)} />}
+            </div>
         </div>
     );
 };
