@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { XMarkIcon, Cog6ToothIcon, PhotoIcon, EnvelopeIcon } from './Icons.tsx';
+import { XMarkIcon, Cog6ToothIcon, PhotoIcon, EnvelopeIcon, FilmIcon } from './Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface SideMenuProps {
@@ -47,6 +48,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose }) => {
                     <ul>
                         <li><Link to="/" onClick={onClose} className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors">Strona Główna</Link></li>
                         <li><Link to="/kalkulator" onClick={onClose} className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors">Kreator Pakietu</Link></li>
+                        <li><Link to="/filmy" onClick={onClose} className="flex items-center py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"><FilmIcon className="w-5 h-5 mr-3" />Filmy</Link></li>
                         <li><Link to="/galeria" onClick={onClose} className="flex items-center py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"><PhotoIcon className="w-5 h-5 mr-3" />Galeria</Link></li>
                         <li><Link to="/kontakt" onClick={onClose} className="flex items-center py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors"><EnvelopeIcon className="w-5 h-5 mr-3" />Kontakt</Link></li>
                         <li><Link to="/logowanie" onClick={onClose} className="block py-3 px-4 rounded-lg text-[#E6C8A4] font-semibold hover:bg-white/10 transition-colors">Panel Klienta</Link></li>
