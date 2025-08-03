@@ -116,13 +116,14 @@ export const sendClientMessage = (content: string) => apiFetch('/api/messages', 
 });
 
 export const getClientPanelData = async () => {
-    const [booking, stages, messages, unreadCount] = await Promise.all([
+    const [bookingData, stages, messages, unreadCount] = await Promise.all([
         getMyBooking(),
         getBookingStages(),
         getMessages(),
         getUnreadMessageCount(),
     ]);
-    return { booking, stages, messages, unreadCount };
+    const { settings, ...booking } = bookingData;
+    return { booking, stages, messages, unreadCount, settings };
 };
 
 // --- ADMIN-AUTHENTICATED API ---
@@ -251,6 +252,15 @@ export const updateAdminSettings = (data: { email: string }) => apiFetch('/api/a
 export const updateAdminCredentials = (data: any) => apiFetch('/api/admin/credentials', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
 export const getAdminContactSettings = () => apiFetch('/api/admin/contact-settings', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 export const updateAdminContactSettings = (data: any) => apiFetch('/api/admin/contact-settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const uploadFilmsPageHeroImage = async (file: File) => {
+    const response = await fetch('/api/admin/settings/upload-films-hero', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name },
+        body: file,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+};
 
 // Admin Messaging
 export const getAdminMessages = (bookingId: string) => apiFetch(`/api/admin/messages/${bookingId}`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
