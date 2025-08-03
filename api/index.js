@@ -53,7 +53,7 @@ const runDbSetup = async (shouldDrop = false) => {
 
         if (shouldDrop) {
             console.log("Dropping all tables...");
-             const tables = ['messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             const tables = ['films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
              for (const table of tables) {
                 await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
              }
@@ -79,6 +79,7 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS booking_stages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, stage_id INTEGER REFERENCES production_stages(id), status VARCHAR(50) DEFAULT 'pending', completed_at TIMESTAMP WITH TIME ZONE);
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS films (id SERIAL PRIMARY KEY, youtube_url TEXT NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, thumbnail_url TEXT, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         `);
         
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
@@ -149,6 +150,26 @@ const authenticateAdmin = (req, res, next) => {
         console.error("Admin JWT verification error:", error.message);
         return res.status(403).json({ message: 'Nieprawidłowy token.' });
     }
+};
+
+// --- YouTube Helper ---
+const getYouTubeVideoId = (url) => {
+    let videoId = null;
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname === 'www.youtube.com' || urlObj.hostname === 'youtube.com') {
+            videoId = urlObj.searchParams.get('v');
+        } else if (urlObj.hostname === 'youtu.be') {
+            videoId = urlObj.pathname.substring(1);
+        }
+    } catch (e) {
+        const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+        const match = url.match(regex);
+        if (match) {
+            videoId = match[1];
+        }
+    }
+    return videoId;
 };
 
 // --- PUBLIC ROUTES ---
@@ -523,6 +544,103 @@ app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => 
         res.status(500).json({ message: 'Błąd serwera.' });
     }
 });
+
+// --- FILMS API ---
+
+app.get('/api/films', async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching films:', error);
+        res.status(500).json({ message: 'Błąd pobierania filmów.' });
+    }
+});
+
+app.get('/api/admin/films', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching films for admin:', error);
+        res.status(500).json({ message: 'Błąd pobierania filmów.' });
+    }
+});
+
+app.post('/api/admin/films', authenticateAdmin, async (req, res) => {
+    const { youtube_url, title, description } = req.body;
+    if (!youtube_url || !title) {
+        return res.status(400).json({ message: 'Link do YouTube i tytuł są wymagane.' });
+    }
+    try {
+        const videoId = getYouTubeVideoId(youtube_url);
+        if (!videoId) {
+            return res.status(400).json({ message: 'Nieprawidłowy link do YouTube.' });
+        }
+        const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+        
+        const result = await getPool().query(
+            'INSERT INTO films (youtube_url, title, description, thumbnail_url) VALUES ($1, $2, $3, $4) RETURNING *',
+            [youtube_url, title, description, thumbnailUrl]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Error creating film:', error);
+        res.status(500).json({ message: 'Błąd dodawania filmu.' });
+    }
+});
+
+app.patch('/api/admin/films/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { youtube_url, title, description } = req.body;
+    try {
+        let thumbnailUrl = undefined;
+        if (youtube_url) {
+            const videoId = getYouTubeVideoId(youtube_url);
+            if (!videoId) return res.status(400).json({ message: 'Nieprawidłowy link do YouTube.' });
+            thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+        }
+        
+        const result = await getPool().query(
+            'UPDATE films SET youtube_url = COALESCE($1, youtube_url), title = COALESCE($2, title), description = COALESCE($3, description), thumbnail_url = COALESCE($4, thumbnail_url) WHERE id = $5 RETURNING *',
+            [youtube_url, title, description, thumbnailUrl, id]
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error updating film:', error);
+        res.status(500).json({ message: 'Błąd aktualizacji filmu.' });
+    }
+});
+
+app.delete('/api/admin/films/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM films WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting film:', error);
+        res.status(500).json({ message: 'Błąd usuwania filmu.' });
+    }
+});
+
+app.post('/api/admin/films/order', authenticateAdmin, async (req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (let i = 0; i < orderedIds.length; i++) {
+            await client.query('UPDATE films SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+        }
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Kolejność filmów została zapisana.' });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error reordering films:', e);
+        res.status(500).json({ message: 'Błąd zapisu kolejności filmów.' });
+    } finally {
+        client.release();
+    }
+});
+
 
 // --- ADMIN-AUTHENTICATED ROUTES ---
 
