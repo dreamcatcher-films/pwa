@@ -1,9 +1,11 @@
 
+
 import React, { useState, FC } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getFilms } from '../api.ts';
 import { LoadingSpinner, XMarkIcon, YouTubeIcon } from '../components/Icons.tsx';
 
+// --- TYPES ---
 interface Film {
     id: number;
     title: string;
@@ -12,6 +14,18 @@ interface Film {
     youtube_url: string;
 }
 
+interface FilmPageSettings {
+    title?: string;
+    subtitle?: string;
+    hero_url?: string;
+}
+
+interface FilmsPageData {
+    films: Film[];
+    settings: FilmPageSettings;
+}
+
+// --- HELPER FUNCTIONS ---
 const getYouTubeVideoId = (url: string): string | null => {
     let videoId: string | null = null;
     try {
@@ -31,6 +45,7 @@ const getYouTubeVideoId = (url: string): string | null => {
     return videoId;
 };
 
+// --- UI COMPONENTS ---
 const VideoPlayerModal: FC<{ film: Film; onClose: () => void }> = ({ film, onClose }) => {
     const videoId = getYouTubeVideoId(film.youtube_url);
     if (!videoId) return null;
@@ -56,52 +71,69 @@ const VideoPlayerModal: FC<{ film: Film; onClose: () => void }> = ({ film, onClo
     );
 };
 
-
+// --- MAIN PAGE COMPONENT ---
 const FilmsPage: FC = () => {
     const [selectedFilm, setSelectedFilm] = useState<Film | null>(null);
-    const { data: films, isLoading, error } = useQuery<Film[], Error>({
-        queryKey: ['films'],
+    const { data, isLoading, error } = useQuery<FilmsPageData, Error>({
+        queryKey: ['filmsPageData'],
         queryFn: getFilms
     });
+    
+    const films = data?.films;
+    const settings = data?.settings;
+    
+    const headerStyle = settings?.hero_url ? { backgroundImage: `url(${settings.hero_url})` } : {};
 
     return (
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-            <header className="text-center mb-12">
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">Nasze Realizacje Filmowe</h1>
-                <p className="mt-4 text-xl text-slate-600 max-w-3xl mx-auto">Każdy film to unikalna historia miłości, opowiedziana z pasją i dbałością o najmniejszy detal. Zapraszamy do obejrzenia.</p>
-            </header>
-
-            {isLoading && (
-                <div className="flex justify-center items-center py-20">
-                    <LoadingSpinner className="w-12 h-12 text-indigo-600" />
+        <div>
+            <header 
+                className="relative bg-slate-800 bg-cover bg-center text-center py-20 px-4 sm:px-6 lg:px-8"
+                style={headerStyle}
+            >
+                <div className="absolute inset-0 bg-black/60"></div>
+                <div className="relative max-w-3xl mx-auto">
+                    <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl drop-shadow-lg">
+                        {settings?.title || 'Nasze Realizacje Filmowe'}
+                    </h1>
+                    <p className="mt-4 text-xl text-slate-200 drop-shadow">
+                        {settings?.subtitle || 'Każdy film to unikalna historia miłości, opowiedziana z pasją i dbałością o najmniejszy detal. Zapraszamy do obejrzenia.'}
+                    </p>
                 </div>
-            )}
-            {error && <p className="text-red-500 text-center py-20">{error.message}</p>}
+            </header>
             
-            {!isLoading && !error && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {films && films.length > 0 ? films.map(film => (
-                        <div key={film.id} className="group cursor-pointer" onClick={() => setSelectedFilm(film)}>
-                            <div className="relative block bg-black rounded-2xl overflow-hidden shadow-lg aspect-video">
-                                <img
-                                    alt={film.title}
-                                    src={film.thumbnail_url}
-                                    className="absolute inset-0 h-full w-full object-cover opacity-80 transition-all duration-300 group-hover:opacity-60 group-hover:scale-105"
-                                />
-                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <YouTubeIcon className="w-16 h-16 text-white/80 drop-shadow-lg transform transition-transform group-hover:scale-110" />
+            <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+                {isLoading && (
+                    <div className="flex justify-center items-center py-20">
+                        <LoadingSpinner className="w-12 h-12 text-indigo-600" />
+                    </div>
+                )}
+                {error && <p className="text-red-500 text-center py-20">{error.message}</p>}
+                
+                {!isLoading && !error && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {films && films.length > 0 ? films.map(film => (
+                            <div key={film.id} className="group cursor-pointer" onClick={() => setSelectedFilm(film)}>
+                                <div className="relative block bg-black rounded-2xl overflow-hidden shadow-lg aspect-video">
+                                    <img
+                                        alt={film.title}
+                                        src={film.thumbnail_url}
+                                        className="absolute inset-0 h-full w-full object-cover opacity-80 transition-all duration-300 group-hover:opacity-60 group-hover:scale-105"
+                                    />
+                                     <div className="absolute inset-0 flex items-center justify-center">
+                                        <YouTubeIcon className="w-16 h-16 text-white/80 drop-shadow-lg transform transition-transform group-hover:scale-110" />
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <h3 className="text-xl font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{film.title}</h3>
+                                    <p className="mt-1 text-sm text-slate-500">{film.description}</p>
                                 </div>
                             </div>
-                            <div className="mt-4">
-                                <h3 className="text-xl font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{film.title}</h3>
-                                <p className="mt-1 text-sm text-slate-500">{film.description}</p>
-                            </div>
-                        </div>
-                    )) : (
-                        <p className="col-span-full text-center text-slate-500 py-20">Brak filmów do wyświetlenia. Zapraszamy wkrótce!</p>
-                    )}
-                </div>
-            )}
+                        )) : (
+                            <p className="col-span-full text-center text-slate-500 py-20">Brak filmów do wyświetlenia. Zapraszamy wkrótce!</p>
+                        )}
+                    </div>
+                )}
+            </main>
             {selectedFilm && <VideoPlayerModal film={selectedFilm} onClose={() => setSelectedFilm(null)} />}
         </div>
     );
