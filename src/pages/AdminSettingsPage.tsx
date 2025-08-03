@@ -19,9 +19,6 @@ const AdminSettingsPage: React.FC = () => {
         contact_phone: '',
         contact_address: '',
         google_maps_api_key: '',
-        films_page_title: '',
-        films_page_subtitle: '',
-        films_page_hero_url: ''
     });
     const [contactStatus, setContactStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [contactMessage, setContactMessage] = useState('');
@@ -34,8 +31,6 @@ const AdminSettingsPage: React.FC = () => {
     });
     const [credentialsStatus, setCredentialsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [credentialsMessage, setCredentialsMessage] = useState('');
-
-    const [filmsHeroFile, setFilmsHeroFile] = useState<File | null>(null);
 
     const token = localStorage.getItem('adminAuthToken');
     
@@ -158,32 +153,16 @@ const AdminSettingsPage: React.FC = () => {
         setContactStatus('loading');
         setContactMessage('');
         try {
-            let heroUrl = contactSettings.films_page_hero_url;
-            if (filmsHeroFile) {
-                const uploadRes = await fetch('/api/admin/settings/upload-films-hero', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'x-vercel-filename': filmsHeroFile.name },
-                    body: filmsHeroFile
-                });
-                if (!uploadRes.ok) throw new Error('Błąd wysyłania grafiki Hero.');
-                const blob = await uploadRes.json();
-                heroUrl = blob.url;
-            }
-
-            const settingsToSave = { ...contactSettings, films_page_hero_url: heroUrl };
-            
             const response = await fetch('/api/admin/contact-settings', {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(settingsToSave),
+                body: JSON.stringify(contactSettings),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać ustawień.');
 
             setContactStatus('success');
             setContactMessage('Ustawienia zostały zaktualizowane.');
-            setContactSettings(prev => ({ ...prev, films_page_hero_url: heroUrl }));
-            setFilmsHeroFile(null);
             setTimeout(() => setContactStatus('idle'), 3000);
         } catch (err) {
             setContactStatus('error');
@@ -333,27 +312,7 @@ const AdminSettingsPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                     <div>
-                        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><FilmIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Strony 'Filmy'</h3>
-                        <p className="mt-1 text-sm text-slate-600">Zarządzaj nagłówkiem na publicznej stronie z filmami.</p>
-                        <div className="mt-6 space-y-4">
-                            <div>
-                                <label htmlFor="films_page_title" className="block text-sm font-medium text-slate-700">Tytuł nagłówka</label>
-                                <input type="text" id="films_page_title" name="films_page_title" value={contactSettings.films_page_title} onChange={handleContactSettingsChange} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm" />
-                            </div>
-                            <div>
-                                <label htmlFor="films_page_subtitle" className="block text-sm font-medium text-slate-700">Podtytuł</label>
-                                <textarea id="films_page_subtitle" name="films_page_subtitle" value={contactSettings.films_page_subtitle} onChange={handleContactSettingsChange} rows={2} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm" />
-                            </div>
-                             <div>
-                                <label htmlFor="films_page_hero_url" className="block text-sm font-medium text-slate-700">Grafika tła nagłówka</label>
-                                <div className="flex items-center gap-4 mt-1">
-                                    {contactSettings.films_page_hero_url && <img src={contactSettings.films_page_hero_url} alt="Podgląd" className="w-24 h-16 object-cover rounded-md" />}
-                                    <input type="file" onChange={(e) => setFilmsHeroFile(e.target.files ? e.target.files[0] : null)} accept="image/*" className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    
                      <div className="mt-4 flex items-center justify-between">
                          <button type="submit" disabled={contactStatus === 'loading'} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
                             {contactStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
