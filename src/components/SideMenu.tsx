@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { XMarkIcon, Cog6ToothIcon, PhotoIcon, EnvelopeIcon, FilmIcon } from './Icons.tsx';
+import { Cog6ToothIcon, EnvelopeIcon, FilmIcon, PhotoIcon, XMarkIcon } from './Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface SideMenuProps {
