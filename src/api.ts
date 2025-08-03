@@ -252,8 +252,12 @@ export const updateAdminSettings = (data: { email: string }) => apiFetch('/api/a
 export const updateAdminCredentials = (data: any) => apiFetch('/api/admin/credentials', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
 export const getAdminContactSettings = () => apiFetch('/api/admin/contact-settings', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 export const updateAdminContactSettings = (data: any) => apiFetch('/api/admin/contact-settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+
+// New Films Page Settings
+export const getAdminFilmsPageSettings = () => apiFetch('/api/admin/films-settings', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const updateAdminFilmsPageSettings = (data: any) => apiFetch('/api/admin/films-settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
 export const uploadFilmsPageHeroImage = async (file: File) => {
-    const response = await fetch('/api/admin/settings/upload-films-hero', {
+    const response = await fetch('/api/admin/films-settings/upload-hero', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name },
         body: file,
