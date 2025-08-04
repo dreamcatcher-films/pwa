@@ -53,7 +53,7 @@ const runDbSetup = async (shouldDrop = false) => {
 
         if (shouldDrop) {
             console.log("Dropping all tables...");
-             const tables = ['films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             const tables = ['guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
              for (const table of tables) {
                 await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
              }
@@ -80,6 +80,17 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS booking_stages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, stage_id INTEGER REFERENCES production_stages(id), status VARCHAR(50) DEFAULT 'pending', completed_at TIMESTAMP WITH TIME ZONE);
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS films (id SERIAL PRIMARY KEY, youtube_url TEXT NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, thumbnail_url TEXT, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS guests (
+                id SERIAL PRIMARY KEY,
+                booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                rsvp_status VARCHAR(50) DEFAULT 'pending' NOT NULL,
+                rsvp_token UUID DEFAULT gen_random_uuid() NOT NULL,
+                notes TEXT,
+                group_name VARCHAR(255),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
         `);
         
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
@@ -556,6 +567,107 @@ app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => 
         res.status(500).json({ message: 'Błąd serwera.' });
     }
 });
+
+// --- GUEST MANAGER API FOR CLIENTS ---
+
+app.get('/api/my-booking/guests', authenticateClient, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM guests WHERE booking_id = $1 ORDER BY name ASC', [req.user.bookingId]);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching guests:', error);
+        res.status(500).json({ message: 'Błąd pobierania listy gości.' });
+    }
+});
+
+app.post('/api/my-booking/guests', authenticateClient, async (req, res) => {
+    const { name, email, group_name } = req.body;
+    try {
+        const result = await getPool().query(
+            'INSERT INTO guests (booking_id, name, email, group_name) VALUES ($1, $2, $3, $4) RETURNING *',
+            [req.user.bookingId, name, email, group_name]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Error adding guest:', error);
+        res.status(500).json({ message: 'Błąd dodawania gościa.' });
+    }
+});
+
+app.put('/api/my-booking/guests/:guestId', authenticateClient, async (req, res) => {
+    const { guestId } = req.params;
+    const { name, email, group_name, rsvp_status } = req.body;
+    try {
+        const result = await getPool().query(
+            'UPDATE guests SET name = $1, email = $2, group_name = $3, rsvp_status = $4 WHERE id = $5 AND booking_id = $6 RETURNING *',
+            [name, email, group_name, rsvp_status, guestId, req.user.bookingId]
+        );
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error updating guest:', error);
+        res.status(500).json({ message: 'Błąd aktualizacji danych gościa.' });
+    }
+});
+
+app.delete('/api/my-booking/guests/:guestId', authenticateClient, async (req, res) => {
+    const { guestId } = req.params;
+    try {
+        const result = await getPool().query('DELETE FROM guests WHERE id = $1 AND booking_id = $2', [guestId, req.user.bookingId]);
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting guest:', error);
+        res.status(500).json({ message: 'Błąd usuwania gościa.' });
+    }
+});
+
+// --- PUBLIC RSVP API FOR GUESTS ---
+
+app.get('/api/public/rsvp/:token', async (req, res) => {
+    const { token } = req.params;
+    try {
+        const guestRes = await getPool().query('SELECT * FROM guests WHERE rsvp_token = $1', [token]);
+        if (guestRes.rowCount === 0) {
+            return res.status(404).json({ message: 'Nieprawidłowy link do zaproszenia.' });
+        }
+        const guest = guestRes.rows[0];
+        
+        const bookingRes = await getPool().query(
+            'SELECT bride_name, groom_name, wedding_date, church_location, venue_location, couple_photo_url FROM bookings WHERE id = $1',
+            [guest.booking_id]
+        );
+        if (bookingRes.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono powiązanego wesela.' });
+        }
+        const booking = bookingRes.rows[0];
+
+        res.json({ guest, booking });
+    } catch (error) {
+        console.error('Error fetching RSVP data:', error);
+        res.status(500).json({ message: 'Błąd serwera.' });
+    }
+});
+
+app.post('/api/public/rsvp/:token', async (req, res) => {
+    const { token } = req.params;
+    const { rsvp_status, notes } = req.body;
+    try {
+        const result = await getPool().query(
+            'UPDATE guests SET rsvp_status = $1, notes = $2 WHERE rsvp_token = $3 RETURNING *',
+            [rsvp_status, notes, token]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nieprawidłowy link do zaproszenia.' });
+        }
+        res.json({ message: 'Dziękujemy za odpowiedź!' });
+    } catch (error) {
+        console.error('Error submitting RSVP:', error);
+        res.status(500).json({ message: 'Błąd serwera.' });
+    }
+});
+
+
 
 // --- FILMS API ---
 
