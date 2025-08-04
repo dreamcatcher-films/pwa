@@ -106,6 +106,10 @@ const runDbSetup = async (shouldDrop = false) => {
         // Add invite settings columns to bookings table if they don't exist
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invite_message TEXT;');
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invite_image_url TEXT;');
+
+        // Add companion columns to guests table if they don't exist
+        await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS allowed_companions INTEGER DEFAULT 0 NOT NULL;');
+        await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS companion_status JSONB;');
         
         console.log('Schema checks complete.');
 
