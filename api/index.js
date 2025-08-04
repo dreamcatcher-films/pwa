@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -53,7 +54,7 @@ const runDbSetup = async (shouldDrop = false) => {
 
         if (shouldDrop) {
             console.log("Dropping all tables...");
-             const tables = ['guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             const tables = ['guest_groups', 'guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
              for (const table of tables) {
                 await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
              }
@@ -76,19 +77,22 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS homepage_slides (id SERIAL PRIMARY KEY, image_url TEXT NOT NULL, title VARCHAR(255), subtitle VARCHAR(255), button_text VARCHAR(255), button_link VARCHAR(255), sort_order INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS homepage_testimonials (id SERIAL PRIMARY KEY, author VARCHAR(255) NOT NULL, content TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS homepage_instagram (id SERIAL PRIMARY KEY, post_url TEXT NOT NULL, image_url TEXT NOT NULL, caption TEXT, sort_order INTEGER DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, invite_message TEXT, invite_image_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS booking_stages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, stage_id INTEGER REFERENCES production_stages(id), status VARCHAR(50) DEFAULT 'pending', completed_at TIMESTAMP WITH TIME ZONE);
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS films (id SERIAL PRIMARY KEY, youtube_url TEXT NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, thumbnail_url TEXT, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS guest_groups (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE NOT NULL, name VARCHAR(255) NOT NULL);
             CREATE TABLE IF NOT EXISTS guests (
                 id SERIAL PRIMARY KEY,
                 booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE NOT NULL,
                 name VARCHAR(255) NOT NULL,
                 email VARCHAR(255),
+                group_id INTEGER REFERENCES guest_groups(id) ON DELETE SET NULL,
                 rsvp_status VARCHAR(50) DEFAULT 'pending' NOT NULL,
                 rsvp_token UUID DEFAULT gen_random_uuid() NOT NULL,
                 notes TEXT,
-                group_name VARCHAR(255),
+                allowed_companions INTEGER DEFAULT 0 NOT NULL,
+                companion_status JSONB,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -346,6 +350,12 @@ app.post('/api/bookings', async (req, res) => {
         );
         const bookingId = bookingResult.rows[0].id;
 
+        // Create default guest groups for the new booking
+        const defaultGroups = ['Rodzice', 'Przyjaciele', 'Bliższa Rodzina', 'Dalsza Rodzina'];
+        for (const groupName of defaultGroups) {
+            await client.query('INSERT INTO guest_groups (booking_id, name) VALUES ($1, $2)', [bookingId, groupName]);
+        }
+
         if (discountCode) {
             await client.query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [discountCode]);
         }
@@ -455,9 +465,9 @@ app.get('/api/public/rsvp/:token', async (req, res) => {
 
 app.post('/api/public/rsvp/:token', async (req, res) => {
     const { token } = req.params;
-    const { rsvp_status, notes } = req.body;
+    const { rsvp_status, notes, companion_status } = req.body;
     try {
-        const result = await getPool().query('UPDATE guests SET rsvp_status = $1, notes = $2 WHERE rsvp_token = $3 RETURNING *', [rsvp_status, notes, token]);
+        const result = await getPool().query('UPDATE guests SET rsvp_status = $1, notes = $2, companion_status = $3 WHERE rsvp_token = $4 RETURNING *', [rsvp_status, notes, JSON.stringify(companion_status), token]);
         if(result.rowCount === 0) return res.status(404).json({message: 'Nie znaleziono zaproszenia.'});
         res.json({ message: 'Dziękujemy za odpowiedź!' });
     } catch (error) {
@@ -523,6 +533,7 @@ const createUploadHandler = (authMiddleware) => async (req, res) => {
 
 app.post('/api/admin/galleries/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
 app.post('/api/my-booking/photo', rawBodyParser, createUploadHandler(authenticateClient));
+app.post('/api/my-booking/invite-settings/upload', rawBodyParser, createUploadHandler(authenticateClient));
 app.post('/api/admin/homepage/slides/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
 app.post('/api/admin/homepage/about/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
 app.post('/api/admin/packages/upload-image', rawBodyParser, createUploadHandler(authenticateAdmin));
@@ -629,25 +640,25 @@ app.post('/api/messages', authenticateClient, async (req, res) => {
 // Guest List for Clients
 app.get('/api/my-booking/guests', authenticateClient, async (req, res) => {
     try {
-        const guests = await getPool().query('SELECT * FROM guests WHERE booking_id = $1 ORDER BY group_name, name', [req.user.userId]);
+        const guests = await getPool().query('SELECT g.*, gg.name as group_name FROM guests g LEFT JOIN guest_groups gg ON g.group_id = gg.id WHERE g.booking_id = $1 ORDER BY gg.name, g.name', [req.user.userId]);
         res.json(guests.rows);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania gości.' });
     }
 });
 app.post('/api/my-booking/guests', authenticateClient, async (req, res) => {
-    const { name, email, group_name } = req.body;
+    const { name, email, group_id, allowed_companions } = req.body;
     try {
-        const result = await getPool().query('INSERT INTO guests (booking_id, name, email, group_name) VALUES ($1, $2, $3, $4) RETURNING *', [req.user.userId, name, email, group_name]);
+        const result = await getPool().query('INSERT INTO guests (booking_id, name, email, group_id, allowed_companions) VALUES ($1, $2, $3, $4, $5) RETURNING *', [req.user.userId, name, email, group_id || null, allowed_companions || 0]);
         res.status(201).json(result.rows[0]);
     } catch (error) {
         res.status(500).json({ message: 'Błąd dodawania gościa.' });
     }
 });
 app.put('/api/my-booking/guests/:id', authenticateClient, async (req, res) => {
-    const { name, email, group_name } = req.body;
+    const { name, email, group_id, allowed_companions, rsvp_status, companion_status } = req.body;
     try {
-        const result = await getPool().query('UPDATE guests SET name = $1, email = $2, group_name = $3 WHERE id = $4 AND booking_id = $5 RETURNING *', [name, email, group_name, req.params.id, req.user.userId]);
+        const result = await getPool().query('UPDATE guests SET name = $1, email = $2, group_id = $3, allowed_companions = $4, rsvp_status = $5, companion_status = $6 WHERE id = $7 AND booking_id = $8 RETURNING *', [name, email, group_id || null, allowed_companions || 0, rsvp_status, JSON.stringify(companion_status), req.params.id, req.user.userId]);
         if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
         res.json(result.rows[0]);
     } catch (error) {
@@ -677,11 +688,23 @@ app.post('/api/my-booking/guests/send-invites', authenticateClient, async (req, 
 
         const { senderName, fromEmail } = await getSenderDetails(client);
         
+        const customImageHtml = booking.invite_image_url ? `<img src="${booking.invite_image_url}" alt="Zaproszenie" style="width:100%;max-width:600px;height:auto;margin-bottom:20px;">` : '';
+        const customMessageHtml = booking.invite_message ? `<p>${booking.invite_message.replace(/\n/g, '<br>')}</p>` : '';
+
         const emails = guests_to_invite.map(guest => ({
             from: `${booking.bride_name} i ${booking.groom_name} <${fromEmail}>`,
             to: guest.email,
             subject: `Zaproszenie na ślub ${booking.bride_name} i ${booking.groom_name}`,
-            html: `<h1>Cześć ${guest.name}!</h1><p>Zapraszamy Cię serdecznie na nasz ślub. Prosimy o potwierdzenie przybycia, klikając w poniższy link:</p><a href="https://${req.headers.host}/rsvp/${guest.rsvp_token}">Potwierdź przybycie</a><p>Pozdrawiamy,<br>${booking.bride_name} i ${booking.groom_name}</p>`,
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                    ${customImageHtml}
+                    <h1>Cześć ${guest.name}!</h1>
+                    ${customMessageHtml}
+                    <p>Zapraszamy Cię serdecznie na nasz ślub. Prosimy o potwierdzenie przybycia, klikając w poniższy link:</p>
+                    <a href="https://${req.headers.host}/rsvp/${guest.rsvp_token}" style="display:inline-block;padding:10px 20px;background-color:#4F46E5;color:white;text-decoration:none;border-radius:5px;">Potwierdź przybycie</a>
+                    <p>Pozdrawiamy,<br>${booking.bride_name} i ${booking.groom_name}</p>
+                </div>
+            `,
             reply_to: booking.email,
         }));
 
@@ -696,6 +719,65 @@ app.post('/api/my-booking/guests/send-invites', authenticateClient, async (req, 
     }
 });
 
+// Guest Groups for Clients
+app.get('/api/my-booking/guest-groups', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        let groupsRes = await client.query('SELECT * FROM guest_groups WHERE booking_id = $1 ORDER BY name', [req.user.userId]);
+
+        if (groupsRes.rowCount === 0) {
+            const defaultGroups = ['Rodzice', 'Przyjaciele', 'Bliższa Rodzina', 'Dalsza Rodzina'];
+            for (const groupName of defaultGroups) {
+                await client.query('INSERT INTO guest_groups (booking_id, name) VALUES ($1, $2)', [req.user.userId, groupName]);
+            }
+            groupsRes = await client.query('SELECT * FROM guest_groups WHERE booking_id = $1 ORDER BY name', [req.user.userId]);
+        }
+        
+        res.json(groupsRes.rows);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania grup gości.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/my-booking/guest-groups', authenticateClient, async (req, res) => {
+    const { name } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO guest_groups (booking_id, name) VALUES ($1, $2) RETURNING *', [req.user.userId, name]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd tworzenia grupy.' });
+    }
+});
+
+app.delete('/api/my-booking/guest-groups/:id', authenticateClient, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM guest_groups WHERE id = $1 AND booking_id = $2', [req.params.id, req.user.userId]);
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd usuwania grupy.' });
+    }
+});
+
+// Invite Settings
+app.get('/api/my-booking/invite-settings', authenticateClient, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT invite_message, invite_image_url FROM bookings WHERE id = $1', [req.user.userId]);
+        res.json(result.rows[0] || { invite_message: '', invite_image_url: '' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania ustawień zaproszenia.' });
+    }
+});
+app.patch('/api/my-booking/invite-settings', authenticateClient, async (req, res) => {
+    const { invite_message, invite_image_url } = req.body;
+    try {
+        await getPool().query('UPDATE bookings SET invite_message = $1, invite_image_url = $2 WHERE id = $3', [invite_message, invite_image_url, req.user.userId]);
+        res.json({ message: 'Ustawienia zapisane.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zapisu ustawień.' });
+    }
+});
 
 // --- ADMIN-PROTECTED ROUTES ---
 // ... (The full list of admin routes would be here)
