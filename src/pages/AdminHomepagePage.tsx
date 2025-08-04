@@ -285,7 +285,7 @@ const AboutUsManager: FC<{ aboutSection: AboutSection, onDataChange: () => void,
             <form onSubmit={handleSubmit} className="space-y-4">
                  <input name="title" value={formData.title} onChange={handleChange} placeholder="Nagłówek sekcji" className={inputClasses} />
                  <textarea name="text" value={formData.text} onChange={handleChange} placeholder="Tekst o Was" className={inputClasses} rows={5}></textarea>
-                 <p className="text-xs text-slate-500 -mt-2 pl-1">Możesz używać formatowania Markdown, np. `**pogrubienie**`, `*kursywa*` lub listy.</p>
+                 <p className="text-xs text-slate-500 -mt-2 pl-1">Możesz używać formatowania Markdown, np. `**pogrubienie**`, `*kursywa*` lub listy. Czytaj dalej - daj "<!-- more -->"</p>
                  
                  <div className="flex items-center gap-4">
                     {formData.image_url && <img src={formData.image_url} alt="Podgląd" className="w-24 h-24 object-cover rounded-md" />}
