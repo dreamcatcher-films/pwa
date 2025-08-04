@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { EngagementRingSpinner, CheckCircleIcon, MapPinIcon, CalendarDaysIcon } from '../components/Icons.tsx';
-import Footer from '../components/Footer.tsx';
 
 // --- TYPES ---
 interface CompanionStatus {
@@ -190,7 +189,6 @@ const RsvpPage: React.FC = () => {
                     </div>
                 </div>
             </div>
-            <Footer />
         </div>
     );
 };
