@@ -139,14 +139,14 @@ export const deleteGuest = (id: number) => apiFetchNoJson(`/api/my-booking/guest
 });
 
 export const getClientPanelData = async () => {
-    const [bookingData, stages, messages, unreadCount] = await Promise.all([
+    const [bookingAndQuestionnaire, stages, messages, unreadCount] = await Promise.all([
         getMyBooking(),
         getBookingStages(),
         getMessages(),
         getUnreadMessageCount(),
     ]);
-    const { settings, ...booking } = bookingData;
-    return { booking, stages, messages, unreadCount, settings };
+    const { booking, questionnaire } = bookingAndQuestionnaire;
+    return { booking, stages, messages, unreadCount, questionnaire };
 };
 
 // Guest Groups
@@ -171,6 +171,18 @@ export const uploadInviteImage = async (file: File) => {
     return response.json();
 };
 
+// Client Questionnaire
+export const saveQuestionnaireAnswers = (data: {response_id: number; answers: Record<string, string>}) => apiFetch('/api/my-booking/questionnaire/answers', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getClientToken()}` },
+    body: JSON.stringify(data),
+});
+export const submitQuestionnaire = (response_id: number) => apiFetch('/api/my-booking/questionnaire/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getClientToken()}` },
+    body: JSON.stringify({ response_id }),
+});
+
 // --- ADMIN-AUTHENTICATED API ---
 
 // Bookings
@@ -188,6 +200,22 @@ export const updateBookingPayment = ({ id, data }: { id: string, data: any }) =>
     body: JSON.stringify(data),
 });
 export const resendCredentials = (id: string) => apiFetch(`/api/admin/bookings/${id}/resend-credentials`, { method: 'POST', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const uploadContract = async ({ bookingId, file }: { bookingId: string, file: File }) => {
+    const response = await fetch(`/api/admin/bookings/${bookingId}/contract/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name, 'Content-Type': file.type },
+        body: file,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const blob = await response.json();
+
+    // Now save the URL to the booking
+    return apiFetch(`/api/admin/bookings/${bookingId}/contract`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` },
+        body: JSON.stringify({ contract_url: blob.url }),
+    });
+};
 
 // Access Keys
 export const getAccessKeys = () => apiFetch('/api/admin/access-keys', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
@@ -415,3 +443,13 @@ export const deleteAdminGuestGroup = ({ bookingId, groupId }: { bookingId: strin
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAdminToken()}` },
 });
+
+// Admin Questionnaire
+export const getQuestionnaireTemplates = () => apiFetch('/api/admin/questionnaires', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const createQuestionnaireTemplate = (data: any) => apiFetch('/api/admin/questionnaires', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const updateQuestionnaireTemplate = ({ id, data }: { id: number, data: any }) => apiFetch(`/api/admin/questionnaires/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const deleteQuestionnaireTemplate = (id: number) => apiFetchNoJson(`/api/admin/questionnaires/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const addQuestion = ({ templateId, data }: { templateId: number, data: any }) => apiFetch(`/api/admin/questionnaires/${templateId}/questions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const updateQuestion = ({ questionId, data }: { questionId: number, data: any }) => apiFetch(`/api/admin/questions/${questionId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
+export const deleteQuestion = (questionId: number) => apiFetchNoJson(`/api/admin/questions/${questionId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const getAdminBookingQuestionnaire = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/questionnaire`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
