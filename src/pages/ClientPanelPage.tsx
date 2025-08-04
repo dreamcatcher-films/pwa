@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, FC, useRef } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, CheckBadgeIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon } from './Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -11,6 +12,8 @@ import { getClientPanelData, updateMyBooking, approveBookingStage, sendClientMes
 import CountdownTimer from '../components/CountdownTimer.tsx';
 import ClientPanelHero from '../components/ClientPanelHero.tsx';
 import GuestManager from '../components/client/GuestManager.tsx';
+import Questionnaire from '../components/client/Questionnaire.tsx';
+import Contract from '../components/client/Contract.tsx';
 
 // --- TYPES ---
 interface EditableBookingData {
@@ -28,6 +31,7 @@ interface BookingData {
     groom_name: string;
     wedding_date: string;
     couple_photo_url: string | null;
+    contract_url: string | null;
     bride_address: string | null;
     groom_address: string | null;
     church_location: string | null;
@@ -60,7 +64,7 @@ interface Message {
     status?: 'sending' | 'error';
 }
 
-type ActiveTab = 'details' | 'guests';
+type ActiveTab = 'details' | 'guests' | 'questionnaire' | 'contract';
 
 // --- MAIN COMPONENT ---
 const ClientPanelPage: React.FC = () => {
@@ -169,7 +173,7 @@ const ClientPanelPage: React.FC = () => {
     
     if (isLoading || !data) return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     
-    const { booking, stages, messages, unreadCount } = data;
+    const { booking, stages, messages, unreadCount, questionnaire } = data;
     
     if (!booking) return <div className="text-center py-20 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8"><p className="text-red-500">Błąd: Nie znaleziono danych rezerwacji.</p><button onClick={() => navigate('/logowanie')} className="mt-4 bg-brand-dark-green text-white font-bold py-2 px-4 rounded-lg">Wróć do logowania</button></div>;
     
@@ -206,6 +210,14 @@ const ClientPanelPage: React.FC = () => {
                        <UserGroupIcon className="w-5 h-5"/>
                         Lista Gości
                     </button>
+                    <button onClick={() => setActiveTab('questionnaire')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'questionnaire' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                       <QuestionMarkCircleIcon className="w-5 h-5"/>
+                        Ankieta i Moodboard
+                    </button>
+                    <button onClick={() => setActiveTab('contract')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'contract' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                       <DocumentTextIcon className="w-5 h-5"/>
+                        Umowa
+                    </button>
                 </nav>
             </div>
 
@@ -239,122 +251,124 @@ const ClientPanelPage: React.FC = () => {
                             </div>
                         </InfoCard>
                         
-                        <InfoCard title="Dane Pary Młodej" icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500"/>}>
-                            <InfoItem label="Panna Młoda" value={booking.bride_name} />
-                            <InfoItem label="Pan Młody" value={booking.groom_name} />
-                            <InfoItem label="Adres e-mail" value={booking.email} />
-                            <InfoItem label="Numer telefonu" value={booking.phone_number} />
-                        </InfoCard>
-
-                         <InfoCard 
-                            title="Szczegóły Wydarzenia" 
-                            icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500"/>}
+                        <InfoCard 
+                            title="Dane Pary Młodej" 
+                            icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}
                             actionButton={
-                                !isEditing && (
-                                    <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors px-3 py-1.5 rounded-lg bg-indigo-50">
-                                        <PencilSquareIcon className="w-5 h-5" /> Edytuj
+                                isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                        {updateBookingMutation.isSuccess && <div className="flex items-center gap-2 text-green-600 text-sm mr-2"><CheckCircleIcon className="w-5 h-5"/> Zapisano!</div>}
+                                        <button onClick={handleCancelEdit} disabled={updateBookingMutation.isPending} className="bg-slate-100 text-slate-800 font-bold py-1 px-3 rounded-lg text-sm">Anuluj</button>
+                                        <button onClick={handleSubmit(onSave)} disabled={updateBookingMutation.isPending} className="bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm flex items-center justify-center w-24">
+                                            {updateBookingMutation.isPending ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zapisz'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                                        <PencilSquareIcon className="w-5 h-5" /> Edytuj informacje
                                     </button>
                                 )
                             }
                         >
                             {isEditing ? (
-                                <form onSubmit={handleSubmit(onSave)}>
-                                    <div className="space-y-4">
-                                        <InputField id="bride_address" label="Adres przygotowań Panny Młodej" register={register('bride_address', { required: true })} error={errors.bride_address} />
-                                        <InputField id="groom_address" label="Adres przygotowań Pana Młodego" register={register('groom_address', { required: true })} error={errors.groom_address} />
-                                        <InputField id="church_location" label="Adres ceremonii" register={register('church_location', { required: true })} error={errors.church_location} />
-                                        <InputField id="venue_location" label="Adres przyjęcia" register={register('venue_location', { required: true })} error={errors.venue_location} />
-                                        <TextAreaField id="schedule" label="Harmonogram dnia" register={register('schedule', { required: true })} error={errors.schedule} rows={4}/>
-                                        <TextAreaField id="additional_info" label="Dodatkowe informacje" register={register('additional_info')} error={errors.additional_info} required={false} rows={3}/>
+                                <form onSubmit={handleSubmit(onSave)} className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <InputField id="bride_address" label="Adres przygotowań Panny Młodej" register={register('bride_address')} error={errors.bride_address} />
+                                        <InputField id="groom_address" label="Adres przygotowań Pana Młodego" register={register('groom_address')} error={errors.groom_address} />
+                                        <InputField id="church_location" label="Adres ceremonii" register={register('church_location')} error={errors.church_location} />
+                                        <InputField id="venue_location" label="Adres przyjęcia" register={register('venue_location')} error={errors.venue_location} />
                                     </div>
-                                    <div className="flex justify-end items-center gap-4 mt-6 pt-4 border-t">
-                                         {updateBookingMutation.isSuccess && <div className="flex items-center gap-2 text-green-600 mr-auto"><CheckCircleIcon className="w-5 h-5"/> Zapisano!</div>}
-                                         {updateBookingMutation.isError && <p className="text-red-500 text-sm mr-auto">{updateBookingMutation.error.message}</p>}
-                                        <button type="button" onClick={handleCancelEdit} disabled={updateBookingMutation.isPending} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
-                                        <button type="submit" disabled={updateBookingMutation.isPending} className="bg-indigo-600 w-32 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex justify-center items-center">
-                                            {updateBookingMutation.isPending ? <EngagementRingSpinner className="w-5 h-5"/> : 'Zapisz'}
-                                        </button>
-                                    </div>
+                                    <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" register={register('schedule')} error={errors.schedule} rows={4} />
+                                    <TextAreaField id="additional_info" label="Dodatkowe informacje" register={register('additional_info')} error={errors.additional_info} rows={3} required={false} />
                                 </form>
                             ) : (
-                                <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                     <InfoItem label="Adres przygotowań Panny Młodej" value={booking.bride_address} />
                                     <InfoItem label="Adres przygotowań Pana Młodego" value={booking.groom_address} />
                                     <InfoItem label="Adres ceremonii" value={booking.church_location} />
                                     <InfoItem label="Adres przyjęcia" value={booking.venue_location} />
-                                    <InfoItem label="Harmonogram dnia" value={booking.schedule} />
-                                    <InfoItem label="Dodatkowe informacje" value={booking.additional_info} />
-                                </>
-                            )}
-                        </InfoCard>
-
-                        <div className="bg-white rounded-2xl shadow-md">
-                            <button onClick={handleToggleChat} className="w-full flex items-center justify-between p-6 cursor-pointer">
-                                <div className="flex items-center">
-                                    <ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500" />
-                                    <h2 className="text-xl font-bold text-slate-800">Komunikacja z nami</h2>
-                                    {unreadCount?.count > 0 && <span className="ml-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">{unreadCount.count} nowa</span>}
-                                </div>
-                                <ChevronDownIcon className={`w-6 h-6 text-slate-500 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} />
-                            </button>
-                            {isChatOpen && (
-                                <div className="p-6 pt-0">
-                                    <div className="border-t border-slate-200 pt-4">
-                                        <div className="space-y-4 pr-2 max-h-96 overflow-y-auto">
-                                            {messages.map((msg: Message) => (
-                                                <div key={msg.id} className={`flex ${msg.sender === 'client' ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className={`max-w-md p-3 rounded-lg ${msg.sender === 'client' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'} ${msg.status === 'sending' ? 'opacity-70' : ''} ${msg.status === 'error' ? 'bg-red-200 text-red-800' : ''}`}>
-                                                        {msg.content && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
-                                                        <p className={`text-xs mt-1 ${msg.sender === 'client' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                                                            {msg.status === 'sending' && 'Wysyłanie...'}
-                                                            {msg.status === 'error' && <span className="font-semibold">Błąd wysyłania</span>}
-                                                            {!msg.status && formatMessageDate(msg.created_at)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div ref={chatEndRef} />
-                                        </div>
-                                        <form onSubmit={handleSendMessage} className="mt-4 pt-4 border-t border-slate-200">
-                                            <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Napisz wiadomość..." rows={3} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled={sendMessageMutation.isPending} />
-                                            <div className="flex justify-end mt-2">
-                                                <button type="submit" disabled={sendMessageMutation.isPending || !newMessage.trim()} className="bg-indigo-600 text-white font-bold py-2 px-5 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 transition-colors flex items-center justify-center w-28 ml-auto">
-                                                    {sendMessageMutation.isPending ? <EngagementRingSpinner className="w-5 h-5" /> : 'Wyślij'}
-                                                </button>
-                                            </div>
-                                        </form>
+                                    <div className="md:col-span-2">
+                                        <InfoItem label="Przybliżony harmonogram dnia" value={booking.schedule} />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <InfoItem label="Dodatkowe informacje" value={booking.additional_info} />
                                     </div>
                                 </div>
                             )}
-                        </div>
+                        </InfoCard>
                     </main>
                     <aside className="lg:col-span-1">
                         <div className="sticky top-28 space-y-8">
                             <CountdownTimer targetDate={booking.wedding_date} />
-                            <InfoCard title="Rozliczenie">
-                                 <InfoItem label="Status płatności" value={<span className="font-bold">{getPaymentStatusText(booking.payment_status)}</span>} />
-                                <div className="grid grid-cols-2 gap-4 border-t pt-4 mt-4">
+                            <InfoCard title="Płatności">
+                                <InfoItem label="Wybrany pakiet" value={booking.package_name} />
+                                {booking.discount_code && <InfoItem label="Kod rabatowy" value={booking.discount_code} />}
+                                <div className="border-t pt-4 mt-4">
+                                    <InfoItem label="Cena końcowa" value={formatCurrency(Number(booking.total_price))} />
                                     <InfoItem label="Wpłacono" value={formatCurrency(Number(booking.amount_paid))} />
-                                    <InfoItem label="Pozostało" value={formatCurrency(Number(booking.total_price) - Number(booking.amount_paid))} />
-                                </div>
-                                <div className="flex justify-between items-baseline pt-4 mt-2 border-t">
-                                    <p className="text-lg font-bold text-slate-900">Suma</p>
-                                    <p className="text-2xl font-bold text-indigo-600">{formatCurrency(Number(booking.total_price))}</p>
+                                    <div className="mt-2 pt-2 border-t">
+                                        <InfoItem 
+                                            label="Pozostało do zapłaty" 
+                                            value={<span className="font-bold text-xl text-indigo-600">{formatCurrency(Number(booking.total_price) - Number(booking.amount_paid))}</span>}
+                                        />
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-2">Status: <span className="font-semibold">{getPaymentStatusText(booking.payment_status)}</span></p>
                                 </div>
                             </InfoCard>
-                            <InfoCard title="Podsumowanie pakietu">
-                                <InfoItem label="Wybrany pakiet" value={booking.package_name} />
-                                <InfoItem label="Wybrane usługi" value={<ul className="list-disc list-inside mt-1 font-medium">{booking.selected_items.map((item, index) => <li key={index}>{item}</li>)}</ul>} />
-                                <InfoItem label="Użyty kod rabatowy" value={booking.discount_code || 'Brak'} />
-                             </InfoCard>
                         </div>
                     </aside>
                 </div>
             )}
 
-            {activeTab === 'guests' && (
-                <div className="mt-8">
-                    <GuestManager />
+            {activeTab === 'guests' && <div className="mt-8"><GuestManager /></div>}
+            {activeTab === 'questionnaire' && <div className="mt-8"><Questionnaire questionnaire={questionnaire} /></div>}
+            {activeTab === 'contract' && <div className="mt-8"><Contract contractUrl={booking.contract_url} /></div>}
+
+            {/* Chat Bubble */}
+            <div className="fixed bottom-6 right-6 z-40">
+                <button onClick={handleToggleChat} className="relative bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 transition-transform hover:scale-110">
+                    <ChatBubbleLeftRightIcon className="w-8 h-8"/>
+                    {unreadCount?.count > 0 && !isChatOpen && (
+                        <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold ring-2 ring-white">
+                            {unreadCount.count}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* Chat Window */}
+            {isChatOpen && (
+                <div className="fixed bottom-24 right-6 z-40 w-96 max-w-[calc(100vw-3rem)] bg-white rounded-2xl shadow-2xl flex flex-col h-[60vh] max-h-[600px] animate-slide-in-bottom">
+                    <header className="p-4 bg-slate-100 rounded-t-2xl border-b flex justify-between items-center">
+                        <h3 className="font-bold text-slate-800">Czat z nami</h3>
+                        <button onClick={handleToggleChat} className="p-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-200"><ChevronDownIcon className="w-6 h-6"/></button>
+                    </header>
+                    <div className="flex-grow p-4 space-y-4 overflow-y-auto">
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`flex ${msg.sender === 'client' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-xs p-3 rounded-lg ${msg.sender === 'client' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                    <p className={`text-xs mt-1 ${msg.sender === 'client' ? 'text-indigo-200' : 'text-slate-400'}`}>{formatMessageDate(msg.created_at)}</p>
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+                    <footer className="p-4 border-t">
+                        <form onSubmit={handleSendMessage} className="flex gap-2">
+                            <input 
+                                type="text"
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                placeholder="Napisz wiadomość..."
+                                className="flex-grow p-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                disabled={sendMessageMutation.isPending}
+                            />
+                            <button type="submit" disabled={sendMessageMutation.isPending || !newMessage.trim()} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300">
+                                Wyślij
+                            </button>
+                        </form>
+                    </footer>
                 </div>
             )}
         </div>
