@@ -640,12 +640,19 @@ app.post('/api/messages', authenticateClient, async (req, res) => {
 // Guest List for Clients
 app.get('/api/my-booking/guests', authenticateClient, async (req, res) => {
     try {
-        const guests = await getPool().query('SELECT g.*, gg.name as group_name FROM guests g LEFT JOIN guest_groups gg ON g.group_id = gg.id WHERE g.booking_id = $1 ORDER BY gg.name, g.name', [req.user.userId]);
-        res.json(guests.rows);
+        const client = await getPool().connect();
+        try {
+            const guests = await client.query('SELECT g.*, gg.name as group_name FROM guests g LEFT JOIN guest_groups gg ON g.group_id = gg.id WHERE g.booking_id = $1 ORDER BY gg.name, g.name', [req.user.userId]);
+            res.json(guests.rows);
+        } finally {
+            client.release();
+        }
     } catch (error) {
+        console.error('Error getting guests for client:', error);
         res.status(500).json({ message: 'Błąd pobierania gości.' });
     }
 });
+
 app.post('/api/my-booking/guests', authenticateClient, async (req, res) => {
     const { name, email, group_id, allowed_companions } = req.body;
     try {
@@ -762,11 +769,15 @@ app.delete('/api/my-booking/guest-groups/:id', authenticateClient, async (req, r
 
 // Invite Settings
 app.get('/api/my-booking/invite-settings', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT invite_message, invite_image_url FROM bookings WHERE id = $1', [req.user.userId]);
+        const result = await client.query('SELECT invite_message, invite_image_url FROM bookings WHERE id = $1', [req.user.userId]);
         res.json(result.rows[0] || { invite_message: '', invite_image_url: '' });
     } catch (error) {
+        console.error("Error getting invite settings:", error);
         res.status(500).json({ message: 'Błąd pobierania ustawień zaproszenia.' });
+    } finally {
+        client.release();
     }
 });
 app.patch('/api/my-booking/invite-settings', authenticateClient, async (req, res) => {
