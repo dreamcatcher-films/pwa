@@ -31,6 +31,7 @@ const AdminBookingDetailsPage = lazy(() => import('./pages/AdminBookingDetailsPa
 const FilmsPage = lazy(() => import('./pages/FilmsPage.tsx'));
 const AdminFilmsPage = lazy(() => import('./pages/AdminFilmsPage.tsx'));
 const RsvpPage = lazy(() => import('./pages/RsvpPage.tsx'));
+const AdminGuestsPage = lazy(() => import('./pages/AdminGuestsPage.tsx'));
 
 const App = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -62,6 +63,7 @@ const App = () => {
                                 <Route path="inbox" element={<AdminInboxPage />} />
                                 <Route path="rezerwacje" element={<AdminBookingsPage />} />
                                 <Route path="rezerwacje/:bookingId" element={<AdminBookingDetailsPage />} />
+                                <Route path="goscie" element={<AdminGuestsPage />} />
                                 <Route path="klucze-dostepu" element={<AdminAccessKeysPage />} />
                                 <Route path="dostepnosc" element={<AdminAvailabilityPage />} />
                                 <Route path="galeria" element={<AdminGalleryPage />} />
