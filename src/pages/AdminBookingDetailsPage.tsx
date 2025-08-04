@@ -11,20 +11,16 @@ import { formatCurrency } from '../utils.ts';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import {
-    getAdminBookingDetails, getAdminGuests, getAdminGuestGroups,
-    addAdminGuest, updateAdminGuest, deleteAdminGuest,
-    addAdminGuestGroup, deleteAdminGuestGroup,
+    getAdminBookingDetails,
     getAdminBookingQuestionnaire,
     uploadContract, getBookingStagesForAdmin, getStages, addStageToBooking,
     updateBookingStageStatus, removeStageFromBooking, getAdminMessages,
     sendAdminMessage, uploadAdminAttachment, markAdminMessagesAsRead,
     updateAdminBooking, updateBookingPayment, resendCredentials
 } from '../api.ts';
+import AdminGuestManager from '../components/admin/GuestManager.tsx';
 
 // --- TYPES ---
-interface CompanionStatus { attending: boolean; is_child: boolean; }
-interface Guest { id: number; name: string; email: string | null; group_id: number | null; group_name: string | null; notes: string | null; rsvp_status: 'pending' | 'confirmed' | 'declined' | 'tentative'; allowed_companions: number; companion_status: CompanionStatus[] | null; }
-interface GuestGroup { id: number; name: string; }
 interface BookingData { id: number; client_id: string; package_name: string; total_price: string; selected_items: string[]; bride_name: string; groom_name: string; wedding_date: string; bride_address: string; groom_address: string; church_location: string | null; venue_location: string | null; schedule: string; email: string; phone_number: string; additional_info: string | null; discount_code: string | null; access_key: string; created_at: string; payment_status: 'pending' | 'partial' | 'paid'; amount_paid: string; contract_url: string | null; }
 interface QuestionnaireResponse { template: { title: string }, questions: { id: number; text: string; type: string }[], answers: Record<string, string>, response: { status: string } }
 interface ProductionStage { id: number; name: string; }
@@ -33,39 +29,6 @@ interface Message { id: number; sender: 'client' | 'admin'; content: string; cre
 
 type EditableBookingData = Pick<BookingData, 'bride_name' | 'groom_name' | 'email' | 'phone_number' | 'wedding_date' | 'bride_address' | 'groom_address' | 'church_location' | 'venue_location' | 'schedule' | 'additional_info'>;
 type PaymentData = Pick<BookingData, 'payment_status' | 'amount_paid'>;
-
-// --- GUEST MANAGER COMPONENT ---
-const AdminGuestManager: FC<{ bookingId: string }> = ({ bookingId }) => {
-    // Guest Manager implementation will be similar to the client's but using admin API calls
-    // This is a placeholder for brevity but would contain the full logic from client/GuestManager.tsx adapted for admin.
-    const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newGroupName, setNewGroupName] = useState('');
-    const [activeFilter, setActiveFilter] = useState<Guest['rsvp_status'] | 'all'>('all');
-    const queryClient = useQueryClient();
-
-    const { data: guests, isLoading: isLoadingGuests } = useQuery<Guest[], Error>({ queryKey: ['adminGuests', bookingId], queryFn: () => getAdminGuests(bookingId) });
-    const { data: groups, isLoading: isLoadingGroups } = useQuery<GuestGroup[], Error>({ queryKey: ['adminGuestGroups', bookingId], queryFn: () => getAdminGuestGroups(bookingId) });
-
-    const addGuestMutation = useMutation({ mutationFn: (data: any) => addAdminGuest({ bookingId, data }), onSuccess: () => queryClient.invalidateQueries({queryKey: ['adminGuests', bookingId]}) });
-    const updateGuestMutation = useMutation({ mutationFn: (data: any) => updateAdminGuest({ bookingId, guestId: data.id, data }), onSuccess: () => queryClient.invalidateQueries({queryKey: ['adminGuests', bookingId]}) });
-    const deleteGuestMutation = useMutation({ mutationFn: (guestId: number) => deleteAdminGuest({ bookingId, guestId }), onSuccess: () => queryClient.invalidateQueries({queryKey: ['adminGuests', bookingId]}) });
-
-    const addGroupMutation = useMutation({ mutationFn: (name: string) => addAdminGuestGroup({ bookingId, name }), onSuccess: () => { setNewGroupName(''); queryClient.invalidateQueries({queryKey: ['adminGuestGroups', bookingId]}); }});
-    const deleteGroupMutation = useMutation({ mutationFn: (groupId: number) => deleteAdminGuestGroup({ bookingId, groupId }), onSuccess: () => queryClient.invalidateQueries({queryKey: ['adminGuestGroups', bookingId]}) });
-
-    // ... The rest of the Guest Manager logic (forms, handlers, UI) would be here ...
-    // NOTE: For the purpose of this response, a simplified placeholder is returned.
-    // A full implementation would mirror the functionality seen in `src/components/client/GuestManager.tsx`.
-    if (isLoadingGuests || isLoadingGroups) return <div className="flex justify-center py-10"><EngagementRingSpinner /></div>;
-
-    return (
-        <div>
-            {/* The full UI for guest management would be rendered here, including stats, tables, and modals. */}
-            <p className="text-center p-8 bg-slate-100 rounded-lg">Pełny menedżer listy gości jest dostępny tutaj. Możesz dodawać, edytować i usuwać gości oraz zarządzać grupami.</p>
-        </div>
-    );
-};
 
 
 // --- MAIN COMPONENT ---
@@ -328,10 +291,7 @@ const AdminBookingDetailsPage: React.FC = () => {
                         }>
                              {isPaymentEditing ? (
                                 <form onSubmit={handleSubmitPayment(onSavePayment)} className="space-y-4">
-                                   <div>
-                                        <label htmlFor="amount_paid" className="block text-sm font-medium text-slate-700">Wpłacona kwota</label>
-                                        <InputField id="amount_paid" type="number" step="0.01" register={registerPayment('amount_paid')} />
-                                    </div>
+                                   <InputField id="amount_paid" label="Wpłacona kwota" type="number" step="0.01" register={registerPayment('amount_paid')} />
                                     <div>
                                         <label htmlFor="payment_status" className="block text-sm font-medium text-slate-700">Status płatności</label>
                                         <select id="payment_status" {...registerPayment('payment_status')} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm">
