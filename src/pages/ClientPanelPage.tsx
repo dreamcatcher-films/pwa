@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon } from './Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
