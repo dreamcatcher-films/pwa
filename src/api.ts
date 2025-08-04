@@ -388,3 +388,30 @@ export const deleteInboxMessage = (id: number) => apiFetchNoJson(`/api/admin/inb
 // Admin Notifications
 export const getNotifications = () => apiFetch('/api/admin/notifications', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 export const getNotificationCount = () => apiFetch('/api/admin/notifications/count', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+
+// Admin Guest Management
+export const getAdminGuests = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/guests`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const addAdminGuest = ({ bookingId, data }: { bookingId: string, data: any }) => apiFetch(`/api/admin/bookings/${bookingId}/guests`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+});
+export const updateAdminGuest = ({ bookingId, guestId, data }: { bookingId: string, guestId: number, data: any }) => apiFetch(`/api/admin/bookings/${bookingId}/guests/${guestId}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+});
+export const deleteAdminGuest = ({ bookingId, guestId }: { bookingId: string, guestId: number }) => apiFetchNoJson(`/api/admin/bookings/${bookingId}/guests/${guestId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getAdminToken()}` },
+});
+export const getAdminGuestGroups = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/guest-groups`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const addAdminGuestGroup = ({ bookingId, name }: { bookingId: string, name: string }) => apiFetch(`/api/admin/bookings/${bookingId}/guest-groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` },
+    body: JSON.stringify({ name }),
+});
+export const deleteAdminGuestGroup = ({ bookingId, groupId }: { bookingId: string, groupId: number }) => apiFetchNoJson(`/api/admin/bookings/${bookingId}/guest-groups/${groupId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getAdminToken()}` },
+});
