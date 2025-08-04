@@ -269,6 +269,12 @@ export const IdentificationIcon: React.FC<{className?: string}> = ({ className =
     </svg>
 );
 
+export const InformationCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+    </svg>
+);
+
 export const InstagramIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className={className}>
         <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.85s-.011 3.584-.069 4.85c-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.85-.07c-3.252-.148-4.771-1.691-4.919-4.919-.058-1.265-.069-1.645-.069-4.85s.011-3.584.069-4.85c.149-3.225 1.664-4.771 4.919-4.919C8.416 2.175 8.796 2.163 12 2.163zm0 1.441c-3.18 0-3.55.01-4.784.068-2.693.123-3.997 1.428-4.12 4.12C3.028 8.84 3.018 9.22 3.018 12s.01 3.16.068 4.784c.123 2.692 1.427 3.996 4.12 4.119 1.233.058 1.604.068 4.784.068s3.55-.01 4.784-.068c2.693-.123 3.997-1.427 4.12-4.119.058-1.624.068-2.004.068-4.784s-.01-3.16-.068-4.784c-.123-2.692-1.427-3.996-4.12-4.12C15.55 3.613 15.18 3.604 12 3.604z"></path>
