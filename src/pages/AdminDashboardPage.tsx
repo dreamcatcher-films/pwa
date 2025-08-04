@@ -1,15 +1,15 @@
 
 
-import React, { useEffect, FC, ReactNode, useState } from 'react';
+import React, { useEffect, FC, ReactElement, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon, UserGroupIcon, QuestionMarkCircleIcon } from '../components/Icons.tsx';
+import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon, UserGroupIcon, QuestionMarkCircleIcon, Squares2X2Icon } from '../components/Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 // --- TYPES ---
 interface NavItem {
     path: string;
     label: string;
-    icon: ReactNode;
+    icon: ReactElement;
     subtitle: string;
 }
 
@@ -74,7 +74,7 @@ const SidebarNavItem: FC<{ item: NavItem, onClick: () => void }> = ({ item, onCl
 const AdminDashboardPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
     const { isAdmin, logout } = useAuth();
     
     useEffect(() => {
@@ -97,22 +97,8 @@ const AdminDashboardPage: React.FC = () => {
 
     return (
         <div className="flex" style={{ minHeight: 'calc(100vh - 64px)' }}>
-            {/* Overlay for mobile */}
-            {isSidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-21 md:hidden"
-                    onClick={() => setIsSidebarOpen(false)}
-                ></div>
-            )}
-
             {/* Sidebar */}
-            <aside className={`fixed inset-y-0 left-0 z-5 w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="p-4 flex justify-between items-center md:hidden border-b border-slate-200">
-                    <h2 className="font-bold text-lg text-slate-800">Menu</h2>
-                    <button onClick={() => setIsSidebarOpen(false)} className="p-2">
-                        <XMarkIcon className="w-6 h-6"/>
-                    </button>
-                </div>
+            <aside className="fixed inset-y-0 left-0 z-10 w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col transform -translate-x-full transition-transform duration-300 ease-in-out md:static md:translate-x-0">
                 <nav className="p-4 flex-grow">
                     {navConfig.map(group => (
                         <div key={group.title} className="mb-6">
@@ -122,7 +108,7 @@ const AdminDashboardPage: React.FC = () => {
                                     <SidebarNavItem 
                                         key={item.path}
                                         item={item}
-                                        onClick={() => setIsSidebarOpen(false)}
+                                        onClick={() => {}}
                                     />
                                 ))}
                             </ul>
@@ -135,14 +121,9 @@ const AdminDashboardPage: React.FC = () => {
             <main className="flex-1 bg-slate-50 overflow-y-auto">
                  <div className="p-6 sm:p-8 lg:p-10">
                     <header className="flex flex-col sm:flex-row justify-between items-start mb-8">
-                        <div className="flex items-center gap-4">
-                             <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-md md:hidden">
-                                <MenuIcon className="w-6 h-6" />
-                            </button>
-                            <div>
-                                <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
-                                <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
-                            </div>
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-slate-900">{currentNavItem?.label || 'Panel Administratora'}</h1>
+                            <p className="mt-1 text-slate-600">{currentNavItem?.subtitle || 'Zarządzaj rezerwacjami, klientami i ustawieniami aplikacji.'}</p>
                         </div>
                         <button 
                             onClick={handleLogout}
@@ -154,6 +135,45 @@ const AdminDashboardPage: React.FC = () => {
                     <Outlet />
                 </div>
             </main>
+
+            {/* Mobile FAB Menu */}
+            <div className="md:hidden fixed bottom-6 right-6 z-40">
+                <button
+                    onClick={() => setIsMobileNavOpen(true)}
+                    className="bg-brand-dark-green text-white rounded-full p-4 shadow-lg hover:bg-opacity-90 transition-transform hover:scale-110"
+                    aria-label="Otwórz menu nawigacji"
+                >
+                    <Squares2X2Icon className="w-8 h-8"/>
+                </button>
+            </div>
+
+            {/* Mobile Menu Panel */}
+            {isMobileNavOpen && (
+                <div className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex flex-col justify-end" onClick={() => setIsMobileNavOpen(false)}>
+                    <div className="bg-white rounded-t-2xl shadow-2xl p-4 animate-slide-in-bottom max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4"></div>
+                        {navConfig.map(group => (
+                            <div key={group.title} className="mb-4">
+                                <h3 className="px-3 mb-2 text-xs font-bold uppercase text-slate-400 tracking-wider">{group.title}</h3>
+                                <nav className="space-y-1">
+                                    {group.items.map(item => (
+                                        <NavLink
+                                            key={item.path}
+                                            to={item.path}
+                                            onClick={() => setIsMobileNavOpen(false)}
+                                            end={item.path === 'rezerwacje' ? false : true}
+                                            className={({ isActive }) => `w-full flex items-center gap-3 p-3 rounded-lg text-left font-semibold ${isActive ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700 hover:bg-slate-100'}`}
+                                        >
+                                            {React.cloneElement(item.icon, { className: "w-6 h-6" })}
+                                            <span>{item.label}</span>
+                                        </NavLink>
+                                    ))}
+                                </nav>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
