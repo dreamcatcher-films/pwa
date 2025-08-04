@@ -1,5 +1,6 @@
 
 
+
 // --- HELPER FUNCTIONS ---
 
 const getAdminToken = () => localStorage.getItem('adminAuthToken');
@@ -457,3 +458,8 @@ export const addQuestion = ({ templateId, data }: { templateId: number, data: an
 export const updateQuestion = ({ questionId, data }: { questionId: number, data: any }) => apiFetch(`/api/admin/questions/${questionId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
 export const deleteQuestion = (questionId: number) => apiFetchNoJson(`/api/admin/questions/${questionId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 export const getAdminBookingQuestionnaire = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/questionnaire`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+export const assignQuestionnaireToBooking = ({ bookingId, templateId }: { bookingId: string, templateId: number }) => apiFetch(`/api/admin/bookings/${bookingId}/questionnaire`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` },
+    body: JSON.stringify({ template_id: templateId }),
+});
