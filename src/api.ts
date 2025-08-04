@@ -1,4 +1,5 @@
 
+
 // --- HELPER FUNCTIONS ---
 
 const getAdminToken = () => localStorage.getItem('adminAuthToken');
@@ -120,6 +121,23 @@ export const sendGuestInvites = () => apiFetch('/api/my-booking/guests/send-invi
     headers: { 'Authorization': `Bearer ${getClientToken()}` },
 });
 
+// Guests
+export const getGuests = () => apiFetch('/api/my-booking/guests', { headers: { 'Authorization': `Bearer ${getClientToken()}` } });
+export const addGuest = (data: any) => apiFetch('/api/my-booking/guests', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getClientToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+});
+export const updateGuest = (data: any) => apiFetch(`/api/my-booking/guests/${data.id}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${getClientToken()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+});
+export const deleteGuest = (id: number) => apiFetchNoJson(`/api/my-booking/guests/${id}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getClientToken()}` },
+});
+
 export const getClientPanelData = async () => {
     const [bookingData, stages, messages, unreadCount] = await Promise.all([
         getMyBooking(),
@@ -129,6 +147,28 @@ export const getClientPanelData = async () => {
     ]);
     const { settings, ...booking } = bookingData;
     return { booking, stages, messages, unreadCount, settings };
+};
+
+// Guest Groups
+export const getGuestGroups = () => apiFetch('/api/my-booking/guest-groups', { headers: { 'Authorization': `Bearer ${getClientToken()}` } });
+export const addGuestGroup = (name: string) => apiFetch('/api/my-booking/guest-groups', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getClientToken()}` }, body: JSON.stringify({ name }) });
+export const deleteGuestGroup = (id: number) => apiFetchNoJson(`/api/my-booking/guest-groups/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getClientToken()}` } });
+
+// Invite Settings
+export const getInviteSettings = () => apiFetch('/api/my-booking/invite-settings', { headers: { 'Authorization': `Bearer ${getClientToken()}` } });
+export const updateInviteSettings = (data: { invite_message: string; invite_image_url: string }) => apiFetch('/api/my-booking/invite-settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getClientToken()}` },
+    body: JSON.stringify(data),
+});
+export const uploadInviteImage = async (file: File) => {
+    const response = await fetch('/api/my-booking/invite-settings/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getClientToken()}`, 'x-vercel-filename': file.name, 'Content-Type': file.type },
+        body: file,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
 };
 
 // --- ADMIN-AUTHENTICATED API ---
