@@ -1,9 +1,14 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, PlusCircleIcon, PencilSquareIcon, TrashIcon, XMarkIcon, CheckCircleIcon, EnvelopeIcon, PhotoIcon, InformationCircleIcon } from '../Icons.tsx';
-import { getGuestGroups, addGuestGroup, deleteGuestGroup, getInviteSettings, updateInviteSettings, uploadInviteImage } from '../../api.ts';
+import { EngagementRingSpinner, PlusCircleIcon, PencilSquareIcon, TrashIcon, XMarkIcon, CheckCircleIcon, EnvelopeIcon, InformationCircleIcon } from '../Icons.tsx';
+import {
+    getGuests, addGuest, updateGuest, deleteGuest, sendGuestInvites,
+    getGuestGroups, addGuestGroup, deleteGuestGroup,
+    getInviteSettings, updateInviteSettings, uploadInviteImage
+} from '../../api.ts';
 
 // --- TYPES ---
 interface CompanionStatus {
@@ -36,52 +41,6 @@ type GuestFormValues = {
     allowed_companions: number;
     rsvp_status: Guest['rsvp_status'];
 };
-
-// --- API ---
-const getClientToken = () => localStorage.getItem('authToken');
-
-const fetchGuests = async (): Promise<Guest[]> => {
-    const res = await fetch('/api/my-booking/guests', { headers: { 'Authorization': `Bearer ${getClientToken()}` } });
-    if (!res.ok) throw new Error('Nie udało się pobrać listy gości.');
-    return res.json();
-};
-const addGuest = async (data: Omit<GuestFormValues, 'rsvp_status' | 'group_id'> & { group_id: number | null }): Promise<Guest> => {
-    const res = await fetch('/api/my-booking/guests', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getClientToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Nie udało się dodać gościa.');
-    return res.json();
-};
-const updateGuest = async ({ id, ...data }: Partial<Guest>): Promise<Guest> => {
-    const res = await fetch(`/api/my-booking/guests/${id}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${getClientToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, group_id: data.group_id || null }),
-    });
-    if (!res.ok) throw new Error('Nie udało się zaktualizować gościa.');
-    return res.json();
-};
-const deleteGuest = async (id: number): Promise<void> => {
-    const res = await fetch(`/api/my-booking/guests/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${getClientToken()}` },
-    });
-    if (!res.ok) throw new Error('Nie udało się usunąć gościa.');
-};
-const sendGuestInvites = async (): Promise<{ message: string }> => {
-    const res = await fetch('/api/my-booking/guests/send-invites', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getClientToken()}` },
-    });
-    if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Nie udało się wysłać zaproszeń.');
-    }
-    return res.json();
-};
-
 
 // --- COMPONENTS ---
 
@@ -227,7 +186,7 @@ const GuestManager: React.FC = () => {
     const queryClient = useQueryClient();
 
     // Queries
-    const { data: guests, isLoading: isLoadingGuests, error: errorGuests } = useQuery<Guest[], Error>({ queryKey: ['guests'], queryFn: fetchGuests });
+    const { data: guests, isLoading: isLoadingGuests, error: errorGuests } = useQuery<Guest[], Error>({ queryKey: ['guests'], queryFn: getGuests });
     const { data: groups, isLoading: isLoadingGroups } = useQuery<GuestGroup[], Error>({ queryKey: ['guestGroups'], queryFn: getGuestGroups });
     const { data: inviteSettings } = useQuery<InviteSettings, Error>({ queryKey: ['inviteSettings'], queryFn: getInviteSettings });
 
