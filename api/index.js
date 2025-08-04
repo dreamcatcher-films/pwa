@@ -1279,6 +1279,51 @@ app.delete('/api/admin/bookings/:bookingId/guest-groups/:id', authenticateAdmin,
         res.status(204).send();
     } catch (error) { res.status(500).json({ message: 'Błąd usuwania grupy.' }); }
 });
+app.post('/api/admin/bookings/:bookingId/guests/send-invites', authenticateAdmin, async (req, res) => {
+    const { bookingId } = req.params;
+    const client = await getPool().connect();
+    try {
+        const bookingRes = await client.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
+        if (bookingRes.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
+        const booking = bookingRes.rows[0];
+
+        const guestsRes = await client.query("SELECT * FROM guests WHERE booking_id = $1 AND rsvp_status = 'pending' AND email IS NOT NULL AND email <> ''", [bookingId]);
+        const guests_to_invite = guestsRes.rows;
+
+        if (guests_to_invite.length === 0) return res.status(400).json({ message: 'Brak gości do zaproszenia (wszyscy już odpowiedzieli lub nie mają podanego adresu e-mail).' });
+
+        const { senderName, fromEmail } = await getSenderDetails(client);
+        
+        const customImageHtml = booking.invite_image_url ? `<img src="${booking.invite_image_url}" alt="Zaproszenie" style="width:100%;max-width:600px;height:auto;margin-bottom:20px;">` : '';
+        const customMessageHtml = booking.invite_message ? `<p>${booking.invite_message.replace(/\n/g, '<br>')}</p>` : '';
+
+        const emails = guests_to_invite.map(guest => ({
+            from: `${booking.bride_name} i ${booking.groom_name} <${fromEmail}>`,
+            to: guest.email,
+            subject: `Zaproszenie na ślub ${booking.bride_name} i ${booking.groom_name}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                    ${customImageHtml}
+                    <h1>Cześć ${guest.name}!</h1>
+                    ${customMessageHtml}
+                    <p>Zapraszamy Cię serdecznie na nasz ślub. Prosimy o potwierdzenie przybycia, klikając w poniższy link:</p>
+                    <a href="https://${req.headers.host}/rsvp/${guest.rsvp_token}" style="display:inline-block;padding:10px 20px;background-color:#4F46E5;color:white;text-decoration:none;border-radius:5px;">Potwierdź przybycie</a>
+                    <p>Pozdrawiamy,<br>${booking.bride_name} i ${booking.groom_name}</p>
+                </div>
+            `,
+            reply_to: booking.email,
+        }));
+
+        await resend.batch.send(emails);
+
+        res.json({ message: `Pomyślnie wysłano zaproszenia do ${guests_to_invite.length} gości.` });
+    } catch (error) {
+        console.error("Error sending guest invites by admin:", error);
+        res.status(500).json({ message: error instanceof Error ? error.message : 'Wystąpił nieznany błąd podczas wysyłania zaproszeń.' });
+    } finally {
+        client.release();
+    }
+});
 
 
 // Admin Access Keys
