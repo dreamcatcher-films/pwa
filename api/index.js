@@ -1,5 +1,4 @@
 
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -54,7 +53,7 @@ const runDbSetup = async (shouldDrop = false) => {
 
         if (shouldDrop) {
             console.log("Dropping all tables...");
-             const tables = ['guest_groups', 'guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             const tables = ['answers', 'questionnaire_responses', 'questions', 'questionnaire_templates', 'guest_groups', 'guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
              for (const table of tables) {
                 await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
              }
@@ -77,7 +76,7 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS homepage_slides (id SERIAL PRIMARY KEY, image_url TEXT NOT NULL, title VARCHAR(255), subtitle VARCHAR(255), button_text VARCHAR(255), button_link VARCHAR(255), sort_order INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS homepage_testimonials (id SERIAL PRIMARY KEY, author VARCHAR(255) NOT NULL, content TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS homepage_instagram (id SERIAL PRIMARY KEY, post_url TEXT NOT NULL, image_url TEXT NOT NULL, caption TEXT, sort_order INTEGER DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, invite_message TEXT, invite_image_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, invite_message TEXT, invite_image_url TEXT, contract_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS booking_stages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, stage_id INTEGER REFERENCES production_stages(id), status VARCHAR(50) DEFAULT 'pending', completed_at TIMESTAMP WITH TIME ZONE);
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS films (id SERIAL PRIMARY KEY, youtube_url TEXT NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, thumbnail_url TEXT, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -95,6 +94,10 @@ const runDbSetup = async (shouldDrop = false) => {
                 companion_status JSONB,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS questionnaire_templates (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, is_default BOOLEAN DEFAULT FALSE);
+            CREATE TABLE IF NOT EXISTS questions (id SERIAL PRIMARY KEY, template_id INTEGER REFERENCES questionnaire_templates(id) ON DELETE CASCADE, text TEXT NOT NULL, type VARCHAR(50) NOT NULL, sort_order INTEGER DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS questionnaire_responses (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, template_id INTEGER REFERENCES questionnaire_templates(id) ON DELETE CASCADE, status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS answers (id SERIAL PRIMARY KEY, response_id INTEGER REFERENCES questionnaire_responses(id) ON DELETE CASCADE, question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE, answer_text TEXT, UNIQUE(response_id, question_id));
         `);
         
         // --- Schema Migrations ---
@@ -105,6 +108,7 @@ const runDbSetup = async (shouldDrop = false) => {
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invite_image_url TEXT;');
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS allowed_companions INTEGER DEFAULT 0 NOT NULL;');
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS companion_status JSONB;');
+        await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS contract_url TEXT;');
         console.log('Schema checks complete.');
 
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
@@ -365,6 +369,19 @@ app.post('/api/bookings', async (req, res) => {
         for (const groupName of defaultGroups) {
             await client.query('INSERT INTO guest_groups (booking_id, name) VALUES ($1, $2)', [bookingId, groupName]);
         }
+        
+        // Assign default questionnaire
+        const defaultTemplateRes = await client.query('SELECT id FROM questionnaire_templates WHERE is_default = TRUE LIMIT 1');
+        if (defaultTemplateRes.rowCount > 0) {
+            await client.query('INSERT INTO questionnaire_responses (booking_id, template_id, status) VALUES ($1, $2, $3)', [bookingId, defaultTemplateRes.rows[0].id, 'pending']);
+        }
+        
+        // Assign first production stage
+        const firstStageRes = await client.query("SELECT id FROM production_stages WHERE name ILIKE '%ankiet%' LIMIT 1");
+        if(firstStageRes.rowCount > 0) {
+            await client.query('INSERT INTO booking_stages (booking_id, stage_id, status) VALUES ($1, $2, $3)', [bookingId, firstStageRes.rows[0].id, 'in_progress']);
+        }
+
 
         if (discountCode) {
             await client.query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [discountCode]);
@@ -550,18 +567,47 @@ app.post('/api/admin/packages/upload-image', rawBodyParser, createUploadHandler(
 app.post('/api/admin/homepage/instagram/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
 app.post('/api/admin/films-settings/upload-hero', rawBodyParser, createUploadHandler(authenticateAdmin));
 app.post('/api/admin/messages/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
+app.post('/api/admin/bookings/:bookingId/contract/upload', rawBodyParser, createUploadHandler(authenticateAdmin));
 
 
 // --- CLIENT-PROTECTED ROUTES ---
 
 app.get('/api/my-booking', authenticateClient, async (req, res) => {
+    const client = await getPool().connect();
     try {
-        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.user.userId]);
-        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
-        res.json(result.rows[0]);
+        const bookingRes = await client.query('SELECT * FROM bookings WHERE id = $1', [req.user.userId]);
+        if (bookingRes.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
+        
+        const booking = bookingRes.rows[0];
+
+        // Fetch questionnaire data
+        const responseRes = await client.query('SELECT * FROM questionnaire_responses WHERE booking_id = $1', [req.user.userId]);
+        let questionnaireData = null;
+
+        if (responseRes.rowCount > 0) {
+            const response = responseRes.rows[0];
+            const templateRes = await client.query('SELECT * FROM questionnaire_templates WHERE id = $1', [response.template_id]);
+            const questionsRes = await client.query('SELECT * FROM questions WHERE template_id = $1 ORDER BY sort_order', [response.template_id]);
+            const answersRes = await client.query('SELECT * FROM answers WHERE response_id = $1', [response.id]);
+            
+            questionnaireData = {
+                response_id: response.id,
+                status: response.status,
+                template: templateRes.rows[0],
+                questions: questionsRes.rows,
+                answers: answersRes.rows.reduce((acc, ans) => {
+                    acc[ans.question_id] = ans.answer_text;
+                    return acc;
+                }, {})
+            };
+        }
+        
+        res.json({ booking, questionnaire: questionnaireData });
     } catch (error) {
-        console.error('Error fetching booking for client:', error);
+        console.error('Error fetching comprehensive booking data for client:', error);
         res.status(500).json({ message: 'Błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -803,6 +849,64 @@ app.patch('/api/my-booking/invite-settings', authenticateClient, async (req, res
         res.status(500).json({ message: 'Błąd zapisu ustawień.' });
     }
 });
+
+// Questionnaire
+app.patch('/api/my-booking/questionnaire/answers', authenticateClient, async(req, res) => {
+    const { response_id, answers } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (const question_id in answers) {
+            const answer_text = answers[question_id];
+            await client.query(`
+                INSERT INTO answers (response_id, question_id, answer_text) VALUES ($1, $2, $3)
+                ON CONFLICT (response_id, question_id) DO UPDATE SET answer_text = $3
+            `, [response_id, question_id, answer_text]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Zapisano odpowiedzi.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error saving answers:', error);
+        res.status(500).json({ message: 'Błąd zapisu odpowiedzi.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/my-booking/questionnaire/submit', authenticateClient, async (req, res) => {
+    const { response_id } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE questionnaire_responses SET status = $1 WHERE id = $2 AND booking_id = $3', ['submitted', response_id, req.user.userId]);
+
+        const adminRes = await client.query('SELECT notification_email FROM admins LIMIT 1');
+        const bookingRes = await client.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [req.user.userId]);
+        const notificationEmail = adminRes.rows[0]?.notification_email;
+        const { bride_name, groom_name } = bookingRes.rows[0];
+
+        if (notificationEmail) {
+            const { senderName, fromEmail } = await getSenderDetails(client);
+            await resend.emails.send({
+                from: `${senderName} <${fromEmail}>`,
+                to: notificationEmail,
+                subject: `Para ${bride_name} i ${groom_name} wypełniła ankietę!`,
+                html: `<h1>Ankieta została wypełniona</h1><p>Para ${bride_name} i ${groom_name} zatwierdziła swoje odpowiedzi w ankiecie. Możesz je teraz przejrzeć w panelu administratora.</p>`
+            });
+        }
+        
+        await client.query('COMMIT');
+        res.json({ message: 'Ankieta została pomyślnie wysłana.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error submitting questionnaire:', error);
+        res.status(500).json({ message: 'Błąd wysyłania ankiety.' });
+    } finally {
+        client.release();
+    }
+});
+
 
 // --- ADMIN-PROTECTED ROUTES ---
 // Database Management
@@ -1113,6 +1217,17 @@ app.post('/api/admin/bookings/:id/resend-credentials', authenticateAdmin, async 
         res.status(500).json({ message: 'Błąd wysyłania e-maila.' });
     } finally {
         client.release();
+    }
+});
+
+app.patch('/api/admin/bookings/:bookingId/contract', authenticateAdmin, async(req, res) => {
+    const { contract_url } = req.body;
+    try {
+        await getPool().query('UPDATE bookings SET contract_url = $1 WHERE id = $2', [contract_url, req.params.bookingId]);
+        res.json({ message: 'Umowa została zapisana.', contract_url });
+    } catch (error) {
+        console.error('Error saving contract URL:', error);
+        res.status(500).json({ message: 'Błąd zapisu umowy.' });
     }
 });
 
@@ -1635,10 +1750,35 @@ app.get('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, r
 });
 app.post('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
     const { stage_id } = req.body;
+    const client = await getPool().connect();
     try {
-        await getPool().query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2)', [req.params.bookingId, stage_id]);
+        await client.query('BEGIN');
+        await client.query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2)', [req.params.bookingId, stage_id]);
+
+        const bookingRes = await client.query('SELECT email, bride_name, groom_name FROM bookings WHERE id = $1', [req.params.bookingId]);
+        const stageRes = await client.query('SELECT name FROM production_stages WHERE id = $1', [stage_id]);
+
+        if (bookingRes.rowCount > 0 && stageRes.rowCount > 0) {
+            const { email, bride_name, groom_name } = bookingRes.rows[0];
+            const { name: stage_name } = stageRes.rows[0];
+            const { senderName, fromEmail } = await getSenderDetails(client);
+            
+            await resend.emails.send({
+                from: `${senderName} <${fromEmail}>`,
+                to: email,
+                subject: `Aktualizacja Twojego projektu: Nowy etap`,
+                html: `<p>Cześć ${bride_name} i ${groom_name},</p><p>W Waszym projekcie pojawił się nowy etap: <strong>${stage_name}</strong>. Zalogujcie się do panelu klienta, aby zobaczyć szczegóły.</p><a href="https://${req.headers.host}/logowanie">Przejdź do panelu klienta</a>`
+            });
+        }
+        await client.query('COMMIT');
         res.status(201).send();
-    } catch (err) { res.status(500).json({ message: 'Błąd dodawania etapu.' }); }
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("Error adding stage to booking:", err);
+        res.status(500).json({ message: 'Błąd dodawania etapu.' });
+    } finally {
+        client.release();
+    }
 });
 app.patch('/api/admin/booking-stages/:id', authenticateAdmin, async (req, res) => {
     const { status } = req.body;
@@ -1823,6 +1963,106 @@ app.post('/api/admin/homepage/instagram/order', authenticateAdmin, async (req, r
         res.status(500).json({ message: 'Błąd zmiany kolejności.' });
     } finally {
         client.release();
+    }
+});
+
+// Admin Questionnaire Management
+app.get('/api/admin/questionnaires', authenticateAdmin, async (req, res) => {
+    try {
+        const templates = await getPool().query('SELECT * FROM questionnaire_templates');
+        const questions = await getPool().query('SELECT * FROM questions ORDER BY sort_order');
+        const templatesWithQuestions = templates.rows.map(t => ({
+            ...t,
+            questions: questions.rows.filter(q => q.template_id === t.id)
+        }));
+        res.json(templatesWithQuestions);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania ankiet.' }); }
+});
+app.post('/api/admin/questionnaires', authenticateAdmin, async (req, res) => {
+    const { title, is_default } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        if (is_default) {
+            await client.query('UPDATE questionnaire_templates SET is_default = FALSE');
+        }
+        const result = await client.query('INSERT INTO questionnaire_templates (title, is_default) VALUES ($1, $2) RETURNING *', [title, is_default]);
+        await client.query('COMMIT');
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd tworzenia ankiety.' });
+    } finally {
+        client.release();
+    }
+});
+app.patch('/api/admin/questionnaires/:id', authenticateAdmin, async (req, res) => {
+    const { title, is_default } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        if (is_default) {
+            await client.query('UPDATE questionnaire_templates SET is_default = FALSE');
+        }
+        const result = await client.query('UPDATE questionnaire_templates SET title=$1, is_default=$2 WHERE id=$3 RETURNING *', [title, is_default, req.params.id]);
+        await client.query('COMMIT');
+        res.json(result.rows[0]);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd aktualizacji ankiety.' });
+    } finally {
+        client.release();
+    }
+});
+app.delete('/api/admin/questionnaires/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM questionnaire_templates WHERE id=$1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania ankiety.' }); }
+});
+app.post('/api/admin/questionnaires/:id/questions', authenticateAdmin, async (req, res) => {
+    const { text, type, sort_order } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO questions (template_id, text, type, sort_order) VALUES ($1, $2, $3, $4) RETURNING *', [req.params.id, text, type, sort_order]);
+        res.status(201).json(result.rows[0]);
+    } catch(err) { res.status(500).json({ message: 'Błąd dodawania pytania.' }); }
+});
+app.patch('/api/admin/questions/:questionId', authenticateAdmin, async (req, res) => {
+    const { text, type, sort_order } = req.body;
+    try {
+        const result = await getPool().query('UPDATE questions SET text=$1, type=$2, sort_order=$3 WHERE id=$4 RETURNING *', [text, type, sort_order, req.params.questionId]);
+        res.json(result.rows[0]);
+    } catch(err) { res.status(500).json({ message: 'Błąd aktualizacji pytania.' }); }
+});
+app.delete('/api/admin/questions/:questionId', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM questions WHERE id=$1', [req.params.questionId]);
+        res.status(204).send();
+    } catch(err) { res.status(500).json({ message: 'Błąd usuwania pytania.' }); }
+});
+app.get('/api/admin/bookings/:bookingId/questionnaire', authenticateAdmin, async (req, res) => {
+    try {
+        const responseRes = await getPool().query('SELECT * FROM questionnaire_responses WHERE booking_id = $1', [req.params.bookingId]);
+        if(responseRes.rowCount === 0) return res.status(404).json({ message: 'Brak ankiety dla tej rezerwacji.' });
+        
+        const response = responseRes.rows[0];
+        const templateRes = await getPool().query('SELECT * FROM questionnaire_templates WHERE id = $1', [response.template_id]);
+        const questionsRes = await getPool().query('SELECT * FROM questions WHERE template_id = $1 ORDER BY sort_order', [response.template_id]);
+        const answersRes = await getPool().query('SELECT * FROM answers WHERE response_id = $1', [response.id]);
+
+        const answersMap = answersRes.rows.reduce((acc, ans) => {
+            acc[ans.question_id] = ans.answer_text;
+            return acc;
+        }, {});
+        
+        res.json({
+            response,
+            template: templateRes.rows[0],
+            questions: questionsRes.rows,
+            answers: answersMap,
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Błąd pobierania odpowiedzi.' });
     }
 });
 
