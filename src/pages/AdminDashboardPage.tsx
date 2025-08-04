@@ -1,7 +1,8 @@
 
+
 import React, { useEffect, FC, ReactNode, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon } from '../components/Icons.tsx';
+import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon, UserGroupIcon } from '../components/Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 // --- TYPES ---
@@ -24,6 +25,7 @@ const navConfig: NavGroup[] = [
         items: [
             { path: 'inbox', label: 'Skrzynka odbiorcza', icon: <EnvelopeIcon className="w-5 h-5" />, subtitle: 'Zarządzaj zapytaniami z formularza kontaktowego.' },
             { path: 'rezerwacje', label: 'Rezerwacje', icon: <InboxStackIcon className="w-5 h-5" />, subtitle: 'Przeglądaj i zarządzaj wszystkimi rezerwacjami.' },
+            { path: 'goscie', label: 'Listy Gości', icon: <UserGroupIcon className="w-5 h-5" />, subtitle: 'Zarządzaj listami gości dla każdej pary.' },
             { path: 'klucze-dostepu', label: 'Klucze Dostępu', icon: <KeyIcon className="w-5 h-5" />, subtitle: 'Generuj klucze dostępu dla nowych klientów.' },
         ]
     },
