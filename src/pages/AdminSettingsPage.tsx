@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { LoadingSpinner, CheckCircleIcon, CircleStackIcon, EnvelopeIcon, IdentificationIcon, UserCircleIcon, LockClosedIcon, TrashIcon, FilmIcon } from '../components/Icons.tsx';
 
@@ -14,6 +15,10 @@ const AdminSettingsPage: React.FC = () => {
     const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [emailMessage, setEmailMessage] = useState('');
     
+    const [senderSettings, setSenderSettings] = useState({ senderName: '', fromEmail: '' });
+    const [senderStatus, setSenderStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [senderMessage, setSenderMessage] = useState('');
+
     const [contactSettings, setContactSettings] = useState({
         contact_email: '',
         contact_phone: '',
@@ -47,6 +52,10 @@ const AdminSettingsPage: React.FC = () => {
                 const adminData = await adminRes.json();
                 setNotificationEmail(adminData.notificationEmail || '');
                 setCredentials(prev => ({ ...prev, loginEmail: adminData.loginEmail || '' }));
+                setSenderSettings({
+                    senderName: adminData.senderName || '',
+                    fromEmail: adminData.fromEmail || ''
+                });
 
 
                 if (!contactRes.ok) throw new Error('Nie udało się pobrać ustawień kontaktowych.');
@@ -126,7 +135,7 @@ const AdminSettingsPage: React.FC = () => {
             const response = await fetch('/api/admin/settings', {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: notificationEmail }),
+                body: JSON.stringify({ notificationEmail }),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać adresu e-mail.');
@@ -140,6 +149,31 @@ const AdminSettingsPage: React.FC = () => {
         }
     };
     
+    const handleSenderSettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSenderSettings(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
+
+    const handleSaveSenderSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSenderStatus('loading');
+        setSenderMessage('');
+        try {
+            const response = await fetch('/api/admin/settings', {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(senderSettings),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Nie udało się zapisać ustawień.');
+            setSenderStatus('success');
+            setSenderMessage('Ustawienia zostały zaktualizowane.');
+            setTimeout(() => setSenderStatus('idle'), 3000);
+        } catch (err) {
+            setSenderStatus('error');
+            setSenderMessage(err instanceof Error ? err.message : 'Błąd zapisu.');
+        }
+    };
+
     const handleContactSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setContactSettings(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
@@ -249,6 +283,34 @@ const AdminSettingsPage: React.FC = () => {
                      </form>
                 </div>
 
+                <div className="bg-white rounded-2xl shadow p-6">
+                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2"><EnvelopeIcon className="w-5 h-5 text-indigo-600"/> Ustawienia Wysyłki E-maili</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                        Skonfiguruj dane nadawcy dla wszystkich e-maili wysyłanych z aplikacji (np. zaproszenia dla gości).
+                    </p>
+                    <form onSubmit={handleSaveSenderSettings} className="mt-6 space-y-4">
+                        <div>
+                             <label htmlFor="senderName" className="block text-sm font-medium text-slate-700">Nazwa nadawcy</label>
+                             <input type="text" id="senderName" name="senderName" value={senderSettings.senderName} onChange={handleSenderSettingsChange} required className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="np. Dreamcatcher Film"/>
+                        </div>
+                        <div>
+                             <label htmlFor="fromEmail" className="block text-sm font-medium text-slate-700">Adres e-mail nadawcy</label>
+                             <input type="email" id="fromEmail" name="fromEmail" value={senderSettings.fromEmail} onChange={handleSenderSettingsChange} required className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="np. kontakt@twojadomena.pl"/>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between">
+                            <button type="submit" disabled={senderStatus === 'loading'} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition w-28">
+                                {senderStatus === 'loading' ? <LoadingSpinner className="w-5 h-5" /> : 'Zapisz'}
+                            </button>
+                            {senderMessage && (
+                                <div className="text-sm">
+                                    {senderStatus === 'success' && <p className="flex items-center gap-2 text-green-600"><CheckCircleIcon className="w-5 h-5"/> {senderMessage}</p>}
+                                    {senderStatus === 'error' && <p className="text-red-600">{senderMessage}</p>}
+                                </div>
+                            )}
+                        </div>
+                    </form>
+                </div>
+
                  <div className="bg-white rounded-2xl shadow p-6">
                     <h3 className="text-lg font-semibold text-slate-900">Ustawienia Powiadomień</h3>
                     <p className="mt-1 text-sm text-slate-600">
@@ -263,6 +325,7 @@ const AdminSettingsPage: React.FC = () => {
                             <input
                                 type="email"
                                 id="notificationEmail"
+                                name="notificationEmail"
                                 value={notificationEmail}
                                 onChange={(e) => setNotificationEmail(e.target.value)}
                                 required
