@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, PlusCircleIcon, PencilSquareIcon, TrashIcon, XMarkIcon, CheckCircleIcon } from '../Icons.tsx';
+import { EngagementRingSpinner, PlusCircleIcon, PencilSquareIcon, TrashIcon, XMarkIcon, CheckCircleIcon, EnvelopeIcon } from '../Icons.tsx';
 import { InputField } from '../FormControls.tsx';
+import { sendGuestInvites } from '../../api.ts';
 
 // --- TYPES ---
 interface Guest {
@@ -109,9 +110,22 @@ const StatCard: React.FC<{ title: string; value: number, color: string }> = ({ t
 const GuestManager: React.FC = () => {
     const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const queryClient = useQueryClient();
 
     const { data: guests, isLoading, error } = useQuery<Guest[], Error>({ queryKey: ['guests'], queryFn: fetchGuests });
+
+    const sendInvitesMutation = useMutation< { message: string }, Error, void >({
+        mutationFn: sendGuestInvites,
+        onSuccess: (data) => {
+            setFeedbackMessage({ type: 'success', text: data.message });
+            setTimeout(() => setFeedbackMessage(null), 5000);
+        },
+        onError: (error) => {
+            setFeedbackMessage({ type: 'error', text: error.message });
+            setTimeout(() => setFeedbackMessage(null), 5000);
+        }
+    });
 
     const deleteMutation = useMutation({
         mutationFn: deleteGuest,
@@ -147,6 +161,7 @@ const GuestManager: React.FC = () => {
         total: guests.length
     } : { confirmed: 0, declined: 0, pending: 0, total: 0 };
 
+    const hasPendingGuests = guests ? guests.some(g => g.rsvp_status === 'pending') : false;
 
     if (isLoading) return <div className="flex justify-center py-10"><EngagementRingSpinner /></div>;
     if (error) return <p className="text-red-500 text-center">{error.message}</p>;
@@ -162,10 +177,26 @@ const GuestManager: React.FC = () => {
 
             <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-slate-800">Lista Gości</h3>
-                <button onClick={handleAdd} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
-                    <PlusCircleIcon className="w-5 h-5"/> Dodaj Gościa
-                </button>
+                <div className="flex gap-4">
+                    <button 
+                        onClick={() => sendInvitesMutation.mutate()}
+                        disabled={!hasPendingGuests || sendInvitesMutation.isPending}
+                        className="flex items-center gap-2 bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed"
+                    >
+                        {sendInvitesMutation.isPending ? <EngagementRingSpinner className="w-5 h-5"/> : <EnvelopeIcon className="w-5 h-5"/>}
+                        Wyślij zaproszenia
+                    </button>
+                    <button onClick={handleAdd} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                        <PlusCircleIcon className="w-5 h-5"/> Dodaj Gościa
+                    </button>
+                </div>
             </div>
+
+            {feedbackMessage && (
+                <div className={`p-3 rounded-lg text-sm ${feedbackMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {feedbackMessage.text}
+                </div>
+            )}
 
             <div className="bg-white rounded-2xl shadow overflow-hidden">
                 <div className="overflow-x-auto">
