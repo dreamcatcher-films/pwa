@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { EngagementRingSpinner, ChatBubbleBottomCenterTextIcon, InstagramIcon } from '../components/Icons.tsx';
@@ -48,6 +48,31 @@ const HomePage: React.FC = () => {
       queryKey: ['homepageContent'],
       queryFn: getHomepageContent
     });
+    
+    const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+    
+    const aboutTextParts = useMemo(() => {
+        if (!content?.aboutSection?.about_us_text) {
+            return { fullText: '', teaser: '', hasMore: false };
+        }
+        const separator = '<!-- more -->';
+        const fullText = content.aboutSection.about_us_text;
+        const separatorIndex = fullText.indexOf(separator);
+
+        if (separatorIndex !== -1) {
+            return {
+                fullText: fullText.replace(separator, ''),
+                teaser: fullText.substring(0, separatorIndex),
+                hasMore: true,
+            };
+        }
+
+        return {
+            fullText: fullText,
+            teaser: fullText,
+            hasMore: false,
+        };
+    }, [content?.aboutSection?.about_us_text]);
 
     if (isLoading) {
         return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
@@ -98,7 +123,17 @@ const HomePage: React.FC = () => {
                     <div className="order-2 md:order-1">
                         <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{aboutSection.about_us_title}</h2>
                         <div className="mt-4 text-lg text-slate-600 [&_p]:mb-4 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:list-inside [&_ol]:list-decimal [&_ol]:list-inside">
-                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{aboutSection.about_us_text}</ReactMarkdown>
+                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                               {isAboutExpanded ? aboutTextParts.fullText : aboutTextParts.teaser}
+                           </ReactMarkdown>
+                           {aboutTextParts.hasMore && !isAboutExpanded && (
+                                <button
+                                    onClick={() => setIsAboutExpanded(true)}
+                                    className="mt-4 font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                                >
+                                    Czytaj dalej...
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
