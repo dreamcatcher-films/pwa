@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon, CalendarDaysIcon, EnvelopeIcon, PhoneIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -224,6 +224,18 @@ const ClientPanelPage: React.FC = () => {
             {activeTab === 'details' && (
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
                     <main className="lg:col-span-2 space-y-8">
+                        <InfoCard title="Kluczowe Informacje" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                <InfoItem 
+                                    label="Data ślubu" 
+                                    value={new Date(booking.wedding_date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' })} 
+                                />
+                                <div />
+                                <InfoItem label="E-mail kontaktowy" value={booking.email} />
+                                <InfoItem label="Numer telefonu" value={booking.phone_number} />
+                            </div>
+                        </InfoCard>
+
                         <InfoCard title="Etapy Produkcji">
                             <div className="space-y-4">
                                 {stages.map((stage: ProductionStage) => {
@@ -252,8 +264,8 @@ const ClientPanelPage: React.FC = () => {
                         </InfoCard>
                         
                         <InfoCard 
-                            title="Dane Pary Młodej" 
-                            icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}
+                            title="Szczegóły Wydarzenia i Notatki" 
+                            icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500" />}
                             actionButton={
                                 isEditing ? (
                                     <div className="flex items-center gap-2">
