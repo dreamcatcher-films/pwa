@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -287,1383 +288,560 @@ app.post('/api/validate-key', async (req, res) => {
         if (result.rowCount > 0) {
             res.json({ valid: true });
         } else {
-            res.status(404).json({ message: 'Nieprawidłowy klucz dostępu.' });
-        }
-    } catch (error) {
-        console.error('Error validating access key:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
+            res.status(404).json({--- START OF FILE src/pages/AdminPackagesPage.tsx ---
 
-app.post('/api/validate-discount', async (req, res) => {
-    const { code } = req.body;
-    try {
-        const result = await getPool().query('SELECT * FROM discount_codes WHERE code = $1 AND (expires_at IS NULL OR expires_at > NOW()) AND (usage_limit IS NULL OR times_used < usage_limit)', [code]);
-        if (result.rowCount > 0) {
-            res.json(result.rows[0]);
-        } else {
-            res.status(404).json({ message: 'Nieprawidłowy lub nieważny kod rabatowy.' });
-        }
-    } catch (error) {
-        console.error('Error validating discount code:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
+import React, { useState, useEffect, FC } from 'react';
+import { LoadingSpinner, CheckCircleIcon, TrashIcon, PencilSquareIcon, PlusCircleIcon, TagIcon, CircleStackIcon, XMarkIcon } from '../components/Icons.tsx';
+import { formatCurrency } from '../utils.ts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-const generateUniqueFourDigitId = async (client) => {
-    let id;
-    let isUnique = false;
-    while (!isUnique) {
-        id = Math.floor(1000 + Math.random() * 9000).toString();
-        const res = await client.query('SELECT 1 FROM bookings WHERE client_id = $1', [id]);
-        if (res.rowCount === 0) {
-            isUnique = true;
+// --- TYPES ---
+interface Category {
+    id: number;
+    name: string;
+    description: string;
+    icon_name: string;
+}
+
+interface Addon {
+    id: number;
+    name: string;
+    price: number;
+    category_ids?: number[];
+}
+
+interface PackageAddon {
+    id: number;
+}
+
+interface Package {
+    id?: number;
+    name: string;
+    description: string;
+    price: number;
+    category_id: number | null;
+    category_name?: string;
+    is_published: boolean;
+    rich_description: string;
+    rich_description_image_url: string;
+    addons: PackageAddon[];
+}
+
+type AdminTab = 'packages' | 'addons' | 'categories';
+
+const inputClasses = "block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+
+// --- MAIN COMPONENT ---
+const AdminPackagesPage: FC = () => {
+    const [activeTab, setActiveTab] = useState<AdminTab>('packages');
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
+    
+    const [packages, setPackages] = useState<Package[]>([]);
+    const [addons, setAddons] = useState<Addon[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
+
+    const token = localStorage.getItem('adminAuthToken');
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError('');
+        try {
+            const response = await fetch('/api/admin/offer-data', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!response.ok) throw new Error(await response.text() || 'Błąd ładowania danych oferty.');
+            const data = await response.json();
+            setPackages(data.packages);
+            setAddons(data.addons);
+            setCategories(data.categories);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd.');
+        } finally {
+            setIsLoading(false);
         }
-    }
-    return id;
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const renderContent = () => {
+        if (isLoading) return <div className="flex justify-center items-center py-20"><LoadingSpinner className="w-12 h-12 text-indigo-600" /></div>;
+        if (error) return <p className="text-red-500 bg-red-50 p-3 rounded-lg text-center">{error}</p>;
+
+        switch (activeTab) {
+            case 'packages': return <PackagesManager packages={packages} addons={addons} categories={categories} onDataChange={fetchData} token={token} />;
+            case 'addons': return <AddonsManager addons={addons} categories={categories} onDataChange={fetchData} token={token} />;
+            case 'categories': return <CategoriesManager categories={categories} onDataChange={fetchData} token={token} />;
+            default: return null;
+        }
+    };
+    
+    return (
+        <div>
+            <div className="border-b border-slate-200 mb-6">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('packages')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'packages' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>Pakiety</button>
+                    <button onClick={() => setActiveTab('addons')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'addons' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>Dodatki</button>
+                    <button onClick={() => setActiveTab('categories')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'categories' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>Kategorie</button>
+                </nav>
+            </div>
+            {renderContent()}
+        </div>
+    );
 };
 
-app.post('/api/bookings', async (req, res) => {
-    const { accessKey, password, ...bookingData } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        
-        const keyRes = await client.query('SELECT 1 FROM access_keys WHERE key = $1', [accessKey]);
-        if (keyRes.rowCount === 0) {
-            return res.status(403).json({ message: 'Nieprawidłowy klucz dostępu.' });
-        }
-
-        const clientId = await generateUniqueFourDigitId(client);
-        const passwordHash = await bcrypt.hash(password, 10);
-        
-        if (bookingData.discountCode) {
-            await client.query('UPDATE discount_codes SET times_used = times_used + 1 WHERE code = $1', [bookingData.discountCode]);
-        }
-
-        const bookingRes = await client.query(
-            `INSERT INTO bookings (access_key, client_id, password_hash, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-            [accessKey, clientId, passwordHash, bookingData.packageName, bookingData.totalPrice, JSON.stringify(bookingData.selectedItems), bookingData.brideName, bookingData.groomName, bookingData.weddingDate, bookingData.brideAddress, bookingData.groomAddress, bookingData.churchLocation, bookingData.venueLocation, bookingData.schedule, bookingData.email, bookingData.phoneNumber, bookingData.additionalInfo, bookingData.discountCode]
-        );
-
-        const bookingId = bookingRes.rows[0].id;
-        
-        await client.query('DELETE FROM access_keys WHERE key = $1', [accessKey]);
-        
-        await client.query(
-            'INSERT INTO availability (title, start_time, end_time, is_all_day, resource) VALUES ($1, $2, $3, $4, $5)',
-            [`Rezerwacja: ${bookingData.brideName} & ${bookingData.groomName}`, bookingData.weddingDate, bookingData.weddingDate, true, { type: 'booking', bookingId }]
-        );
-
-        await client.query('COMMIT');
-        res.status(201).json({ bookingId, clientId });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Error creating booking:', error);
-        res.status(500).json({ message: 'Błąd tworzenia rezerwacji.' });
-    } finally {
-        client.release();
-    }
-});
-
-
-app.post('/api/contact', async (req, res) => {
-    const { firstName, lastName, email, phone, subject, message } = req.body;
-    try {
-        await getPool().query(
-            'INSERT INTO contact_messages (first_name, last_name, email, phone, subject, message) VALUES ($1, $2, $3, $4, $5, $6)',
-            [firstName, lastName, email, phone, subject, message]
-        );
-
-        const adminSettings = await getPool().query("SELECT value FROM app_settings WHERE key = 'notification_email'");
-        const adminEmail = adminSettings.rows[0]?.value;
-
-        if (adminEmail) {
-            await resend.emails.send({
-                from: 'Dreamcatcher App <no-reply@dreamcatcherfilm.com>',
-                to: adminEmail,
-                subject: `Nowe zapytanie: ${subject}`,
-                html: `<p>Otrzymałeś nową wiadomość od <strong>${firstName} ${lastName}</strong> (${email}).</p><p><strong>Treść:</strong></p><p>${message}</p>`
-            });
-        }
-
-        res.status(201).json({ message: 'Wiadomość wysłana pomyślnie.' });
-    } catch (error) {
-        console.error('Error saving contact message:', error);
-        res.status(500).json({ message: 'Błąd wysyłania wiadomości.' });
-    }
-});
-
-
-// --- AUTH ROUTES ---
-
-app.post('/api/login', async (req, res) => {
-    const { clientId, password } = req.body;
-    try {
-        const result = await getPool().query('SELECT id, password_hash FROM bookings WHERE client_id = $1', [clientId]);
-        if (result.rowCount === 0) {
-            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
-        }
-        const user = result.rows[0];
-        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
-        }
-        const token = jwt.sign({ bookingId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        res.json({ token });
-    } catch (error) {
-        console.error('Client login error:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.post('/api/admin/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const result = await getPool().query('SELECT id, password_hash FROM admins WHERE email = $1', [email]);
-        if (result.rowCount === 0) {
-            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        }
-        const admin = result.rows[0];
-        const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Nieprawidłowy e-mail lub hasło.' });
-        }
-        const token = jwt.sign({ adminId: admin.id }, process.env.ADMIN_JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token });
-    } catch (error) {
-        console.error('Admin login error:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-// --- CLIENT-AUTHENTICATED ROUTES ---
-
-app.get('/api/my-booking', authenticateClient, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        const [bookingRes, settingsRes] = await Promise.all([
-             client.query('SELECT * FROM bookings WHERE id = $1', [req.user.bookingId]),
-             client.query("SELECT key, value FROM app_settings WHERE key IN ('client_panel_welcome_text', 'client_panel_hero_url')")
-        ]);
-        if (bookingRes.rowCount === 0) {
-            return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
-        }
-        
-        const settings = settingsRes.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-        
-        res.json({
-            ...bookingRes.rows[0],
-            settings
-        });
-    } catch (error) {
-        console.error('Error fetching my-booking:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.patch('/api/my-booking', authenticateClient, async (req, res) => {
-    const { bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
-    try {
-        await getPool().query(
-            'UPDATE bookings SET bride_address = $1, groom_address = $2, church_location = $3, venue_location = $4, schedule = $5, additional_info = $6 WHERE id = $7',
-            [bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.user.bookingId]
-        );
-        res.json({ message: 'Dane zaktualizowane.' });
-    } catch (error) {
-        console.error('Error updating my-booking:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.post('/api/my-booking/photo', authenticateClient, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || `photo-${req.user.bookingId}.jpg`;
-    if (!req.body || req.body.length === 0) {
-        return res.status(400).json({ message: 'Brak pliku do wysłania.' });
-    }
-    try {
-        const blob = await put(filename, req.body, {
-            access: 'public',
-            token: process.env.BLOB_READ_WRITE_TOKEN
-        });
-        await getPool().query('UPDATE bookings SET couple_photo_url = $1 WHERE id = $2', [blob.url, req.user.bookingId]);
-        res.status(200).json(blob);
-    } catch (error) {
-        console.error('Error uploading couple photo:', error);
-        res.status(500).json({ message: 'Błąd podczas przesyłania zdjęcia.' });
-    }
-});
-
-app.get('/api/booking-stages', authenticateClient, async (req, res) => {
-    try {
-        const result = await getPool().query(`
-            SELECT bs.id, ps.name, ps.description, bs.status, bs.completed_at 
-            FROM booking_stages bs
-            JOIN production_stages ps ON bs.stage_id = ps.id
-            WHERE bs.booking_id = $1
-            ORDER BY ps.id ASC
-        `, [req.user.bookingId]);
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching booking stages:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.patch('/api/booking-stages/:stageId/approve', authenticateClient, async (req, res) => {
-    const { stageId } = req.params;
-    try {
-        await getPool().query("UPDATE booking_stages SET status = 'completed', completed_at = NOW() WHERE id = $1 AND booking_id = $2 AND status = 'awaiting_approval'", [stageId, req.user.bookingId]);
-        res.json({ message: 'Etap zatwierdzony.' });
-    } catch (error) {
-        console.error('Error approving stage:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.get('/api/messages', authenticateClient, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.user.bookingId]);
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching messages:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.post('/api/messages', authenticateClient, async (req, res) => {
-    const { content } = req.body;
-    try {
-        const result = await getPool().query(
-            'INSERT INTO messages (booking_id, sender, content, is_read_by_admin) VALUES ($1, $2, $3, $4) RETURNING *',
-            [req.user.bookingId, 'client', content, false]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        console.error('Error sending message:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.get('/api/messages/unread-count', authenticateClient, async (req, res) => {
-    try {
-        const result = await getPool().query("SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = 'admin' AND is_read_by_client = FALSE", [req.user.bookingId]);
-        res.json({ count: parseInt(result.rows[0].count, 10) });
-    } catch (error) {
-        console.error('Error fetching unread count:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.patch('/api/messages/mark-as-read', authenticateClient, async (req, res) => {
-    try {
-        await getPool().query("UPDATE messages SET is_read_by_client = TRUE WHERE booking_id = $1 AND sender = 'admin'", [req.user.bookingId]);
-        res.status(204).send();
-    } catch (error) {
-        console.error('Error marking messages as read:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-// --- GUEST MANAGER API FOR CLIENTS ---
-
-app.get('/api/my-booking/guests', authenticateClient, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM guests WHERE booking_id = $1 ORDER BY name ASC', [req.user.bookingId]);
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching guests:', error);
-        res.status(500).json({ message: 'Błąd pobierania listy gości.' });
-    }
-});
-
-app.post('/api/my-booking/guests', authenticateClient, async (req, res) => {
-    const { name, email, group_name } = req.body;
-    try {
-        const result = await getPool().query(
-            'INSERT INTO guests (booking_id, name, email, group_name) VALUES ($1, $2, $3, $4) RETURNING *',
-            [req.user.bookingId, name, email, group_name]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        console.error('Error adding guest:', error);
-        res.status(500).json({ message: 'Błąd dodawania gościa.' });
-    }
-});
-
-app.put('/api/my-booking/guests/:guestId', authenticateClient, async (req, res) => {
-    const { guestId } = req.params;
-    const { name, email, group_name, rsvp_status } = req.body;
-    try {
-        const result = await getPool().query(
-            'UPDATE guests SET name = $1, email = $2, group_name = $3, rsvp_status = $4 WHERE id = $5 AND booking_id = $6 RETURNING *',
-            [name, email, group_name, rsvp_status, guestId, req.user.bookingId]
-        );
-        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
-        res.json(result.rows[0]);
-    } catch (error) {
-        console.error('Error updating guest:', error);
-        res.status(500).json({ message: 'Błąd aktualizacji danych gościa.' });
-    }
-});
-
-app.delete('/api/my-booking/guests/:guestId', authenticateClient, async (req, res) => {
-    const { guestId } = req.params;
-    try {
-        const result = await getPool().query('DELETE FROM guests WHERE id = $1 AND booking_id = $2', [guestId, req.user.bookingId]);
-        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
-        res.status(204).send();
-    } catch (error) {
-        console.error('Error deleting guest:', error);
-        res.status(500).json({ message: 'Błąd usuwania gościa.' });
-    }
-});
-
-app.post('/api/my-booking/guests/send-invites', authenticateClient, async (req, res) => {
-    const { bookingId } = req.user;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-
-        const bookingRes = await client.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [bookingId]);
-        if (bookingRes.rowCount === 0) {
-            return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
-        }
-        const booking = bookingRes.rows[0];
-
-        const guestsRes = await client.query(
-            "SELECT name, email, rsvp_token FROM guests WHERE booking_id = $1 AND rsvp_status = 'pending' AND email IS NOT NULL AND email <> ''",
-            [bookingId]
-        );
-
-        const guestsToSend = guestsRes.rows;
-        if (guestsToSend.length === 0) {
-            return res.status(400).json({ message: 'Brak gości oczekujących na zaproszenie z podanym adresem e-mail.' });
-        }
-
-        const appUrl = `${req.protocol}://${req.get('host')}`;
-        
-        const emailPromises = guestsToSend.map(guest => {
-            const rsvpLink = `${appUrl}/rsvp/${guest.rsvp_token}`;
-            return resend.emails.send({
-                from: `${booking.bride_name} i ${booking.groom_name} <no-reply@dreamcatcherfilm.com>`,
-                to: guest.email,
-                subject: `${booking.bride_name} i ${booking.groom_name} zapraszają! Potwierdź swoją obecność.`,
-                html: `
-                    <div style="font-family: sans-serif; text-align: center; padding: 20px; color: #333;">
-                        <h2 style="color: #0F3E34;">Cześć, ${guest.name}!</h2>
-                        <p>${booking.bride_name} i ${booking.groom_name} z wielką radością zapraszają Cię na swój ślub.</p>
-                        <p>Prosimy o potwierdzenie swojej obecności, klikając w poniższy przycisk:</p>
-                        <a href="${rsvpLink}" style="background-color: #0F3E34; color: white; padding: 15px 25px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0; font-weight: bold;">Potwierdź Obecność</a>
-                        <p style="font-size: 12px; color: #888; margin-top: 30px;">System zaproszeń dostarczony przez Dreamcatcher Film</p>
-                    </div>
-                `
-            });
-        });
-
-        await Promise.all(emailPromises);
-        
-        await client.query('COMMIT');
-        res.json({ message: `Zaproszenia zostały pomyślnie wysłane do ${guestsToSend.length} gości.` });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Error sending guest invites:', error);
-        res.status(500).json({ message: 'Błąd podczas wysyłania zaproszeń.' });
-    } finally {
-        client.release();
-    }
-});
-
-// --- PUBLIC RSVP API FOR GUESTS ---
-
-app.get('/api/public/rsvp/:token', async (req, res) => {
-    const { token } = req.params;
-    try {
-        const guestRes = await getPool().query('SELECT * FROM guests WHERE rsvp_token = $1', [token]);
-        if (guestRes.rowCount === 0) {
-            return res.status(404).json({ message: 'Nieprawidłowy link do zaproszenia.' });
-        }
-        const guest = guestRes.rows[0];
-        
-        const bookingRes = await getPool().query(
-            'SELECT bride_name, groom_name, wedding_date, church_location, venue_location, couple_photo_url FROM bookings WHERE id = $1',
-            [guest.booking_id]
-        );
-        if (bookingRes.rowCount === 0) {
-            return res.status(404).json({ message: 'Nie znaleziono powiązanego wesela.' });
-        }
-        const booking = bookingRes.rows[0];
-
-        res.json({ guest, booking });
-    } catch (error) {
-        console.error('Error fetching RSVP data:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.post('/api/public/rsvp/:token', async (req, res) => {
-    const { token } = req.params;
-    const { rsvp_status, notes } = req.body;
-    try {
-        const result = await getPool().query(
-            'UPDATE guests SET rsvp_status = $1, notes = $2 WHERE rsvp_token = $3 RETURNING *',
-            [rsvp_status, notes, token]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'Nieprawidłowy link do zaproszenia.' });
-        }
-        res.json({ message: 'Dziękujemy za odpowiedź!' });
-    } catch (error) {
-        console.error('Error submitting RSVP:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-
-
-// --- FILMS API ---
-
-app.get('/api/films', async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        const [filmsRes, settingsRes] = await Promise.all([
-             client.query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC'),
-             client.query("SELECT key, value FROM app_settings WHERE key IN ('films_page_title', 'films_page_subtitle', 'films_page_hero_url')")
-        ]);
-        const settings = settingsRes.rows.reduce((acc, row) => ({ ...acc, [row.key.replace('films_page_', '')]: row.value }), {});
-        res.json({ films: filmsRes.rows, settings });
-    } catch (error) {
-        console.error('Error fetching films:', error);
-        res.status(500).json({ message: 'Błąd pobierania filmów.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.get('/api/admin/films', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM films ORDER BY sort_order ASC, created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching films for admin:', error);
-        res.status(500).json({ message: 'Błąd pobierania filmów.' });
-    }
-});
-
-app.post('/api/admin/films', authenticateAdmin, async (req, res) => {
-    const { youtube_url, title, description } = req.body;
-    if (!youtube_url || !title) {
-        return res.status(400).json({ message: 'Link do YouTube i tytuł są wymagane.' });
-    }
-    try {
-        const videoId = getYouTubeVideoId(youtube_url);
-        if (!videoId) {
-            return res.status(400).json({ message: 'Nieprawidłowy link do YouTube.' });
-        }
-        const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-        
-        const result = await getPool().query(
-            'INSERT INTO films (youtube_url, title, description, thumbnail_url) VALUES ($1, $2, $3, $4) RETURNING *',
-            [youtube_url, title, description, thumbnailUrl]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        console.error('Error creating film:', error);
-        res.status(500).json({ message: 'Błąd dodawania filmu.' });
-    }
-});
-
-app.patch('/api/admin/films/:id', authenticateAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { youtube_url, title, description } = req.body;
-    try {
-        let thumbnailUrl = undefined;
-        if (youtube_url) {
-            const videoId = getYouTubeVideoId(youtube_url);
-            if (!videoId) return res.status(400).json({ message: 'Nieprawidłowy link do YouTube.' });
-            thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-        }
-        
-        const result = await getPool().query(
-            'UPDATE films SET youtube_url = COALESCE($1, youtube_url), title = COALESCE($2, title), description = COALESCE($3, description), thumbnail_url = COALESCE($4, thumbnail_url) WHERE id = $5 RETURNING *',
-            [youtube_url, title, description, thumbnailUrl, id]
-        );
-        res.json(result.rows[0]);
-    } catch (error) {
-        console.error('Error updating film:', error);
-        res.status(500).json({ message: 'Błąd aktualizacji filmu.' });
-    }
-});
-
-app.delete('/api/admin/films/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM films WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        console.error('Error deleting film:', error);
-        res.status(500).json({ message: 'Błąd usuwania filmu.' });
-    }
-});
-
-app.post('/api/admin/films/order', authenticateAdmin, async (req, res) => {
-    const { orderedIds } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        for (let i = 0; i < orderedIds.length; i++) {
-            await client.query('UPDATE films SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
-        }
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Kolejność filmów została zapisana.' });
-    } catch (e) {
-        await client.query('ROLLBACK');
-        console.error('Error reordering films:', e);
-        res.status(500).json({ message: 'Błąd zapisu kolejności filmów.' });
-    } finally {
-        client.release();
-    }
-});
-
-
-// --- ADMIN-AUTHENTICATED ROUTES ---
-
-app.get('/api/admin/notifications/count', authenticateAdmin, async (req, res) => {
-    try {
-        const client = await getPool().connect();
-        try {
-            const clientMessages = await client.query("SELECT COUNT(DISTINCT booking_id) FROM messages WHERE sender = 'client' AND is_read_by_admin = FALSE");
-            const inboxMessages = await client.query("SELECT COUNT(*) FROM contact_messages WHERE is_read = FALSE");
-            const totalCount = parseInt(clientMessages.rows[0].count, 10) + parseInt(inboxMessages.rows[0].count, 10);
-            res.json({ count: totalCount });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error fetching notification count:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-app.get('/api/admin/notifications', authenticateAdmin, async (req, res) => {
-     try {
-        const client = await getPool().connect();
-        try {
-            const clientMessagesRes = await client.query(`
-                SELECT DISTINCT ON (m.booking_id) m.booking_id, b.bride_name || ' & ' || b.groom_name AS sender_name, m.content AS preview, 
-                (SELECT COUNT(*) FROM messages WHERE booking_id = m.booking_id AND sender = 'client' AND is_read_by_admin = FALSE) as unread_count
-                FROM messages m
-                JOIN bookings b ON m.booking_id = b.id
-                WHERE m.sender = 'client' AND m.is_read_by_admin = FALSE
-                ORDER BY m.booking_id, m.created_at DESC;
-            `);
-             const inboxMessagesRes = await client.query(`
-                SELECT id as message_id, first_name || ' ' || last_name AS sender_name, message as preview
-                FROM contact_messages
-                WHERE is_read = FALSE
-                ORDER BY created_at DESC;
-            `);
-
-            const notifications = [
-                ...clientMessagesRes.rows.map(r => ({ ...r, type: 'client_message' })),
-                ...inboxMessagesRes.rows.map(r => ({ ...r, type: 'inbox_message' }))
-            ];
-            res.json(notifications);
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error fetching notifications:', error);
-        res.status(500).json({ message: 'Błąd serwera.' });
-    }
-});
-
-
-app.get('/api/admin/inbox', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM contact_messages ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching inbox messages.' });
-    }
-});
-
-app.patch('/api/admin/inbox/:id/read', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('UPDATE contact_messages SET is_read = TRUE WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating message status.' });
-    }
-});
-
-app.delete('/api/admin/inbox/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM contact_messages WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting message.' });
-    }
-});
-
-app.get('/api/admin/bookings', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT id, client_id, bride_name, groom_name, wedding_date, total_price, created_at FROM bookings ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching bookings.' });
-    }
-});
-
-app.get('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM bookings WHERE id = $1', [req.params.id]);
-        if (result.rowCount === 0) return res.status(404).json({ message: 'Booking not found' });
-        res.json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching booking details.' });
-    }
-});
-
-app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
-     try {
-        const { id } = req.params;
-        const { bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
-        const result = await getPool().query(
-            `UPDATE bookings SET bride_name = $1, groom_name = $2, email = $3, phone_number = $4, wedding_date = $5, bride_address = $6, groom_address = $7, church_location = $8, venue_location = $9, schedule = $10, additional_info = $11 WHERE id = $12 RETURNING *`,
-            [bride_name, groom_name, email, phone_number, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, additional_info, id]
-        );
-        res.json({ message: 'Zaktualizowano pomyślnie.', booking: result.rows[0] });
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji rezerwacji.' });
-    }
-});
-
-app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('DELETE FROM availability WHERE resource->>\'type\' = \'booking\' AND (resource->>\'bookingId\')::int = $1', [req.params.id]);
-        await client.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
-        await client.query('COMMIT');
-        res.status(204).send();
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Error deleting booking.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.patch('/api/admin/bookings/:id/payment', authenticateAdmin, async (req, res) => {
-    try {
-        const { payment_status, amount_paid } = req.body;
-        const result = await getPool().query('UPDATE bookings SET payment_status = $1, amount_paid = $2 WHERE id = $3 RETURNING payment_status, amount_paid', [payment_status, amount_paid, req.params.id]);
-        res.json({ message: 'Płatność zaktualizowana.', payment_details: result.rows[0] });
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji płatności.' });
-    }
-});
-
-app.post('/api/admin/bookings/:bookingId/resend-credentials', authenticateAdmin, async (req, res) => {
-    const { bookingId } = req.params;
-    try {
-        const result = await getPool().query('SELECT email, client_id, bride_name, groom_name FROM bookings WHERE id = $1', [bookingId]);
-        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
-
-        const { email, client_id, bride_name, groom_name } = result.rows[0];
-
-        await resend.emails.send({
-            from: 'Dreamcatcher Films <no-reply@dreamcatcherfilm.com>',
-            to: email,
-            subject: 'Twoje dane do Panelu Klienta Dreamcatcher Film',
-            html: `
-                <h1>Cześć ${bride_name} i ${groom_name}!</h1>
-                <p>Oto Twoje dane do logowania do naszego Panelu Klienta:</p>
-                <p><strong>Numer klienta:</strong> ${client_id}</p>
-                <p><strong>Hasło:</strong> [ustawione podczas rezerwacji]</p>
-                <p>Możesz zalogować się <a href="${req.protocol}://${req.get('host')}/logowanie">tutaj</a>.</p>
-                <p>Pozdrawiamy,<br>Zespół Dreamcatcher Film</p>
-            `
-        });
-        res.json({ message: 'E-mail z danymi został wysłany.' });
-    } catch (error) {
-        console.error('Error resending credentials:', error);
-        res.status(500).json({ message: 'Błąd wysyłania e-maila.' });
-    }
-});
-
-
-app.get('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM access_keys ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching access keys.' });
-    }
-});
-
-app.post('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
-     const { client_name } = req.body;
-     const client = await getPool().connect();
-    try {
-        let key;
-        let isUnique = false;
-        while (!isUnique) {
-            key = Math.floor(1000 + Math.random() * 9000).toString();
-            const res = await client.query('SELECT 1 FROM access_keys WHERE key = $1', [key]);
-            if (res.rowCount === 0) isUnique = true;
-        }
-        const result = await client.query('INSERT INTO access_keys (key, client_name) VALUES ($1, $2) RETURNING *', [key, client_name]);
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error creating access key.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.delete('/api/admin/access-keys/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM access_keys WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting access key.' });
-    }
-});
-
-app.get('/api/admin/availability', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM availability');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching availability.' });
-    }
-});
-
-app.post('/api/admin/availability', authenticateAdmin, async (req, res) => {
-    try {
-        const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await getPool().query('INSERT INTO availability (title, description, start_time, end_time, is_all_day, resource) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [title, description, start_time, end_time, is_all_day, { type: 'event' }]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error creating event.' });
-    }
-});
-
-app.patch('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
-    try {
-        const { title, description, start_time, end_time, is_all_day } = req.body;
-        const result = await getPool().query('UPDATE availability SET title = $1, description = $2, start_time = $3, end_time = $4, is_all_day = $5 WHERE id = $6 AND (resource->>\'type\') = \'event\' RETURNING *',
-            [title, description, start_time, end_time, is_all_day, req.params.id]
-        );
-        res.json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating event.' });
-    }
-});
-
-app.delete('/api/admin/availability/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM availability WHERE id = $1 AND (resource->>\'type\') = \'event\'', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting event.' });
-    }
-});
-
-app.get('/api/admin/galleries', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM galleries ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching gallery items.' });
-    }
-});
-
-app.post('/api/admin/galleries/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
-    try {
-        const filename = req.headers['x-vercel-filename'] || 'gallery-image.jpg';
-        const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-        res.status(200).json(blob);
-    } catch (error) {
-        res.status(500).json({ message: 'Error uploading gallery image.' });
-    }
-});
-
-app.post('/api/admin/galleries', authenticateAdmin, async (req, res) => {
-    try {
-        const { title, description, image_url } = req.body;
-        const result = await getPool().query('INSERT INTO galleries (title, description, image_url) VALUES ($1, $2, $3) RETURNING *', [title, description, image_url]);
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error creating gallery item.' });
-    }
-});
-
-app.delete('/api/admin/galleries/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM galleries WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting gallery item.' });
-    }
-});
-
-app.get('/api/admin/stages', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM production_stages ORDER BY id ASC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching stages.' });
-    }
-});
-
-app.post('/api/admin/stages', authenticateAdmin, async (req, res) => {
-    try {
-        const { name, description } = req.body;
-        const result = await getPool().query('INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *', [name, description]);
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Error creating stage.' });
-    }
-});
-
-app.delete('/api/admin/stages/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Error deleting stage.' });
-    }
-});
-
-app.post('/api/admin/setup-database', authenticateAdmin, async(req, res) => {
-    try {
-        await initialize(false); // run setup without dropping tables
-        res.status(200).json({ message: "Schemat bazy danych został pomyślnie zainicjowany/zaktualizowany." });
-    } catch (error) {
-        console.error("Manual DB setup failed:", error);
-        res.status(500).json({ message: "Wystąpił błąd podczas inicjalizacji bazy danych." });
-    }
-});
-
-app.post('/api/admin/reset-database', authenticateAdmin, async(req, res) => {
-    try {
-        await initialize(true); // run setup WITH dropping tables
-        res.status(200).json({ message: "Baza danych została pomyślnie zresetowana. Utworzono domyślnego administratora." });
-    } catch (error) {
-        console.error("Manual DB reset failed:", error);
-        res.status(500).json({ message: "Wystąpił błąd podczas resetowania bazy danych." });
-    }
-});
-
-app.get('/api/admin/settings', authenticateAdmin, async (req, res) => {
-    try {
-        const [adminRes, settingsRes] = await Promise.all([
-             getPool().query('SELECT email FROM admins WHERE id = $1', [req.admin.adminId]),
-             getPool().query("SELECT value FROM app_settings WHERE key = 'notification_email'")
-        ]);
-        res.json({
-            loginEmail: adminRes.rows[0]?.email,
-            notificationEmail: settingsRes.rows[0]?.value,
-        });
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching admin settings.' });
-    }
-});
-
-app.patch('/api/admin/settings', authenticateAdmin, async (req, res) => {
-    try {
-        const { email } = req.body;
-        await getPool().query("INSERT INTO app_settings (key, value) VALUES ('notification_email', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [email]);
-        res.json({ message: 'Ustawienia zapisane.' });
-    } catch (error) {
-        res.status(500).json({ message: 'Error saving admin settings.' });
-    }
-});
-
-app.get('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
-    try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'contact_%' OR key LIKE 'client_panel_%' OR key = 'google_maps_api_key'");
-        const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-        res.json(settings);
-    } catch (err) {
-        res.status(500).json({ message: "Błąd pobierania ustawień" });
-    }
-});
-
-app.patch('/api/admin/contact-settings', authenticateAdmin, async(req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        for (const [key, value] of Object.entries(req.body)) {
-            await client.query("INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, value]);
-        }
-        await client.query('COMMIT');
-        res.json({ message: 'Ustawienia zapisane.' });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: "Błąd zapisu ustawień" });
-    } finally {
-        client.release();
-    }
-});
-
-app.get('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'films_page_%'");
-        const settings = result.rows.reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-        res.json(settings);
-    } catch (err) {
-        res.status(500).json({ message: "Błąd pobierania ustawień strony filmów" });
-    }
-});
-
-app.patch('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        for (const [key, value] of Object.entries(req.body)) {
-            if (key.startsWith('films_page_')) {
-                await client.query("INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, value]);
-            }
-        }
-        await client.query('COMMIT');
-        res.json({ message: 'Ustawienia zapisane.' });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: "Błąd zapisu ustawień strony filmów" });
-    } finally {
-        client.release();
-    }
-});
-
-app.post('/api/admin/films-settings/upload-hero', authenticateAdmin, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || 'films-hero.jpg';
-    try {
-        const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-        res.status(200).json(blob);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd wysyłania grafiki.' });
-    }
-});
-
-
-app.patch('/api/admin/credentials', authenticateAdmin, async (req, res) => {
-    const { currentPassword, newEmail, newPassword } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const adminRes = await client.query('SELECT * FROM admins WHERE id = $1', [req.admin.adminId]);
-        if (adminRes.rowCount === 0) return res.status(404).json({ message: 'Admin not found.' });
-
-        const admin = adminRes.rows[0];
-        const isPasswordValid = await bcrypt.compare(currentPassword, admin.password_hash);
-        if (!isPasswordValid) return res.status(401).json({ message: 'Bieżące hasło jest nieprawidłowe.' });
-
-        if (newEmail && newEmail !== admin.email) {
-            await client.query('UPDATE admins SET email = $1 WHERE id = $2', [newEmail, req.admin.adminId]);
-        }
-        if (newPassword) {
-            const newPasswordHash = await bcrypt.hash(newPassword, 10);
-            await client.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [newPasswordHash, req.admin.adminId]);
-        }
-        await client.query('COMMIT');
-        res.json({ message: 'Dane logowania zaktualizowane.' });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd zapisu danych logowania.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.get('/api/admin/discounts', authenticateAdmin, async (req, res) => {
-    try {
-        const result = await getPool().query('SELECT * FROM discount_codes ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania kodów rabatowych.' });
-    }
-});
-
-app.post('/api/admin/discounts', authenticateAdmin, async (req, res) => {
-    try {
-        const { code, type, value, usage_limit, expires_at } = req.body;
-        const result = await getPool().query('INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [code, type, value, usage_limit, expires_at]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        if (error.code === '23505') return res.status(409).json({ message: 'Kod o tej nazwie już istnieje.' });
-        res.status(500).json({ message: 'Błąd tworzenia kodu rabatowego.' });
-    }
-});
-
-app.delete('/api/admin/discounts/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania kodu rabatowego.' });
-    }
-});
-
-// --- NEWLY ADDED ENDPOINTS ---
-
-// Offer Data (Packages, Addons, Categories) for Admin
-app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
-    try {
-        const client = await getPool().connect();
-        try {
-            const [packagesRes, addonsRes, categoriesRes, packageAddonsRes, addonCategoriesRes] = await Promise.all([
-                client.query('SELECT p.*, c.name as category_name FROM packages p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.name ASC'),
-                client.query('SELECT * FROM addons ORDER BY name ASC'),
-                client.query('SELECT * FROM categories ORDER BY name ASC'),
-                client.query('SELECT * FROM package_addons'),
-                client.query('SELECT * FROM addon_categories')
-            ]);
-
-            const packages = packagesRes.rows.map(p => ({
-                ...p,
-                addons: packageAddonsRes.rows.filter(pa => pa.package_id === p.id).map(pa => ({ id: pa.addon_id }))
-            }));
-            const addons = addonsRes.rows.map(a => ({
-                ...a,
-                category_ids: addonCategoriesRes.rows.filter(ac => ac.addon_id === a.id).map(ac => ac.category_id)
-            }));
-            
-            res.json({ packages, addons, categories: categoriesRes.rows });
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error('Error fetching offer data for admin:', error);
-        res.status(500).json({ message: 'Błąd pobierania danych oferty.' });
-    }
-});
-
-// Categories CRUD
-app.post('/api/admin/categories', authenticateAdmin, async (req, res) => {
-    try {
-        const { name, description, icon_name } = req.body;
-        const result = await getPool().query('INSERT INTO categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *', [name, description, icon_name]);
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd tworzenia kategorii.' });
-    }
-});
-app.patch('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
-    try {
-        const { name, description, icon_name } = req.body;
-        const result = await getPool().query('UPDATE categories SET name = $1, description = $2, icon_name = $3 WHERE id = $4 RETURNING *', [name, description, icon_name, req.params.id]);
-        res.json(result.rows[0]);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji kategorii.' });
-    }
-});
-app.delete('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM categories WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania kategorii.' });
-    }
-});
-
-// Addons CRUD
-app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
-    const { name, price, category_ids = [] } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
-        const addonId = addonRes.rows[0].id;
-        if (category_ids.length > 0) {
-            for (const categoryId of category_ids) {
-                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, categoryId]);
-            }
-        }
-        await client.query('COMMIT');
-        res.status(201).json({ id: addonId, name, price, category_ids });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd tworzenia dodatku.' });
-    } finally {
-        client.release();
-    }
-});
-
-app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
-    const { name, price, category_ids = [] } = req.body;
-    const addonId = req.params.id;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('UPDATE addons SET name = $1, price = $2 WHERE id = $3', [name, price, addonId]);
-        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [addonId]);
-        if (category_ids.length > 0) {
-            for (const categoryId of category_ids) {
-                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, categoryId]);
-            }
-        }
-        await client.query('COMMIT');
-        res.json({ id: addonId, name, price, category_ids });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd aktualizacji dodatku.' });
-    } finally {
-        client.release();
-    }
-});
-app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM addons WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania dodatku.' });
-    }
-});
-
-// Packages CRUD
-app.post('/api/admin/packages/upload-image', authenticateAdmin, rawBodyParser, async (req, res) => {
-    try {
-        const filename = req.headers['x-vercel-filename'] || 'package-image.jpg';
-        const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-        res.status(200).json(blob);
-    } catch (error) {
-        res.status(500).json({ message: 'Error uploading package image.' });
-    }
-});
-app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
-    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons = [] } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        const pkgRes = await client.query('INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [name, description, price, category_id, is_published, rich_description, rich_description_image_url]);
-        const packageId = pkgRes.rows[0].id;
-        for (const addon of addons) {
-            await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
-        }
-        await client.query('COMMIT');
-        res.status(201).json({ id: packageId, ...req.body });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd tworzenia pakietu.' });
-    } finally {
-        client.release();
-    }
-});
-app.patch('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
-    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons = [] } = req.body;
-    const packageId = req.params.id;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query('UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8', [name, description, price, category_id, is_published, rich_description, rich_description_image_url, packageId]);
-        await client.query('DELETE FROM package_addons WHERE package_id = $1', [packageId]);
-        for (const addon of addons) {
-            await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
-        }
-        await client.query('COMMIT');
-        res.json({ id: packageId, ...req.body });
-    } catch (error) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd aktualizacji pakietu.' });
-    } finally {
-        client.release();
-    }
-});
-app.delete('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
-    try {
-        await getPool().query('DELETE FROM packages WHERE id = $1', [req.params.id]);
-        res.status(204).send();
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania pakietu.' });
-    }
-});
-
-
-// Homepage Management
-app.get('/api/admin/homepage/slides', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query('SELECT * FROM homepage_slides ORDER BY sort_order ASC');
-    res.json(result.rows);
-});
-app.post('/api/admin/homepage/slides/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || 'slide.jpg';
-    const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-    res.status(200).json(blob);
-});
-app.post('/api/admin/homepage/slides', authenticateAdmin, async (req, res) => {
-    const { image_url, title, subtitle, button_text, button_link } = req.body;
-    const result = await getPool().query('INSERT INTO homepage_slides (image_url, title, subtitle, button_text, button_link) VALUES ($1, $2, $3, $4, $5) RETURNING *', [image_url, title, subtitle, button_text, button_link]);
-    res.status(201).json(result.rows[0]);
-});
-app.patch('/api/admin/homepage/slides/:id', authenticateAdmin, async (req, res) => {
-    const { image_url, title, subtitle, button_text, button_link } = req.body;
-    const result = await getPool().query('UPDATE homepage_slides SET image_url=$1, title=$2, subtitle=$3, button_text=$4, button_link=$5 WHERE id=$6 RETURNING *', [image_url, title, subtitle, button_text, button_link, req.params.id]);
-    res.json(result.rows[0]);
-});
-app.delete('/api/admin/homepage/slides/:id', authenticateAdmin, async (req, res) => {
-    await getPool().query('DELETE FROM homepage_slides WHERE id = $1', [req.params.id]);
-    res.status(204).send();
-});
-app.post('/api/admin/homepage/slides/order', authenticateAdmin, async (req, res) => {
-    const { orderedIds } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        for (let i = 0; i < orderedIds.length; i++) {
-            await client.query('UPDATE homepage_slides SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
-        }
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Kolejność zapisana.' });
-    } catch (e) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd zapisu kolejności.' });
-    } finally {
-        client.release();
-    }
-});
-
-
-app.get('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query("SELECT value, key FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')");
-    const about = result.rows.reduce((acc, row) => ({ ...acc, [row.key.replace('about_us_', '')]: row.value }), {});
-    res.json(about);
-});
-app.post('/api/admin/homepage/about/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || 'about.jpg';
-    const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-    res.status(200).json(blob);
-});
-app.patch('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
-    const { title, text, image_url } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_title', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [title]);
-        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_text', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [text]);
-        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [image_url]);
-        await client.query('COMMIT');
-        res.json({ message: 'Zapisano pomyślnie.' });
-    } catch (e) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd zapisu sekcji "O nas".' });
-    } finally {
-        client.release();
-    }
-});
-
-app.get('/api/admin/homepage/testimonials', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY id ASC');
-    res.json(result.rows);
-});
-app.post('/api/admin/homepage/testimonials', authenticateAdmin, async (req, res) => {
-    const { author, content } = req.body;
-    const result = await getPool().query('INSERT INTO homepage_testimonials (author, content) VALUES ($1, $2) RETURNING *', [author, content]);
-    res.status(201).json(result.rows[0]);
-});
-app.patch('/api/admin/homepage/testimonials/:id', authenticateAdmin, async (req, res) => {
-    const { author, content } = req.body;
-    const result = await getPool().query('UPDATE homepage_testimonials SET author=$1, content=$2 WHERE id=$3 RETURNING *', [author, content, req.params.id]);
-    res.json(result.rows[0]);
-});
-app.delete('/api/admin/homepage/testimonials/:id', authenticateAdmin, async (req, res) => {
-    await getPool().query('DELETE FROM homepage_testimonials WHERE id = $1', [req.params.id]);
-    res.status(204).send();
-});
-
-app.get('/api/admin/homepage/instagram', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query('SELECT * FROM homepage_instagram ORDER BY sort_order ASC');
-    res.json(result.rows);
-});
-app.post('/api/admin/homepage/instagram/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || 'instagram.jpg';
-    const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN });
-    res.status(200).json(blob);
-});
-app.post('/api/admin/homepage/instagram', authenticateAdmin, async (req, res) => {
-    const { post_url, image_url, caption } = req.body;
-    const result = await getPool().query('INSERT INTO homepage_instagram (post_url, image_url, caption) VALUES ($1, $2, $3) RETURNING *', [post_url, image_url, caption]);
-    res.status(201).json(result.rows[0]);
-});
-app.delete('/api/admin/homepage/instagram/:id', authenticateAdmin, async (req, res) => {
-    await getPool().query('DELETE FROM homepage_instagram WHERE id = $1', [req.params.id]);
-    res.status(204).send();
-});
-app.post('/api/admin/homepage/instagram/order', authenticateAdmin, async (req, res) => {
-    const { orderedIds } = req.body;
-    const client = await getPool().connect();
-    try {
-        await client.query('BEGIN');
-        for (let i = 0; i < orderedIds.length; i++) {
-            await client.query('UPDATE homepage_instagram SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
-        }
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Kolejność zapisana.' });
-    } catch (e) {
-        await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd zapisu kolejności.' });
-    } finally {
-        client.release();
-    }
-});
-
-
-app.get('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query('SELECT bs.id, ps.name, bs.status FROM booking_stages bs JOIN production_stages ps ON bs.stage_id = ps.id WHERE bs.booking_id = $1 ORDER BY ps.id', [req.params.bookingId]);
-    res.json(result.rows);
-});
-app.post('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
-    const { stage_id } = req.body;
-    const result = await getPool().query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2) RETURNING *', [req.params.bookingId, stage_id]);
-    res.status(201).json(result.rows[0]);
-});
-app.patch('/api/admin/booking-stages/:stageId', authenticateAdmin, async (req, res) => {
-    const { status } = req.body;
-    await getPool().query('UPDATE booking_stages SET status = $1 WHERE id = $2', [status, req.params.stageId]);
-    res.status(200).json({ message: 'Status zaktualizowany.' });
-});
-app.delete('/api/admin/booking-stages/:stageId', authenticateAdmin, async (req, res) => {
-    await getPool().query('DELETE FROM booking_stages WHERE id = $1', [req.params.stageId]);
-    res.status(204).send();
-});
-
-app.get('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query('SELECT * FROM messages WHERE booking_id = $1 ORDER BY created_at ASC', [req.params.bookingId]);
-    res.json(result.rows);
-});
-app.post('/api/admin/messages/upload', authenticateAdmin, rawBodyParser, async (req, res) => {
-    const filename = req.headers['x-vercel-filename'] || 'attachment';
-    const blob = await put(filename, req.body, { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN, contentType: req.headers['content-type'] });
-    res.status(200).json(blob);
-});
-app.post('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) => {
-    const { content, attachment_url, attachment_type } = req.body;
-    const result = await getPool().query(
-        'INSERT INTO messages (booking_id, sender, content, attachment_url, attachment_type, is_read_by_client) VALUES ($1, \'admin\', $2, $3, $4, FALSE) RETURNING *',
-        [req.params.bookingId, content, attachment_url, attachment_type]
+// --- MODAL WRAPPER ---
+const Modal: FC<{ children: React.ReactNode, onClose: () => void, size?: 'md' | 'lg' | 'xl' }> = ({ children, onClose, size = 'lg' }) => {
+    const sizeClasses = {
+        md: 'max-w-md',
+        lg: 'max-w-2xl',
+        xl: 'max-w-4xl'
+    };
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
+            <div className={`bg-white rounded-2xl shadow-2xl p-6 w-full relative animate-modal-in ${sizeClasses[size]}`} onClick={e => e.stopPropagation()}>
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                    <XMarkIcon className="w-6 h-6"/>
+                </button>
+                {children}
+            </div>
+        </div>
     );
-    res.status(201).json(result.rows[0]);
-});
-app.get('/api/admin/bookings/:bookingId/unread-count', authenticateAdmin, async (req, res) => {
-    const result = await getPool().query("SELECT COUNT(*) FROM messages WHERE booking_id = $1 AND sender = 'client' AND is_read_by_admin = FALSE", [req.params.bookingId]);
-    res.json({ count: parseInt(result.rows[0].count, 10) });
-});
-app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', authenticateAdmin, async (req, res) => {
-    await getPool().query("UPDATE messages SET is_read_by_admin = TRUE WHERE booking_id = $1 AND sender = 'client'", [req.params.bookingId]);
-    res.status(204).send();
-});
+};
 
-// --- CATCH-ALL ---
-app.use((req, res) => {
-    res.status(404).json({ message: `Cannot ${req.method} ${req.path}` });
-});
+// --- PACKAGES MANAGER ---
+const PackagesManager: FC<{ packages: Package[], addons: Addon[], categories: Category[], onDataChange: () => void, token: string | null }> = ({ packages, addons, categories, onDataChange, token }) => {
+    const [editingPackage, setEditingPackage] = useState<Package | null>(null);
 
-export default app;
+    const handleDelete = async (id: number) => {
+        if (!window.confirm('Czy na pewno chcesz usunąć ten pakiet?')) return;
+        try {
+            const res = await fetch(`/api/admin/packages/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error(await res.text());
+            onDataChange();
+        } catch (err) {
+            alert((err as Error).message);
+        }
+    };
+    
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-800">Zarządzaj Pakietami</h3>
+                <button onClick={() => setEditingPackage({ name: '', description: '', price: 0, addons: [], category_id: null, is_published: false, rich_description: '', rich_description_image_url: '' })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                    <PlusCircleIcon className="w-5 h-5"/> Dodaj Pakiet
+                </button>
+            </div>
+            <div className="bg-white rounded-2xl shadow overflow-hidden">
+                <ul className="divide-y divide-slate-200">
+                     {packages.map(pkg => (
+                        <li key={pkg.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                            <div className="flex items-center gap-4">
+                                <span className={`w-3 h-3 rounded-full ${pkg.is_published ? 'bg-green-500' : 'bg-slate-400'}`} title={pkg.is_published ? 'Opublikowany' : 'Szkic'}></span>
+                                <div>
+                                    <p className="font-bold text-slate-800">{pkg.name}</p>
+                                    <p className="text-sm text-slate-500">{pkg.category_name || 'Brak kategorii'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-indigo-600">{formatCurrency(pkg.price)}</span>
+                                <button onClick={() => setEditingPackage(pkg)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-md hover:bg-indigo-50"><PencilSquareIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDelete(pkg.id!)} className="p-2 text-slate-500 hover:text-red-600 rounded-md hover:bg-red-50"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </li>
+                     ))}
+                </ul>
+            </div>
+            {editingPackage && <PackageEditor pkg={editingPackage} allAddons={addons} allCategories={categories} onClose={() => setEditingPackage(null)} onSave={onDataChange} token={token} />}
+        </div>
+    );
+};
+
+// --- ADDONS MANAGER ---
+const AddonsManager: FC<{ addons: Addon[], categories: Category[], onDataChange: () => void, token: string | null }> = ({ addons, categories, onDataChange, token }) => {
+    const [editingAddon, setEditingAddon] = useState<Partial<Addon> | null>(null);
+
+    const handleSave = async (addon: Partial<Addon>) => {
+        const endpoint = addon.id ? `/api/admin/addons/${addon.id}` : '/api/admin/addons';
+        const method = addon.id ? 'PATCH' : 'POST';
+        try {
+            const res = await fetch(endpoint, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(addon) });
+            if (!res.ok) throw new Error(await res.text());
+            onDataChange();
+            setEditingAddon(null);
+        } catch (err) {
+            alert((err as Error).message);
+        }
+    };
+    
+     const handleDelete = async (id: number) => {
+        if (!window.confirm('Czy na pewno chcesz usunąć ten dodatek?')) return;
+        try {
+            const res = await fetch(`/api/admin/addons/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error(await res.text());
+            onDataChange();
+        } catch (err) {
+            alert((err as Error).message);
+        }
+    };
+    
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-800">Zarządzaj Dodatkami</h3>
+                <button onClick={() => setEditingAddon({ name: '', price: 0, category_ids: [] })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                    <PlusCircleIcon className="w-5 h-5"/> Dodaj Dodatek
+                </button>
+            </div>
+            <div className="bg-white rounded-2xl shadow overflow-hidden">
+                <ul className="divide-y divide-slate-200">
+                    {addons.map(addon => (
+                        <li key={addon.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                            <div>
+                                <p className="font-medium text-slate-800">{addon.name}</p>
+                                <p className="text-xs text-slate-500">
+                                    Dostępny w: {
+                                        addon.category_ids && addon.category_ids.length > 0 
+                                        ? addon.category_ids.map(id => categories.find(c => c.id === id)?.name).filter(Boolean).join(', ')
+                                        : 'Wszystkie kategorie'
+                                    }
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="font-semibold text-slate-700">{formatCurrency(addon.price)}</span>
+                                <button onClick={() => setEditingAddon(addon)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-md hover:bg-indigo-50"><PencilSquareIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDelete(addon.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-md hover:bg-red-50"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {editingAddon && <AddonEditor addon={editingAddon} allCategories={categories} onClose={() => setEditingAddon(null)} onSave={handleSave} />}
+        </div>
+    );
+};
+
+// --- CATEGORIES MANAGER ---
+const CategoriesManager: FC<{ categories: Category[], onDataChange: () => void, token: string | null }> = ({ categories, onDataChange, token }) => {
+    const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
+
+    const handleSave = async (category: Partial<Category>) => {
+        const endpoint = category.id ? `/api/admin/categories/${category.id}` : '/api/admin/categories';
+        const method = category.id ? 'PATCH' : 'POST';
+        try {
+            const res = await fetch(endpoint, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(category) });
+            if (!res.ok) throw new Error(await res.text());
+            onDataChange();
+            setEditingCategory(null);
+        } catch (err) {
+            alert((err as Error).message);
+        }
+    };
+    
+    const handleDelete = async (id: number) => {
+        if (!window.confirm('Czy na pewno chcesz usunąć tę kategorię?')) return;
+        try {
+            const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error(await res.text());
+            onDataChange();
+        } catch (err) {
+            alert((err as Error).message);
+        }
+    };
+    
+    return (
+        <div>
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-800">Zarządzaj Kategoriami</h3>
+                <button onClick={() => setEditingCategory({})} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                    <PlusCircleIcon className="w-5 h-5"/> Dodaj Kategorię
+                </button>
+            </div>
+            <div className="bg-white rounded-2xl shadow overflow-hidden">
+                <ul className="divide-y divide-slate-200">
+                    {categories.map(cat => (
+                        <li key={cat.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                            <div>
+                                <p className="font-medium text-slate-800">{cat.name}</p>
+                                <p className="text-sm text-slate-500">{cat.description}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setEditingCategory(cat)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-md hover:bg-indigo-50"><PencilSquareIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDelete(cat.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-md hover:bg-red-50"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {editingCategory && <SimpleEditor item={editingCategory} onClose={() => setEditingCategory(null)} onSave={handleSave} title="Kategoria" fields={[{ name: 'name', label: 'Nazwa' }, { name: 'description', label: 'Opis' }, { name: 'icon_name', label: 'Nazwa ikony' }]} />}
+        </div>
+    );
+};
+
+// --- ADDON EDITOR MODAL ---
+const AddonEditor: FC<{ addon: Partial<Addon>, allCategories: Category[], onClose: () => void, onSave: (data: Partial<Addon>) => void }> = ({ addon, allCategories, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+        ...addon,
+        category_ids: addon.category_ids || []
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setFormData(prev => ({...prev, [e.target.name]: e.target.value}));
+    };
+
+    const handleCategoryToggle = (categoryId: number) => {
+        setFormData(prev => {
+            const newCategoryIds = prev.category_ids!.includes(categoryId)
+                ? prev.category_ids!.filter(id => id !== categoryId)
+                : [...prev.category_ids!, categoryId];
+            return { ...prev, category_ids: newCategoryIds };
+        });
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        await onSave(formData);
+        setIsSubmitting(false);
+    };
+
+    return (
+        <Modal onClose={onClose} size="md">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <h3 className="text-xl font-bold text-slate-800">{addon.id ? `Edytuj Dodatek` : `Nowy Dodatek`}</h3>
+                <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-slate-700">Nazwa</label>
+                    <input name="name" type="text" value={formData.name || ''} onChange={handleChange} className={inputClasses} required />
+                </div>
+                 <div>
+                    <label htmlFor="price" className="block text-sm font-medium text-slate-700">Cena</label>
+                    <input name="price" type="number" step="0.01" value={formData.price || ''} onChange={handleChange} className={inputClasses} required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700">Dostępny w kategoriach</label>
+                    <p className="text-xs text-slate-500 mb-2">Jeśli żadna kategoria nie jest zaznaczona, dodatek będzie dostępny dla wszystkich pakietów.</p>
+                    <div className="mt-2 space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
+                        {allCategories.map(cat => (
+                            <label key={cat.id} className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.category_ids!.includes(cat.id)}
+                                    onChange={() => handleCategoryToggle(cat.id)}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="ml-2 text-sm text-slate-800">{cat.name}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+                 <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center w-28">
+                        {isSubmitting ? <LoadingSpinner className="w-5 h-5"/> : 'Zapisz'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+
+// --- SIMPLE EDITOR MODAL (for Categories) ---
+const SimpleEditor: FC<{ item: any, onClose: () => void, onSave: (item: any) => void, title: string, fields: {name: string, label: string, type?: string}[] }> = ({ item, onClose, onSave, title, fields }) => {
+    const [formData, setFormData] = useState(item);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setFormData(prev => ({...prev, [e.target.name]: e.target.value}));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        await onSave(formData);
+        setIsSubmitting(false);
+    };
+
+    return (
+        <Modal onClose={onClose} size="md">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <h3 className="text-xl font-bold text-slate-800">{item.id ? `Edytuj ${title}` : `Nowy ${title}`}</h3>
+                {fields.map(field => (
+                    <div key={field.name}>
+                        <label htmlFor={field.name} className="block text-sm font-medium text-slate-700">{field.label}</label>
+                        <input name={field.name} type={field.type || 'text'} value={formData[field.name] || ''} onChange={handleChange} className={inputClasses} required />
+                    </div>
+                ))}
+                 <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center w-28">
+                        {isSubmitting ? <LoadingSpinner className="w-5 h-5"/> : 'Zapisz'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+
+// --- ADVANCED PACKAGE EDITOR ---
+const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Category[], onClose: () => void, onSave: () => void, token: string | null }> = ({ pkg, allAddons, allCategories, onClose, onSave, token }) => {
+    const [formData, setFormData] = useState<Package>(pkg);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    
+    const isEditing = !!formData.id;
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value, type } = e.target;
+        if (type === 'checkbox') {
+             setFormData(p => ({ ...p, [name]: (e.target as HTMLInputElement).checked }));
+        } else {
+             setFormData(p => ({ ...p, [name]: name === 'price' || name === 'category_id' ? Number(value) : value }));
+        }
+    };
+
+    const handleAddonToggle = (addonId: number) => {
+        const isIncluded = formData.addons.some(a => a.id === addonId);
+        if (isIncluded) {
+            setFormData(p => ({...p, addons: p.addons.filter(a => a.id !== addonId)}));
+        } else {
+            setFormData(p => ({...p, addons: [...p.addons, { id: addonId }]}));
+        }
+    };
+    
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setError('');
+        try {
+            let imageUrl = formData.rich_description_image_url;
+            if (imageFile) {
+                const uploadRes = await fetch('/api/admin/packages/upload-image', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'x-vercel-filename': imageFile.name },
+                    body: imageFile
+                });
+                if (!uploadRes.ok) throw new Error('Błąd wysyłania zdjęcia.');
+                const blob = await uploadRes.json();
+                imageUrl = blob.url;
+            }
+
+            const endpoint = isEditing ? `/api/admin/packages/${formData.id}` : '/api/admin/packages';
+            const method = isEditing ? 'PATCH' : 'POST';
+
+            const res = await fetch(endpoint, {
+                method,
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...formData, rich_description_image_url: imageUrl })
+            });
+            if (!res.ok) {
+                const errText = await res.text();
+                 throw new Error(errText || 'Błąd zapisu pakietu.');
+            }
+            
+            onSave();
+            onClose();
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
+    const includedAddonIds = new Set(formData.addons.map(a => a.id));
+
+    const availableAddons = allAddons.filter(a => {
+        if (includedAddonIds.has(a.id)) return false;
+        if (!formData.category_id) return false;
+        if (!a.category_ids || a.category_ids.length === 0) return true; // Universal addons
+        return a.category_ids.includes(formData.category_id);
+    });
+
+    return (
+        <Modal onClose={onClose} size="xl">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                 <h3 className="text-xl font-bold text-slate-800">{isEditing ? 'Edytuj Pakiet' : 'Nowy Pakiet'}</h3>
+                 {error && <p className="text-red-500 bg-red-50 p-2 rounded-md text-sm">{error}</p>}
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input name="name" value={formData.name} onChange={handleChange} placeholder="Nazwa pakietu" className={inputClasses} required />
+                    <input name="price" type="number" step="0.01" value={formData.price} onChange={handleChange} placeholder="Cena bazowa" className={inputClasses} required />
+                     <select name="category_id" value={formData.category_id || ''} onChange={handleChange} className={inputClasses} required>
+                        <option value="">-- Wybierz kategorię --</option>
+                        {allCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                </div>
+                <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Krótki opis (dla listy)" className={inputClasses} rows={2}></textarea>
+                
+                <div className="pt-4 border-t">
+                    <h4 className="font-semibold mb-2">Treść Marketingowa (dla klienta)</h4>
+                     <textarea name="rich_description" value={formData.rich_description} onChange={handleChange} placeholder="Szczegółowy opis marketingowy pakietu (obsługuje Markdown)" className={inputClasses} rows={5}></textarea>
+                    <div className="flex items-center gap-4 mt-2">
+                        {formData.rich_description_image_url && <img src={formData.rich_description_image_url} alt="Podgląd" className="w-24 h-24 object-cover rounded-md" />}
+                        <input type="file" onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)} accept="image/*" className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t grid grid-cols-2 gap-6">
+                    <div>
+                        <h4 className="font-semibold mb-2">Dostępne dodatki</h4>
+                        {!formData.category_id ? (
+                            <div className="text-center p-4 border rounded-lg bg-slate-50 text-slate-500 text-sm">
+                                Wybierz kategorię pakietu, aby zobaczyć dostępne dodatki.
+                            </div>
+                        ) : (
+                            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 border rounded-lg p-2">
+                                {availableAddons.map(addon => (
+                                    <li key={addon.id} className="flex justify-between items-center p-2 rounded-md hover:bg-slate-50">
+                                        <span>{addon.name} ({formatCurrency(addon.price)})</span>
+                                        <button type="button" onClick={() => handleAddonToggle(addon.id)} className="p-1 text-green-500 hover:text-green-700"><PlusCircleIcon/></button>
+                                    </li>
+                                ))}
+                                {availableAddons.length === 0 && <p className="text-center text-sm text-slate-400 p-2">Brak dostępnych dodatków dla tej kategorii.</p>}
+                            </ul>
+                        )}
+                    </div>
+                    <div>
+                        <h4 className="font-semibold mb-2">Dodatki w pakiecie</h4>
+                        <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 border rounded-lg p-2">
+                            {formData.addons.map(includedAddon => {
+                                const addonDetails = allAddons.find(a => a.id === includedAddon.id);
+                                if (!addonDetails) return null;
+                                return (
+                                    <li key={includedAddon.id} className="flex justify-between items-center p-2 bg-indigo-50 rounded-md">
+                                        <div className="flex-grow">
+                                            <span>{addonDetails.name}</span>
+                                            {parseFloat(addonDetails.price.toString()) === 0 && (
+                                                <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">Darmowy</span>
+                                            )}
+                                        </div>
+                                        <button type="button" onClick={() => handleAddonToggle(includedAddon.id)} className="p-1 text-red-500 hover:text-red-700"><TrashIcon/></button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                </div>
+                
+                 <div className="flex justify-between items-center pt-4 border-t">
+                     <label className="flex items-center gap-2 text-sm cursor-pointer font-semibold">
+                        <input type="checkbox" name="is_published" checked={formData.is_published} onChange={handleChange} className="rounded w-5 h-5" />
+                        Opublikowany
+                    </label>
+                    <div className="flex gap-3">
+                        <button type="button" onClick={onClose} disabled={isSubmitting} className="bg-slate-100 text-slate-800 font-bold py-2 px-4 rounded-lg">Anuluj</button>
+                        <button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center w-28">
+                            {isSubmitting ? <LoadingSpinner className="w-5 h-5"/> : 'Zapisz'}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+export default AdminPackagesPage;
