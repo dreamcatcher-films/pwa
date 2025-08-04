@@ -613,11 +613,15 @@ app.get('/api/my-booking', authenticateClient, async (req, res) => {
 });
 
 app.patch('/api/my-booking', authenticateClient, async (req, res) => {
-    const { bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
+    const { bride_name, groom_name, email, phone_number, bride_address, groom_address, church_location, venue_location, schedule, additional_info } = req.body;
     try {
         const result = await getPool().query(
-            'UPDATE bookings SET bride_address = $1, groom_address = $2, church_location = $3, venue_location = $4, schedule = $5, additional_info = $6 WHERE id = $7 RETURNING *',
-            [bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.user.userId]
+            `UPDATE bookings SET 
+             bride_name = $1, groom_name = $2, email = $3, phone_number = $4,
+             bride_address = $5, groom_address = $6, church_location = $7, 
+             venue_location = $8, schedule = $9, additional_info = $10 
+             WHERE id = $11 RETURNING *`,
+            [bride_name, groom_name, email, phone_number, bride_address, groom_address, church_location, venue_location, schedule, additional_info, req.user.userId]
         );
         res.json({ message: 'Dane zaktualizowane.', booking: result.rows[0] });
     } catch (error) {
