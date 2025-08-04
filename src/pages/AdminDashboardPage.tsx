@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext.tsx';
 interface NavItem {
     path: string;
     label: string;
-    icon: ReactElement;
+    icon: ReactElement<{ className?: string }>;
     subtitle: string;
 }
 
