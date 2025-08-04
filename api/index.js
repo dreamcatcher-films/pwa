@@ -662,12 +662,16 @@ app.get('/api/my-booking/guests', authenticateClient, async (req, res) => {
 });
 
 app.post('/api/my-booking/guests', authenticateClient, async (req, res) => {
-    const { name, email, group_id, allowed_companions } = req.body;
+    const { name, email, group_id, allowed_companions, companion_status } = req.body;
     try {
-        const result = await getPool().query('INSERT INTO guests (booking_id, name, email, group_id, allowed_companions) VALUES ($1, $2, $3, $4, $5) RETURNING *', [req.user.userId, name, email, group_id || null, allowed_companions || 0]);
+        const result = await getPool().query(
+            'INSERT INTO guests (booking_id, name, email, group_id, allowed_companions, companion_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [req.user.userId, name, email, group_id || null, allowed_companions || 0, JSON.stringify(companion_status)]
+        );
         res.status(201).json(result.rows[0]);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd dodawania gościa.' });
+        console.error('Error adding guest:', error);
+        res.status(500).json({ message: 'Błąd dodawania gościa.', details: error.message });
     }
 });
 app.put('/api/my-booking/guests/:id', authenticateClient, async (req, res) => {
