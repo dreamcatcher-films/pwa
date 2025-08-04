@@ -1,4 +1,5 @@
 
+
 import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
@@ -29,13 +30,15 @@ const AdminInboxPage = lazy(() => import('./pages/AdminInboxPage.tsx'));
 const AdminBookingDetailsPage = lazy(() => import('./pages/AdminBookingDetailsPage.tsx'));
 const FilmsPage = lazy(() => import('./pages/FilmsPage.tsx'));
 const AdminFilmsPage = lazy(() => import('./pages/AdminFilmsPage.tsx'));
+const RsvpPage = lazy(() => import('./pages/RsvpPage.tsx'));
 
 const App = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const location = useLocation();
 
     const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt', '/filmy'];
-    const isPublicPage = publicPaths.includes(location.pathname);
+    const isPublicPage = publicPaths.includes(location.pathname) || location.pathname.startsWith('/rsvp/');
+
 
     return (
         <>
@@ -52,6 +55,7 @@ const App = () => {
                             <Route path="/logowanie" element={<LoginPage />} />
                             <Route path="/panel-klienta" element={<ClientPanelPage />} />
                             <Route path="/admin/logowanie" element={<AdminLoginPage />} />
+                            <Route path="/rsvp/:token" element={<RsvpPage />} />
                             
                             <Route path="/admin" element={<AdminDashboardPage />}>
                                 <Route index element={<Navigate to="/admin/inbox" replace />} />
