@@ -97,6 +97,14 @@ const runDbSetup = async (shouldDrop = false) => {
             );
         `);
         
+        // --- Schema Migrations ---
+        // This section ensures older database schemas are updated.
+        console.log('Running schema checks and migrations...');
+        await client.query('ALTER TABLE guests DROP COLUMN IF EXISTS group_name;');
+        await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES guest_groups(id) ON DELETE SET NULL;');
+        console.log('Schema checks complete.');
+
+
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
         if (adminRes.rowCount === 0) {
             const defaultEmail = 'admin@dreamcatcher.com';
