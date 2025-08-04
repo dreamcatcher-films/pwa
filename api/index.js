@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -1114,6 +1115,56 @@ app.post('/api/admin/bookings/:id/resend-credentials', authenticateAdmin, async 
         client.release();
     }
 });
+
+// Admin Guest Management
+app.get('/api/admin/bookings/:bookingId/guests', authenticateAdmin, async (req, res) => {
+    try {
+        const guests = await getPool().query('SELECT g.*, gg.name as group_name FROM guests g LEFT JOIN guest_groups gg ON g.group_id = gg.id WHERE g.booking_id = $1 ORDER BY gg.name, g.name', [req.params.bookingId]);
+        res.json(guests.rows);
+    } catch (error) { res.status(500).json({ message: 'Błąd pobierania gości.' }); }
+});
+app.post('/api/admin/bookings/:bookingId/guests', authenticateAdmin, async (req, res) => {
+    const { name, email, group_id, allowed_companions, companion_status } = req.body;
+    try {
+        const result = await getPool().query( 'INSERT INTO guests (booking_id, name, email, group_id, allowed_companions, companion_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', [req.params.bookingId, name, email, group_id || null, allowed_companions || 0, JSON.stringify(companion_status)] );
+        res.status(201).json(result.rows[0]);
+    } catch (error) { res.status(500).json({ message: 'Błąd dodawania gościa.' }); }
+});
+app.put('/api/admin/bookings/:bookingId/guests/:id', authenticateAdmin, async (req, res) => {
+    const { name, email, group_id, allowed_companions, rsvp_status, companion_status } = req.body;
+    try {
+        const result = await getPool().query('UPDATE guests SET name = $1, email = $2, group_id = $3, allowed_companions = $4, rsvp_status = $5, companion_status = $6 WHERE id = $7 AND booking_id = $8 RETURNING *', [name, email, group_id || null, allowed_companions || 0, rsvp_status, JSON.stringify(companion_status), req.params.id, req.params.bookingId]);
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
+        res.json(result.rows[0]);
+    } catch (error) { res.status(500).json({ message: 'Błąd aktualizacji gościa.' }); }
+});
+app.delete('/api/admin/bookings/:bookingId/guests/:id', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('DELETE FROM guests WHERE id = $1 AND booking_id = $2', [req.params.id, req.params.bookingId]);
+        if (result.rowCount === 0) return res.status(404).json({ message: 'Nie znaleziono gościa.' });
+        res.status(204).send();
+    } catch (error) { res.status(500).json({ message: 'Błąd usuwania gościa.' }); }
+});
+app.get('/api/admin/bookings/:bookingId/guest-groups', authenticateAdmin, async (req, res) => {
+    try {
+        const groupsRes = await getPool().query('SELECT * FROM guest_groups WHERE booking_id = $1 ORDER BY name', [req.params.bookingId]);
+        res.json(groupsRes.rows);
+    } catch (error) { res.status(500).json({ message: 'Błąd pobierania grup gości.' }); }
+});
+app.post('/api/admin/bookings/:bookingId/guest-groups', authenticateAdmin, async (req, res) => {
+    const { name } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO guest_groups (booking_id, name) VALUES ($1, $2) RETURNING *', [req.params.bookingId, name]);
+        res.status(201).json(result.rows[0]);
+    } catch (error) { res.status(500).json({ message: 'Błąd tworzenia grupy.' }); }
+});
+app.delete('/api/admin/bookings/:bookingId/guest-groups/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM guest_groups WHERE id = $1 AND booking_id = $2', [req.params.id, req.params.bookingId]);
+        res.status(204).send();
+    } catch (error) { res.status(500).json({ message: 'Błąd usuwania grupy.' }); }
+});
+
 
 // Admin Access Keys
 app.get('/api/admin/access-keys', authenticateAdmin, async (req, res) => {
