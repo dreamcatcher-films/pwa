@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -2108,6 +2109,27 @@ app.get('/api/admin/bookings/:bookingId/questionnaire', authenticateAdmin, async
         });
     } catch (err) {
         res.status(500).json({ message: 'Błąd pobierania odpowiedzi.' });
+    }
+});
+
+app.post('/api/admin/bookings/:bookingId/questionnaire', authenticateAdmin, async (req, res) => {
+    const { bookingId } = req.params;
+    const { template_id } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        // Deleting will cascade and remove answers.
+        await client.query('DELETE FROM questionnaire_responses WHERE booking_id = $1', [bookingId]);
+        // Insert the new one
+        await client.query('INSERT INTO questionnaire_responses (booking_id, template_id, status) VALUES ($1, $2, $3)', [bookingId, template_id, 'pending']);
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Ankieta została przypisana.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error assigning questionnaire:', err);
+        res.status(500).json({ message: 'Błąd przypisywania ankiety.' });
+    } finally {
+        client.release();
     }
 });
 
