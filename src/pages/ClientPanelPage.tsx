@@ -17,6 +17,10 @@ import Contract from '../components/client/Contract.tsx';
 
 // --- TYPES ---
 interface EditableBookingData {
+    bride_name: string;
+    groom_name: string;
+    email: string;
+    phone_number: string;
     bride_address: string;
     groom_address: string;
     church_location: string;
@@ -100,6 +104,10 @@ const ClientPanelPage: React.FC = () => {
      useEffect(() => {
         if (data?.booking) {
             const defaultValues = {
+                bride_name: data.booking.bride_name || '',
+                groom_name: data.booking.groom_name || '',
+                email: data.booking.email || '',
+                phone_number: data.booking.phone_number || '',
                 bride_address: data.booking.bride_address || '',
                 groom_address: data.booking.groom_address || '',
                 church_location: data.booking.church_location || '',
@@ -224,18 +232,6 @@ const ClientPanelPage: React.FC = () => {
             {activeTab === 'details' && (
                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
                     <main className="lg:col-span-2 space-y-8">
-                        <InfoCard title="Kluczowe Informacje" icon={<CalendarDaysIcon className="w-7 h-7 mr-3 text-indigo-500" />}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                                <InfoItem 
-                                    label="Data ślubu" 
-                                    value={new Date(booking.wedding_date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' })} 
-                                />
-                                <div />
-                                <InfoItem label="E-mail kontaktowy" value={booking.email} />
-                                <InfoItem label="Numer telefonu" value={booking.phone_number} />
-                            </div>
-                        </InfoCard>
-
                         <InfoCard title="Etapy Produkcji">
                             <div className="space-y-4">
                                 {stages.map((stage: ProductionStage) => {
@@ -264,8 +260,8 @@ const ClientPanelPage: React.FC = () => {
                         </InfoCard>
                         
                         <InfoCard 
-                            title="Szczegóły Wydarzenia i Notatki" 
-                            icon={<MapPinIcon className="w-7 h-7 mr-3 text-indigo-500" />}
+                            title="Dane kontaktowe i szczegóły wydarzenia" 
+                            icon={<UserGroupIcon className="w-7 h-7 mr-3 text-indigo-500" />}
                             actionButton={
                                 isEditing ? (
                                     <div className="flex items-center gap-2">
@@ -283,19 +279,47 @@ const ClientPanelPage: React.FC = () => {
                             }
                         >
                             {isEditing ? (
-                                <form onSubmit={handleSubmit(onSave)} className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <InputField id="bride_address" label="Adres przygotowań Panny Młodej" register={register('bride_address')} error={errors.bride_address} />
-                                        <InputField id="groom_address" label="Adres przygotowań Pana Młodego" register={register('groom_address')} error={errors.groom_address} />
-                                        <InputField id="church_location" label="Adres ceremonii" register={register('church_location')} error={errors.church_location} />
-                                        <InputField id="venue_location" label="Adres przyjęcia" register={register('venue_location')} error={errors.venue_location} />
+                                <form onSubmit={handleSubmit(onSave)} className="space-y-6">
+                                    <div>
+                                        <h4 className="text-md font-semibold text-slate-800 mb-2">Dane Pary Młodej i Kontakt</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <InputField id="bride_name" label="Imię i nazwisko Panny Młodej" register={register('bride_name')} error={errors.bride_name} />
+                                            <InputField id="groom_name" label="Imię i nazwisko Pana Młodego" register={register('groom_name')} error={errors.groom_name} />
+                                            <InputField id="email" label="E-mail kontaktowy" type="email" register={register('email')} error={errors.email} />
+                                            <InputField id="phone_number" label="Numer telefonu" type="tel" register={register('phone_number')} error={errors.phone_number} />
+                                        </div>
                                     </div>
-                                    <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" register={register('schedule')} error={errors.schedule} rows={4} />
-                                    <TextAreaField id="additional_info" label="Dodatkowe informacje" register={register('additional_info')} error={errors.additional_info} rows={3} required={false} />
+                                    <div className="pt-6 border-t">
+                                        <h4 className="text-md font-semibold text-slate-800 mb-2">Szczegóły Wydarzenia</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <InputField id="bride_address" label="Adres przygotowań Panny Młodej" register={register('bride_address')} error={errors.bride_address} />
+                                            <InputField id="groom_address" label="Adres przygotowań Pana Młodego" register={register('groom_address')} error={errors.groom_address} />
+                                            <InputField id="church_location" label="Adres ceremonii" register={register('church_location')} error={errors.church_location} />
+                                            <InputField id="venue_location" label="Adres przyjęcia" register={register('venue_location')} error={errors.venue_location} />
+                                        </div>
+                                        <div className="mt-4">
+                                            <TextAreaField id="schedule" label="Przybliżony harmonogram dnia" register={register('schedule')} error={errors.schedule} rows={4} />
+                                        </div>
+                                        <div className="mt-4">
+                                            <TextAreaField id="additional_info" label="Dodatkowe informacje" register={register('additional_info')} error={errors.additional_info} rows={3} required={false} />
+                                        </div>
+                                    </div>
                                 </form>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                                    <InfoItem label="Adres przygotowań Panny Młodej" value={booking.bride_address} />
+                                    <InfoItem label="Panna Młoda" value={booking.bride_name} />
+                                    <InfoItem label="Pan Młody" value={booking.groom_name} />
+                                    <InfoItem label="E-mail kontaktowy" value={booking.email} />
+                                    <InfoItem label="Numer telefonu" value={booking.phone_number} />
+                                     <div className="md:col-span-2">
+                                        <InfoItem 
+                                            label="Data ślubu" 
+                                            value={new Date(booking.wedding_date).toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' })} 
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2 pt-4 mt-4 border-t">
+                                        <InfoItem label="Adres przygotowań Panny Młodej" value={booking.bride_address} />
+                                    </div>
                                     <InfoItem label="Adres przygotowań Pana Młodego" value={booking.groom_address} />
                                     <InfoItem label="Adres ceremonii" value={booking.church_location} />
                                     <InfoItem label="Adres przyjęcia" value={booking.venue_location} />
