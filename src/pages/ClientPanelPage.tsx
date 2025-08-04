@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon, CalendarDaysIcon, EnvelopeIcon, PhoneIcon } from '../components/Icons.tsx';
+import { EngagementRingSpinner, UserGroupIcon, PencilSquareIcon, CheckCircleIcon, ClockIcon, ChatBubbleLeftRightIcon, ChevronDownIcon, MapPinIcon, QuestionMarkCircleIcon, DocumentTextIcon, CalendarDaysIcon, EnvelopeIcon, PhoneIcon, Squares2X2Icon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from '../components/FormControls.tsx';
 import { InfoCard, InfoItem } from '../components/InfoCard.tsx';
@@ -70,12 +70,20 @@ interface Message {
 
 type ActiveTab = 'details' | 'guests' | 'questionnaire' | 'contract';
 
+const TABS = [
+    { id: 'details', label: 'Szczegóły rezerwacji', icon: <PencilSquareIcon className="w-5 h-5"/> },
+    { id: 'guests', label: 'Lista Gości', icon: <UserGroupIcon className="w-5 h-5"/> },
+    { id: 'questionnaire', label: 'Ankieta i Moodboard', icon: <QuestionMarkCircleIcon className="w-5 h-5"/> },
+    { id: 'contract', label: 'Umowa', icon: <DocumentTextIcon className="w-5 h-5"/> }
+];
+
 // --- MAIN COMPONENT ---
 const ClientPanelPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<ActiveTab>('details');
     const [isEditing, setIsEditing] = useState(false);
     const [newMessage, setNewMessage] = useState('');
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
     const chatEndRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
@@ -178,6 +186,11 @@ const ClientPanelPage: React.FC = () => {
             markAsReadMutation.mutate();
         }
     };
+
+    const handleTabClick = (tabId: ActiveTab) => {
+        setActiveTab(tabId);
+        setIsMobileMenuOpen(false);
+    };
     
     if (isLoading || !data) return <div className="flex justify-center items-center h-screen"><EngagementRingSpinner /></div>;
     
@@ -208,24 +221,15 @@ const ClientPanelPage: React.FC = () => {
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
             <ClientPanelHero booking={booking} onLogout={handleLogout} />
             
+            {/* Desktop Tabs */}
             <div className="mt-8 border-b border-slate-200">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('details')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'details' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
-                        <PencilSquareIcon className="w-5 h-5"/>
-                        Szczegóły rezerwacji
-                    </button>
-                    <button onClick={() => setActiveTab('guests')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'guests' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
-                       <UserGroupIcon className="w-5 h-5"/>
-                        Lista Gości
-                    </button>
-                    <button onClick={() => setActiveTab('questionnaire')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'questionnaire' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
-                       <QuestionMarkCircleIcon className="w-5 h-5"/>
-                        Ankieta i Moodboard
-                    </button>
-                    <button onClick={() => setActiveTab('contract')} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'contract' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
-                       <DocumentTextIcon className="w-5 h-5"/>
-                        Umowa
-                    </button>
+                <nav className="hidden md:flex -mb-px space-x-8" aria-label="Tabs">
+                    {TABS.map(tab => (
+                        <button key={tab.id} onClick={() => handleTabClick(tab.id as ActiveTab)} className={`flex items-center gap-2 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
                 </nav>
             </div>
 
@@ -361,8 +365,19 @@ const ClientPanelPage: React.FC = () => {
             {activeTab === 'contract' && <div className="mt-8"><Contract contractUrl={booking.contract_url} /></div>}
 
             {/* Chat Bubble */}
-            <div className="fixed bottom-6 right-6 z-40">
+            <div className="fixed bottom-6 right-6 z-40 md:hidden">
                 <button onClick={handleToggleChat} className="relative bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 transition-transform hover:scale-110">
+                    <ChatBubbleLeftRightIcon className="w-8 h-8"/>
+                    {unreadCount?.count > 0 && !isChatOpen && (
+                        <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold ring-2 ring-white">
+                            {unreadCount.count}
+                        </span>
+                    )}
+                </button>
+            </div>
+            
+            <div className="fixed bottom-6 right-28 z-40 hidden md:block">
+                 <button onClick={handleToggleChat} className="relative bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 transition-transform hover:scale-110">
                     <ChatBubbleLeftRightIcon className="w-8 h-8"/>
                     {unreadCount?.count > 0 && !isChatOpen && (
                         <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold ring-2 ring-white">
@@ -405,6 +420,34 @@ const ClientPanelPage: React.FC = () => {
                             </button>
                         </form>
                     </footer>
+                </div>
+            )}
+
+            {/* Mobile FAB Menu */}
+            <div className="md:hidden fixed bottom-6 right-6 z-40">
+                <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="bg-brand-dark-green text-white rounded-full p-4 shadow-lg hover:bg-opacity-90 transition-transform hover:scale-110"
+                    aria-label="Otwórz menu nawigacji"
+                >
+                    <Squares2X2Icon className="w-8 h-8"/>
+                </button>
+            </div>
+
+            {/* Mobile Menu Panel */}
+            {isMobileMenuOpen && (
+                <div className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex flex-col justify-end" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className="bg-white rounded-t-2xl shadow-2xl p-4 animate-slide-in-bottom" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4"></div>
+                        <nav className="space-y-2">
+                            {TABS.map(tab => (
+                                <button key={tab.id} onClick={() => handleTabClick(tab.id as ActiveTab)} className={`w-full flex items-center gap-3 p-4 rounded-lg text-left text-lg font-semibold ${activeTab === tab.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700 hover:bg-slate-100'}`}>
+                                    {React.cloneElement(tab.icon, { className: `w-6 h-6 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-500'}` })}
+                                    <span>{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
                 </div>
             )}
         </div>
