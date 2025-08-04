@@ -2,7 +2,7 @@
 
 import React, { useEffect, FC, ReactNode, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon, UserGroupIcon } from '../components/Icons.tsx';
+import { InboxStackIcon, KeyIcon, CalendarIcon, PhotoIcon, TagIcon, TicketIcon, ClipboardDocumentListIcon, CircleStackIcon, HomeModernIcon, EnvelopeIcon, MenuIcon, XMarkIcon, FilmIcon, UserGroupIcon, QuestionMarkCircleIcon } from '../components/Icons.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 // --- TYPES ---
@@ -44,6 +44,7 @@ const navConfig: NavGroup[] = [
         items: [
             { path: 'dostepnosc', label: 'Dostępność', icon: <CalendarIcon className="w-5 h-5" />, subtitle: 'Zarządzaj swoim kalendarzem i terminami.' },
             { path: 'etapy-produkcji', label: 'Etapy Produkcji', icon: <ClipboardDocumentListIcon className="w-5 h-5" />, subtitle: 'Definiuj szablony etapów produkcji dla klientów.' },
+            { path: 'ankiety', label: 'Ankiety', icon: <QuestionMarkCircleIcon className="w-5 h-5" />, subtitle: 'Zarządzaj szablonami ankiet i pytaniami.' },
             { path: 'ustawienia', label: 'Ustawienia', icon: <CircleStackIcon className="w-5 h-5" />, subtitle: 'Zarządzaj ustawieniami aplikacji i bazą danych.' },
         ]
     }
