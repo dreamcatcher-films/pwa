@@ -443,6 +443,10 @@ export const deleteAdminGuestGroup = ({ bookingId, groupId }: { bookingId: strin
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${getAdminToken()}` },
 });
+export const sendAdminGuestInvites = ({ bookingId }: { bookingId: string }) => apiFetch(`/api/admin/bookings/${bookingId}/guests/send-invites`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getAdminToken()}` },
+});
 
 // Admin Questionnaire
 export const getQuestionnaireTemplates = () => apiFetch('/api/admin/questionnaires', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
