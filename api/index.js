@@ -622,6 +622,61 @@ app.delete('/api/my-booking/guests/:guestId', authenticateClient, async (req, re
     }
 });
 
+app.post('/api/my-booking/guests/send-invites', authenticateClient, async (req, res) => {
+    const { bookingId } = req.user;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        const bookingRes = await client.query('SELECT bride_name, groom_name FROM bookings WHERE id = $1', [bookingId]);
+        if (bookingRes.rowCount === 0) {
+            return res.status(404).json({ message: 'Nie znaleziono rezerwacji.' });
+        }
+        const booking = bookingRes.rows[0];
+
+        const guestsRes = await client.query(
+            "SELECT name, email, rsvp_token FROM guests WHERE booking_id = $1 AND rsvp_status = 'pending' AND email IS NOT NULL AND email <> ''",
+            [bookingId]
+        );
+
+        const guestsToSend = guestsRes.rows;
+        if (guestsToSend.length === 0) {
+            return res.status(400).json({ message: 'Brak gości oczekujących na zaproszenie z podanym adresem e-mail.' });
+        }
+
+        const appUrl = `${req.protocol}://${req.get('host')}`;
+        
+        const emailPromises = guestsToSend.map(guest => {
+            const rsvpLink = `${appUrl}/rsvp/${guest.rsvp_token}`;
+            return resend.emails.send({
+                from: `${booking.bride_name} i ${booking.groom_name} <no-reply@dreamcatcherfilm.com>`,
+                to: guest.email,
+                subject: `${booking.bride_name} i ${booking.groom_name} zapraszają! Potwierdź swoją obecność.`,
+                html: `
+                    <div style="font-family: sans-serif; text-align: center; padding: 20px; color: #333;">
+                        <h2 style="color: #0F3E34;">Cześć, ${guest.name}!</h2>
+                        <p>${booking.bride_name} i ${booking.groom_name} z wielką radością zapraszają Cię na swój ślub.</p>
+                        <p>Prosimy o potwierdzenie swojej obecności, klikając w poniższy przycisk:</p>
+                        <a href="${rsvpLink}" style="background-color: #0F3E34; color: white; padding: 15px 25px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0; font-weight: bold;">Potwierdź Obecność</a>
+                        <p style="font-size: 12px; color: #888; margin-top: 30px;">System zaproszeń dostarczony przez Dreamcatcher Film</p>
+                    </div>
+                `
+            });
+        });
+
+        await Promise.all(emailPromises);
+        
+        await client.query('COMMIT');
+        res.json({ message: `Zaproszenia zostały pomyślnie wysłane do ${guestsToSend.length} gości.` });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error sending guest invites:', error);
+        res.status(500).json({ message: 'Błąd podczas wysyłania zaproszeń.' });
+    } finally {
+        client.release();
+    }
+});
+
 // --- PUBLIC RSVP API FOR GUESTS ---
 
 app.get('/api/public/rsvp/:token', async (req, res) => {
