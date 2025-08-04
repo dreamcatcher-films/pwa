@@ -102,6 +102,11 @@ const runDbSetup = async (shouldDrop = false) => {
         console.log('Running schema checks and migrations...');
         await client.query('ALTER TABLE guests DROP COLUMN IF EXISTS group_name;');
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES guest_groups(id) ON DELETE SET NULL;');
+        
+        // Add invite settings columns to bookings table if they don't exist
+        await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invite_message TEXT;');
+        await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS invite_image_url TEXT;');
+        
         console.log('Schema checks complete.');
 
 
