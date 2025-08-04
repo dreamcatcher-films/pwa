@@ -1286,6 +1286,40 @@ app.post('/api/admin/films/order', authenticateAdmin, async (req, res) => {
     }
 });
 
+// Admin Films Page Settings
+app.get('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key LIKE 'films_page_%'");
+        const settings = result.rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ message: 'Błąd pobierania ustawień strony filmów.' });
+    }
+});
+
+app.patch('/api/admin/films-settings', authenticateAdmin, async (req, res) => {
+    const settings = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (const key in settings) {
+            if (key.startsWith('films_page_')) {
+                await client.query("INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, settings[key]]);
+            }
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Ustawienia zaktualizowane.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd zapisu ustawień strony filmów.' });
+    } finally {
+        client.release();
+    }
+});
+
 
 // Admin Messages
 app.get('/api/admin/messages/:bookingId', authenticateAdmin, async (req, res) => {
@@ -1343,7 +1377,7 @@ app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
     try {
         const client = await getPool().connect();
         try {
-            const [packagesRes, addonsRes, categoriesRes, packageAddonsRes, addonCategoriesRes] = await Promise.all([
+            const [packagesRes, addonsRes, categoriesRes, packageAddonsRes] = await Promise.all([
                 client.query('SELECT p.*, c.name as category_name FROM packages p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.name'),
                 client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.name'),
                 client.query('SELECT * FROM categories ORDER BY name'),
@@ -1367,6 +1401,131 @@ app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
         res.status(500).json({ message: 'Błąd pobierania danych oferty.' });
     }
 });
+
+// Categories
+app.post('/api/admin/categories', authenticateAdmin, async (req, res) => {
+    const { name, description, icon_name } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *', [name, description, icon_name]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd tworzenia kategorii.' }); }
+});
+app.patch('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
+    const { name, description, icon_name } = req.body;
+    try {
+        const result = await getPool().query('UPDATE categories SET name=$1, description=$2, icon_name=$3 WHERE id=$4 RETURNING *', [name, description, icon_name, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd aktualizacji kategorii.' }); }
+});
+app.delete('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM categories WHERE id=$1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania kategorii.' }); }
+});
+
+// Addons
+app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
+    const { name, price, category_ids } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
+        const addonId = addonRes.rows[0].id;
+        if (category_ids && category_ids.length > 0) {
+            for (const catId of category_ids) {
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, catId]);
+            }
+        }
+        await client.query('COMMIT');
+        const newAddon = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [addonId]);
+        res.status(201).json(newAddon.rows[0]);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd tworzenia dodatku.' });
+    } finally {
+        client.release();
+    }
+});
+app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
+    const { name, price, category_ids } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE addons SET name=$1, price=$2 WHERE id=$3', [name, price, req.params.id]);
+        await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [req.params.id]);
+        if (category_ids && category_ids.length > 0) {
+            for (const catId of category_ids) {
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [req.params.id, catId]);
+            }
+        }
+        await client.query('COMMIT');
+        const updatedAddon = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [req.params.id]);
+        res.json(updatedAddon.rows[0]);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd aktualizacji dodatku.' });
+    } finally {
+        client.release();
+    }
+});
+app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM addons WHERE id=$1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania dodatku.' }); }
+});
+
+// Packages
+app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const pkgRes = await client.query('INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [name, description, price, category_id, is_published, rich_description, rich_description_image_url]);
+        const packageId = pkgRes.rows[0].id;
+        if (addons && addons.length > 0) {
+            for (const addon of addons) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
+            }
+        }
+        await client.query('COMMIT');
+        res.status(201).json({ id: packageId, ...req.body });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd tworzenia pakietu.' });
+    } finally {
+        client.release();
+    }
+});
+app.patch('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8', [name, description, price, category_id, is_published, rich_description, rich_description_image_url, req.params.id]);
+        await client.query('DELETE FROM package_addons WHERE package_id=$1', [req.params.id]);
+        if (addons && addons.length > 0) {
+            for (const addon of addons) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [req.params.id, addon.id]);
+            }
+        }
+        await client.query('COMMIT');
+        res.json({ id: req.params.id, ...req.body });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd aktualizacji pakietu.' });
+    } finally {
+        client.release();
+    }
+});
+app.delete('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM packages WHERE id=$1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania pakietu.' }); }
+});
+
 
 // Admin Discounts
 app.get('/api/admin/discounts', authenticateAdmin, async (req, res) => {
@@ -1442,6 +1601,178 @@ app.delete('/api/admin/booking-stages/:id', authenticateAdmin, async (req, res) 
         await getPool().query('DELETE FROM booking_stages WHERE id = $1', [req.params.id]);
         res.status(204).send();
     } catch (err) { res.status(500).json({ message: 'Błąd usuwania etapu.' }); }
+});
+
+// Admin Homepage Management
+app.get('/api/admin/homepage/slides', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_slides ORDER BY sort_order ASC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania slajdów.' }); }
+});
+
+app.post('/api/admin/homepage/slides', authenticateAdmin, async (req, res) => {
+    const { image_url, title, subtitle, button_text, button_link } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO homepage_slides (image_url, title, subtitle, button_text, button_link) VALUES ($1, $2, $3, $4, $5) RETURNING *', [image_url, title, subtitle, button_text, button_link]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd tworzenia slajdu.' }); }
+});
+
+app.patch('/api/admin/homepage/slides/:id', authenticateAdmin, async (req, res) => {
+    const { image_url, title, subtitle, button_text, button_link } = req.body;
+    try {
+        const result = await getPool().query('UPDATE homepage_slides SET image_url=$1, title=$2, subtitle=$3, button_text=$4, button_link=$5 WHERE id=$6 RETURNING *', [image_url, title, subtitle, button_text, button_link, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd aktualizacji slajdu.' }); }
+});
+
+app.delete('/api/admin/homepage/slides/:id', authenticateAdmin, async (req, res) => {
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const itemRes = await client.query('SELECT image_url FROM homepage_slides WHERE id = $1', [req.params.id]);
+        if (itemRes.rowCount > 0 && itemRes.rows[0].image_url) {
+            try { await del(itemRes.rows[0].image_url); } catch (blobError) { console.warn(`Blob deletion failed for ${itemRes.rows[0].image_url}:`, blobError.message); }
+        }
+        await client.query('DELETE FROM homepage_slides WHERE id = $1', [req.params.id]);
+        await client.query('COMMIT');
+        res.status(204).send();
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd usuwania slajdu.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/admin/homepage/slides/order', authenticateAdmin, async (req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (let i = 0; i < orderedIds.length; i++) {
+            await client.query('UPDATE homepage_slides SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Kolejność zaktualizowana.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd zmiany kolejności.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query("SELECT key, value FROM app_settings WHERE key IN ('about_us_title', 'about_us_text', 'about_us_image_url')");
+        const aboutData = result.rows.reduce((acc, row) => {
+            acc[row.key.replace('about_us_', '')] = row.value;
+            return acc;
+        }, {});
+        res.json(aboutData);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania sekcji O nas.' }); }
+});
+
+app.patch('/api/admin/homepage/about', authenticateAdmin, async (req, res) => {
+    const { title, text, image_url } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_title', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [title]);
+        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_text', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [text]);
+        await client.query("INSERT INTO app_settings (key, value) VALUES ('about_us_image_url', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [image_url]);
+        await client.query('COMMIT');
+        res.json({ message: 'Sekcja O nas zaktualizowana.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd aktualizacji sekcji O nas.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/api/admin/homepage/testimonials', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_testimonials ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania opinii.' }); }
+});
+
+app.post('/api/admin/homepage/testimonials', authenticateAdmin, async (req, res) => {
+    const { author, content } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO homepage_testimonials (author, content) VALUES ($1, $2) RETURNING *', [author, content]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd tworzenia opinii.' }); }
+});
+
+app.patch('/api/admin/homepage/testimonials/:id', authenticateAdmin, async (req, res) => {
+    const { author, content } = req.body;
+    try {
+        const result = await getPool().query('UPDATE homepage_testimonials SET author=$1, content=$2 WHERE id=$3 RETURNING *', [author, content, req.params.id]);
+        res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd aktualizacji opinii.' }); }
+});
+
+app.delete('/api/admin/homepage/testimonials/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM homepage_testimonials WHERE id=$1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania opinii.' }); }
+});
+
+app.get('/api/admin/homepage/instagram', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM homepage_instagram ORDER BY sort_order ASC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania postów z Instagrama.' }); }
+});
+
+app.post('/api/admin/homepage/instagram', authenticateAdmin, async (req, res) => {
+    const { post_url, image_url, caption } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO homepage_instagram (post_url, image_url, caption) VALUES ($1, $2, $3) RETURNING *', [post_url, image_url, caption]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd dodawania posta.' }); }
+});
+
+app.delete('/api/admin/homepage/instagram/:id', authenticateAdmin, async (req, res) => {
+     const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        const itemRes = await client.query('SELECT image_url FROM homepage_instagram WHERE id = $1', [req.params.id]);
+        if (itemRes.rowCount > 0 && itemRes.rows[0].image_url) {
+            try { await del(itemRes.rows[0].image_url); } catch (blobError) { console.warn(`Blob deletion failed for ${itemRes.rows[0].image_url}:`, blobError.message); }
+        }
+        await client.query('DELETE FROM homepage_instagram WHERE id = $1', [req.params.id]);
+        await client.query('COMMIT');
+        res.status(204).send();
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd usuwania posta.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/admin/homepage/instagram/order', authenticateAdmin, async (req, res) => {
+    const { orderedIds } = req.body;
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+        for (let i = 0; i < orderedIds.length; i++) {
+            await client.query('UPDATE homepage_instagram SET sort_order = $1 WHERE id = $2', [i, orderedIds[i]]);
+        }
+        await client.query('COMMIT');
+        res.json({ message: 'Kolejność zaktualizowana.' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ message: 'Błąd zmiany kolejności.' });
+    } finally {
+        client.release();
+    }
 });
 
 
