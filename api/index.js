@@ -1338,8 +1338,112 @@ app.patch('/api/admin/bookings/:bookingId/messages/mark-as-read', authenticateAd
     } catch (err) { res.status(500).json({ message: 'Błąd oznaczania wiadomości.' }); }
 });
 
-// All other admin routes... (fully implemented here)
-// ... add other handlers for stages, discounts, etc. following the patterns above ...
+// Offer Management
+app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
+    try {
+        const client = await getPool().connect();
+        try {
+            const [packagesRes, addonsRes, categoriesRes, packageAddonsRes, addonCategoriesRes] = await Promise.all([
+                client.query('SELECT p.*, c.name as category_name FROM packages p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.name'),
+                client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.name'),
+                client.query('SELECT * FROM categories ORDER BY name'),
+                client.query('SELECT * FROM package_addons'),
+            ]);
+
+            const packagesWithAddons = packagesRes.rows.map(pkg => ({
+                ...pkg,
+                addons: packageAddonsRes.rows.filter(pa => pa.package_id === pkg.id).map(pa => ({ id: pa.addon_id }))
+            }));
+
+            res.json({
+                packages: packagesWithAddons,
+                addons: addonsRes.rows.map(a => ({...a, category_ids: a.category_ids[0] === null ? [] : a.category_ids })),
+                categories: categoriesRes.rows
+            });
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.status(500).json({ message: 'Błąd pobierania danych oferty.' });
+    }
+});
+
+// Admin Discounts
+app.get('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM discount_codes ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania kodów.' }); }
+});
+app.post('/api/admin/discounts', authenticateAdmin, async (req, res) => {
+    const { code, type, value, usage_limit, expires_at } = req.body;
+    try {
+        const result = await getPool().query(
+            'INSERT INTO discount_codes (code, type, value, usage_limit, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [code.toUpperCase(), type, value, usage_limit, expires_at]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd tworzenia kodu.' }); }
+});
+app.delete('/api/admin/discounts/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM discount_codes WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania kodu.' }); }
+});
+
+// Admin Stages
+app.get('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query('SELECT * FROM production_stages ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania etapów.' }); }
+});
+app.post('/api/admin/stages', authenticateAdmin, async (req, res) => {
+    const { name, description } = req.body;
+    try {
+        const result = await getPool().query('INSERT INTO production_stages (name, description) VALUES ($1, $2) RETURNING *', [name, description]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ message: 'Błąd tworzenia etapu.' }); }
+});
+app.delete('/api/admin/stages/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM production_stages WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania etapu.' }); }
+});
+
+// Admin Booking Stages
+app.get('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
+    try {
+        const result = await getPool().query(
+            'SELECT bs.id, ps.name, bs.status FROM booking_stages bs JOIN production_stages ps ON bs.stage_id = ps.id WHERE bs.booking_id = $1 ORDER BY ps.id ASC',
+            [req.params.bookingId]
+        );
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ message: 'Błąd pobierania etapów rezerwacji.' }); }
+});
+app.post('/api/admin/booking-stages/:bookingId', authenticateAdmin, async (req, res) => {
+    const { stage_id } = req.body;
+    try {
+        await getPool().query('INSERT INTO booking_stages (booking_id, stage_id) VALUES ($1, $2)', [req.params.bookingId, stage_id]);
+        res.status(201).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd dodawania etapu.' }); }
+});
+app.patch('/api/admin/booking-stages/:id', authenticateAdmin, async (req, res) => {
+    const { status } = req.body;
+    try {
+        await getPool().query('UPDATE booking_stages SET status = $1 WHERE id = $2', [status, req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd aktualizacji statusu.' }); }
+});
+app.delete('/api/admin/booking-stages/:id', authenticateAdmin, async (req, res) => {
+    try {
+        await getPool().query('DELETE FROM booking_stages WHERE id = $1', [req.params.id]);
+        res.status(204).send();
+    } catch (err) { res.status(500).json({ message: 'Błąd usuwania etapu.' }); }
+});
+
 
 // Final catch-all and export
 app.all('/api/*', (req, res) => {
