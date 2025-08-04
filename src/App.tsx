@@ -32,6 +32,7 @@ const FilmsPage = lazy(() => import('./pages/FilmsPage.tsx'));
 const AdminFilmsPage = lazy(() => import('./pages/AdminFilmsPage.tsx'));
 const RsvpPage = lazy(() => import('./pages/RsvpPage.tsx'));
 const AdminGuestsPage = lazy(() => import('./pages/AdminGuestsPage.tsx'));
+const AdminQuestionnairesPage = lazy(() => import('./pages/AdminQuestionnairesPage.tsx'));
 
 const App = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -71,6 +72,7 @@ const App = () => {
                                 <Route path="oferta" element={<AdminPackagesPage />} />
                                 <Route path="kody-rabatowe" element={<AdminDiscountsPage />} />
                                 <Route path="etapy-produkcji" element={<AdminStagesPage />} />
+                                <Route path="ankiety" element={<AdminQuestionnairesPage />} />
                                 <Route path="ustawienia" element={<AdminSettingsPage />} />
                                 <Route path="strona-glowna" element={<AdminHomepagePage />} />
                             </Route>
