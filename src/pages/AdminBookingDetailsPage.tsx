@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef, FC } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,13 +17,15 @@ import {
     uploadContract, getBookingStagesForAdmin, getStages, addStageToBooking,
     updateBookingStageStatus, removeStageFromBooking, getAdminMessages,
     sendAdminMessage, uploadAdminAttachment, markAdminMessagesAsRead,
-    updateAdminBooking, updateBookingPayment, resendCredentials
+    updateAdminBooking, updateBookingPayment, resendCredentials,
+    getQuestionnaireTemplates, assignQuestionnaireToBooking
 } from '../api.ts';
 import AdminGuestManager from '../components/admin/GuestManager.tsx';
 
 // --- TYPES ---
 interface BookingData { id: number; client_id: string; package_name: string; total_price: string; selected_items: string[]; bride_name: string; groom_name: string; wedding_date: string; bride_address: string; groom_address: string; church_location: string | null; venue_location: string | null; schedule: string; email: string; phone_number: string; additional_info: string | null; discount_code: string | null; access_key: string; created_at: string; payment_status: 'pending' | 'partial' | 'paid'; amount_paid: string; contract_url: string | null; }
 interface QuestionnaireResponse { template: { title: string }, questions: { id: number; text: string; type: string }[], answers: Record<string, string>, response: { status: string } }
+interface QuestionnaireTemplate { id: number; title: string; }
 interface ProductionStage { id: number; name: string; }
 interface BookingStage { id: number; name: string; status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed'; }
 interface Message { id: number; sender: 'client' | 'admin'; content: string; created_at: string; attachment_url?: string; attachment_type?: string; }
@@ -43,6 +46,8 @@ const AdminBookingDetailsPage: React.FC = () => {
     // --- State Management ---
     const [isEditing, setIsEditing] = useState(false);
     const [isPaymentEditing, setIsPaymentEditing] = useState(false);
+    const [isChangingQuestionnaire, setIsChangingQuestionnaire] = useState(false);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
     const [newStageId, setNewStageId] = useState('');
     const [newMessage, setNewMessage] = useState('');
     const [attachment, setAttachment] = useState<File | null>(null);
@@ -60,6 +65,10 @@ const AdminBookingDetailsPage: React.FC = () => {
         queryKey: ['adminBookingQuestionnaire', bookingId],
         queryFn: () => getAdminBookingQuestionnaire(bookingId!),
         enabled: !!bookingId,
+    });
+    const { data: allQuestionnaires } = useQuery<QuestionnaireTemplate[], Error>({
+        queryKey: ['questionnaireTemplates'],
+        queryFn: getQuestionnaireTemplates,
     });
     
     // --- Form Hooks ---
@@ -83,6 +92,14 @@ const AdminBookingDetailsPage: React.FC = () => {
     const removeStageMutation = useMutation({ mutationFn: removeStageFromBooking, onSuccess: () => queryClient.invalidateQueries({queryKey: ['bookingStagesForAdmin', bookingId]}) });
     const sendMessageMutation = useMutation({ mutationFn: (data: any) => sendAdminMessage({ bookingId: bookingId!, data }), onSuccess: () => { setNewMessage(''); setAttachment(null); queryClient.invalidateQueries({queryKey:['adminMessages', bookingId]}); }});
     const contractMutation = useMutation({ mutationFn: (file: File) => uploadContract({ bookingId: bookingId!, file }), onSuccess: () => { setContractFile(null); queryClient.invalidateQueries({queryKey: ['adminBookingDetails', bookingId]}); }});
+    const assignQuestionnaireMutation = useMutation({
+        mutationFn: (templateId: number) => assignQuestionnaireToBooking({ bookingId: bookingId!, templateId }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminBookingQuestionnaire', bookingId] });
+            setIsChangingQuestionnaire(false);
+            setSelectedTemplateId('');
+        }
+    });
 
     // --- Handlers ---
     const onSave: SubmitHandler<EditableBookingData> = data => updateBookingMutation.mutate(data);
@@ -97,6 +114,14 @@ const AdminBookingDetailsPage: React.FC = () => {
             // Placeholder for attachment upload logic
         }
         sendMessageMutation.mutate({ content: newMessage, ...attachmentData });
+    };
+    const handleAssignQuestionnaire = () => {
+        if (!selectedTemplateId) return;
+
+        if (questionnaireData && !window.confirm('Zmiana szablonu ankiety usunie wszystkie dotychczasowe odpowiedzi klienta. Czy na pewno chcesz kontynuować?')) {
+            return;
+        }
+        assignQuestionnaireMutation.mutate(parseInt(selectedTemplateId, 10));
     };
 
     if (isLoadingBooking) return <div className="flex justify-center items-center py-20"><EngagementRingSpinner /></div>;
@@ -163,6 +188,48 @@ const AdminBookingDetailsPage: React.FC = () => {
                                 </select>
                                 <button onClick={handleAddStage} disabled={!newStageId || addStageMutation.isPending} className="bg-slate-200 font-semibold px-4 py-2 rounded-lg text-sm">Dodaj</button>
                             </div>
+                        </InfoCard>
+                        
+                        <InfoCard title="Ankieta" icon={<QuestionMarkCircleIcon className="w-7 h-7 mr-3 text-indigo-500"/>}>
+                            {isLoadingQuestionnaire ? (
+                                <EngagementRingSpinner />
+                            ) : !questionnaireData && !isChangingQuestionnaire ? (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-slate-500">Do tej rezerwacji nie przypisano żadnej ankiety.</p>
+                                    <div className="flex gap-2 pt-2">
+                                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="flex-grow rounded-md border-slate-300 text-sm">
+                                            <option value="">-- Wybierz szablon --</option>
+                                            {allQuestionnaires?.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}
+                                        </select>
+                                        <button onClick={handleAssignQuestionnaire} disabled={!selectedTemplateId || assignQuestionnaireMutation.isPending} className="bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg text-sm flex items-center justify-center w-28">
+                                            {assignQuestionnaireMutation.isPending ? <EngagementRingSpinner className="w-5 h-5" /> : 'Przypisz'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : isChangingQuestionnaire || !questionnaireData ? (
+                                 <div className="space-y-3">
+                                    <p className="text-sm text-slate-500">{questionnaireData ? 'Wybierz nowy szablon ankiety. Uwaga: spowoduje to usunięcie istniejących odpowiedzi klienta.' : 'Wybierz szablon ankiety do przypisania.'}</p>
+                                    <div className="flex gap-2 pt-2">
+                                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="flex-grow rounded-md border-slate-300 text-sm">
+                                            <option value="">-- Wybierz szablon --</option>
+                                            {allQuestionnaires?.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}
+                                        </select>
+                                        <button onClick={() => setIsChangingQuestionnaire(false)} className="bg-slate-100 font-semibold px-4 py-2 rounded-lg text-sm">Anuluj</button>
+                                        <button onClick={handleAssignQuestionnaire} disabled={!selectedTemplateId || assignQuestionnaireMutation.isPending} className="bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg text-sm flex items-center justify-center w-28">
+                                            {assignQuestionnaireMutation.isPending ? <EngagementRingSpinner className="w-5 h-5" /> : 'Zaktualizuj'}
+                                        </button>
+                                    </div>
+                                 </div>
+                            ) : (
+                                <div>
+                                    <InfoItem label="Przypisany szablon" value={questionnaireData.template.title} />
+                                    <InfoItem label="Status odpowiedzi" value={questionnaireData.response.status === 'submitted' ? 'Wysłana' : 'Oczekuje na wypełnienie'} />
+                                    <div className="mt-4 pt-4 border-t">
+                                        <button onClick={() => setIsChangingQuestionnaire(true)} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">Zmień ankietę</button>
+                                    </div>
+                                </div>
+                            )}
+                            {assignQuestionnaireMutation.isError && <p className="text-red-500 text-xs mt-2">{assignQuestionnaireMutation.error.message}</p>}
                         </InfoCard>
 
                         <InfoCard title="Wiadomości" icon={<ChatBubbleLeftRightIcon className="w-7 h-7 mr-3 text-indigo-500"/>}>
