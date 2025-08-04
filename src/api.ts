@@ -115,6 +115,11 @@ export const sendClientMessage = (content: string) => apiFetch('/api/messages', 
     body: JSON.stringify({ content }),
 });
 
+export const sendGuestInvites = () => apiFetch('/api/my-booking/guests/send-invites', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getClientToken()}` },
+});
+
 export const getClientPanelData = async () => {
     const [bookingData, stages, messages, unreadCount] = await Promise.all([
         getMyBooking(),
