@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  /* Enforce a light color scheme to prevent Chrome's auto-dark theme from overriding styles. */
+  color-scheme: light;
+}
+
 /* Custom utility to hide scrollbars */
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
