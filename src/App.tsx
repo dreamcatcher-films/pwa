@@ -33,13 +33,15 @@ const AdminFilmsPage = lazy(() => import('./pages/AdminFilmsPage.tsx'));
 const RsvpPage = lazy(() => import('./pages/RsvpPage.tsx'));
 const AdminGuestsPage = lazy(() => import('./pages/AdminGuestsPage.tsx'));
 const AdminQuestionnairesPage = lazy(() => import('./pages/AdminQuestionnairesPage.tsx'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage.tsx'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.tsx'));
 
 const App = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const location = useLocation();
 
-    const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt', '/filmy'];
-    const isPublicPage = publicPaths.includes(location.pathname) || location.pathname.startsWith('/rsvp/');
+    const publicPaths = ['/', '/kalkulator', '/galeria', '/kontakt', '/filmy', '/przypomnij-haslo', '/reset-hasla'];
+    const isPublicPage = publicPaths.some(path => location.pathname.startsWith(path)) || location.pathname.startsWith('/rsvp/');
 
 
     return (
@@ -55,6 +57,8 @@ const App = () => {
                             <Route path="/filmy" element={<FilmsPage />} />
                             <Route path="/kontakt" element={<ContactPage />} />
                             <Route path="/logowanie" element={<LoginPage />} />
+                            <Route path="/przypomnij-haslo" element={<ForgotPasswordPage />} />
+                            <Route path="/reset-hasla/:token" element={<ResetPasswordPage />} />
                             <Route path="/panel-klienta" element={<ClientPanelPage />} />
                             <Route path="/admin/logowanie" element={<AdminLoginPage />} />
                             <Route path="/rsvp/:token" element={<RsvpPage />} />
