@@ -1,5 +1,3 @@
-
-
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -255,11 +253,15 @@ app.get('/api/packages', async (req, res) => {
             const [categoriesRes, packagesRes, addonsRes, packageAddonsRes] = await Promise.all([
                 client.query('SELECT * FROM categories ORDER BY id'),
                 client.query('SELECT * FROM packages WHERE is_published = TRUE ORDER BY price ASC'),
-                client.query('SELECT * FROM addons ORDER BY name ASC'),
+                client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY name ASC'),
                 client.query('SELECT * FROM package_addons')
             ]);
 
-            const allAddons = addonsRes.rows;
+            const allAddons = addonsRes.rows.map(a => ({
+                ...a,
+                category_ids: a.category_ids[0] === null ? [] : a.category_ids
+            }));
+
             const packagesWithAddons = packagesRes.rows.map(pkg => {
                 const includedAddonIds = packageAddonsRes.rows
                     .filter(pa => pa.package_id === pkg.id)
