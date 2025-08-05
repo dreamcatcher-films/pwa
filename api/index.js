@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { put, del } from '@vercel/blob';
 import { Resend } from 'resend';
+import crypto from 'crypto';
 
 // --- Environment Variable Validation ---
 const requiredEnvVars = ['DATABASE_URL', 'ADMIN_JWT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY', 'BLOB_READ_WRITE_TOKEN'];
@@ -54,7 +55,7 @@ const runDbSetup = async (shouldDrop = false) => {
 
         if (shouldDrop) {
             console.log("Dropping all tables...");
-             const tables = ['answers', 'questionnaire_responses', 'questions', 'questionnaire_templates', 'guest_groups', 'guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
+             const tables = ['password_reset_tokens', 'answers', 'questionnaire_responses', 'questions', 'questionnaire_templates', 'guest_groups', 'guests', 'films', 'messages', 'booking_stages', 'bookings', 'homepage_instagram', 'homepage_testimonials', 'homepage_slides', 'package_addons', 'addon_categories', 'packages', 'categories', 'app_settings', 'contact_messages', 'production_stages', 'discount_codes', 'addons', 'galleries', 'availability', 'admins', 'access_keys'];
              for (const table of tables) {
                 await client.query(`DROP TABLE IF EXISTS ${table} CASCADE;`);
              }
@@ -99,6 +100,7 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS questions (id SERIAL PRIMARY KEY, template_id INTEGER REFERENCES questionnaire_templates(id) ON DELETE CASCADE, text TEXT NOT NULL, type VARCHAR(50) NOT NULL, sort_order INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS questionnaire_responses (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, template_id INTEGER REFERENCES questionnaire_templates(id) ON DELETE CASCADE, status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS answers (id SERIAL PRIMARY KEY, response_id INTEGER REFERENCES questionnaire_responses(id) ON DELETE CASCADE, question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE, answer_text TEXT, UNIQUE(response_id, question_id));
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (email VARCHAR(255) PRIMARY KEY, token_hash VARCHAR(255) NOT NULL, expires_at TIMESTAMP WITH TIME ZONE NOT NULL);
         `);
         
         // --- Schema Migrations ---
@@ -507,14 +509,14 @@ app.post('/api/public/rsvp/:token', async (req, res) => {
 // --- AUTHENTICATION ROUTES ---
 
 app.post('/api/login', async (req, res) => {
-    const { clientId, password } = req.body;
+    const { loginIdentifier, password } = req.body;
     try {
-        const result = await getPool().query('SELECT id, password_hash FROM bookings WHERE client_id = $1', [clientId]);
-        if (result.rowCount === 0) return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
+        const result = await getPool().query('SELECT id, password_hash FROM bookings WHERE client_id = $1 OR email = $1', [loginIdentifier]);
+        if (result.rowCount === 0) return res.status(401).json({ message: 'Nieprawidłowe dane logowania lub hasło.' });
 
         const user = result.rows[0];
         const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-        if (!isPasswordValid) return res.status(401).json({ message: 'Nieprawidłowy numer klienta lub hasło.' });
+        if (!isPasswordValid) return res.status(401).json({ message: 'Nieprawidłowe dane logowania lub hasło.' });
 
         const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({ token });
@@ -539,6 +541,85 @@ app.post('/api/admin/login', async (req, res) => {
     } catch (error) {
         console.error('Admin login error:', error);
         res.status(500).json({ message: 'Błąd serwera podczas logowania.' });
+    }
+});
+
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    const client = await getPool().connect();
+    try {
+        const bookingRes = await client.query('SELECT id FROM bookings WHERE email = $1', [email]);
+        if (bookingRes.rowCount > 0) {
+            const token = crypto.randomBytes(32).toString('hex');
+            const tokenHash = await bcrypt.hash(token, 10);
+            const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+            await client.query('DELETE FROM password_reset_tokens WHERE email = $1', [email]);
+            await client.query('INSERT INTO password_reset_tokens (email, token_hash, expires_at) VALUES ($1, $2, $3)', [email, tokenHash, expiresAt]);
+            
+            const { senderName, fromEmail } = await getSenderDetails(client);
+            const resetLink = `https://${req.headers.host}/reset-hasla/${token}`;
+
+            await resend.emails.send({
+                from: `${senderName} <${fromEmail}>`,
+                to: email,
+                subject: 'Reset hasła - Dreamcatcher Film',
+                html: `
+                    <h1>Reset hasła</h1>
+                    <p>Otrzymaliśmy prośbę o zresetowanie hasła do Twojego konta w Panelu Klienta.</p>
+                    <p>Kliknij poniższy link, aby ustawić nowe hasło. Link jest ważny przez 30 minut.</p>
+                    <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background-color:#4F46E5;color:white;text-decoration:none;border-radius:5px;">Zresetuj hasło</a>
+                    <p>Jeśli to nie Ty prosiłeś/aś o zmianę, zignoruj tę wiadomość.</p>
+                `
+            });
+        }
+        // Always send a success response to prevent user enumeration
+        res.json({ message: 'Jeśli konto o podanym adresie e-mail istnieje, wysłaliśmy na nie instrukcje.' });
+    } catch (error) {
+        console.error("Forgot password error:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ message: 'Brak tokenu lub hasła.' });
+
+    const client = await getPool().connect();
+    try {
+        await client.query('BEGIN');
+
+        // Clean up expired tokens first
+        await client.query('DELETE FROM password_reset_tokens WHERE expires_at < NOW()');
+
+        const allTokensRes = await client.query('SELECT email, token_hash FROM password_reset_tokens');
+        let validTokenEntry = null;
+
+        for (const row of allTokensRes.rows) {
+            if (await bcrypt.compare(token, row.token_hash)) {
+                validTokenEntry = row;
+                break;
+            }
+        }
+
+        if (!validTokenEntry) {
+            return res.status(400).json({ message: 'Token jest nieprawidłowy lub wygasł.' });
+        }
+
+        const newPasswordHash = await bcrypt.hash(password, 10);
+        await client.query('UPDATE bookings SET password_hash = $1 WHERE email = $2', [newPasswordHash, validTokenEntry.email]);
+        await client.query('DELETE FROM password_reset_tokens WHERE email = $1', [validTokenEntry.email]);
+
+        await client.query('COMMIT');
+        res.json({ message: 'Hasło zostało pomyślnie zresetowane.' });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Reset password error:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
+    } finally {
+        client.release();
     }
 });
 
