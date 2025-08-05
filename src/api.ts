@@ -1,6 +1,5 @@
 
 
-
 // --- HELPER FUNCTIONS ---
 
 const getAdminToken = () => localStorage.getItem('adminAuthToken');
@@ -65,7 +64,7 @@ export const getFilms = () => apiFetch('/api/films');
 
 // --- AUTHENTICATION API ---
 
-export const loginClient = (credentials: { clientId: string, password: string }) => apiFetch('/api/login', {
+export const loginClient = (credentials: { loginIdentifier: string, password: string }) => apiFetch('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(credentials),
@@ -75,6 +74,18 @@ export const loginAdmin = (credentials: { email: string, password: string }) => 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(credentials),
+});
+
+export const forgotPassword = (email: string) => apiFetch('/api/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+});
+
+export const resetPassword = ({ token, password }: { token: string; password: string }) => apiFetch('/api/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
 });
 
 
