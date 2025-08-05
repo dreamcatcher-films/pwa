@@ -13,6 +13,7 @@ interface Addon {
     id: number;
     name: string;
     price: number;
+    category_ids?: number[];
 }
 
 interface PackageAddon extends Addon {
@@ -452,10 +453,24 @@ const CalculatorPage: FC = () => {
     };
 
     const getAvailableAddons = (): PackageAddon[] => {
-        if (!selectedPackage || !offerData) return [];
+        if (!selectedPackage || !offerData || !selectedCategoryId) return [];
         const packageItemIds = new Set(selectedPackage.included.map(i => i.id));
+        
         return offerData.allAddons
-            .filter(addon => !packageItemIds.has(addon.id))
+            .filter(addon => {
+                // Filter out items already in the package
+                if (packageItemIds.has(addon.id)) {
+                    return false;
+                }
+                
+                // If an addon has no assigned categories, it's available for all.
+                if (!addon.category_ids || addon.category_ids.length === 0) {
+                    return true;
+                }
+                
+                // If it has assigned categories, check if the current category is one of them.
+                return addon.category_ids.includes(selectedCategoryId);
+            })
             .map(addon => ({ ...addon, locked: false }));
     };
     
