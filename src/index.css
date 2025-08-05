@@ -18,11 +18,10 @@ html {
 }
 
 /* --- New Background Styles --- */
-body.bg-paper {
+body {
   background-color: #F5F3ED; /* Fallback color */
   /* This is a subtle paper texture pattern */
   background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAEASURBVGhD7dm/SgNBFAbgP8SjiHhCwcYiFvZpL5BfYG9jbZBCFEFEET+gU9gYCFaI/VjY2chCTy8/gY1kU3T3gEu2l52F/bDLzs7b92Y3OzsxgCgK3cCAgWJGo8TMEcM4hJiN0Wy0sW21aGOyV2+2Yx+N0U/GZtJ/BqPjaH83D+do/x+E/NPg4OQ4nN4ch4PTMhycb8Xg42oMjm7H4OzmOBxej8fh5WwMjpajsXN0Fx3N72g8PpbD4a0EDg/ncHh/AoeX8zh8l8Dh+wwOz2dwuJ/A4fUuDu/ncLg/gcP3mTi8l8Ph+wwOX2VyOJ7D4fpMDp9lc3g+n8P1lZx+l8vhgQMER4kZI4ZxCDEbp5X85A+Z/1k2/gAAAABJRU5ErkJggg==');
-  /* `position: relative` was removed to fix stacking context issues with the fixed-position side menu. */
 }
 
 /* Decorative leaves were removed as per user request. */
