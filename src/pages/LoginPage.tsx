@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { EngagementRingSpinner, LockClosedIcon, UserIcon } from '../components/Icons.tsx';
@@ -7,7 +7,7 @@ import { InputField } from '../components/FormControls.tsx';
 import { loginClient } from '../api.ts';
 
 type FormValues = {
-    clientId: string;
+    loginIdentifier: string;
     password: string;
 };
 
@@ -43,11 +43,11 @@ const LoginPage: React.FC = () => {
                     )}
                     
                     <InputField
-                        id="clientId"
-                        label="Numer Klienta"
-                        placeholder="np. 1234"
-                        register={register('clientId', { required: 'Numer klienta jest wymagany' })}
-                        error={errors.clientId}
+                        id="loginIdentifier"
+                        label="Numer Klienta lub E-mail"
+                        placeholder="np. 1234 lub jan.kowalski@example.com"
+                        register={register('loginIdentifier', { required: 'To pole jest wymagane' })}
+                        error={errors.loginIdentifier}
                         icon={<UserIcon className="h-5 w-5 text-slate-400" />}
                     />
                     
@@ -61,6 +61,12 @@ const LoginPage: React.FC = () => {
                         icon={<LockClosedIcon className="h-5 w-5 text-slate-400" />}
                     />
 
+                    <div className="flex items-center justify-between">
+                        <Link to="/przypomnij-haslo" className="text-sm font-medium text-indigo-600 hover:underline">
+                            Zapomniałeś/aś hasła?
+                        </Link>
+                    </div>
+
                     <button
                         type="submit"
                         disabled={loginMutation.isPending}
@@ -70,7 +76,7 @@ const LoginPage: React.FC = () => {
                     </button>
                 </form>
                  <p className="text-center text-sm text-slate-500 mt-6">
-                    Nie pamiętasz danych? <a href="/kontakt" className="font-medium text-indigo-600 hover:underline">Skontaktuj się z nami</a>.
+                    Nie masz jeszcze konta? <Link to="/kalkulator" className="font-medium text-indigo-600 hover:underline">Stwórz swój pakiet i zarezerwuj termin</Link>.
                 </p>
             </div>
         </div>
