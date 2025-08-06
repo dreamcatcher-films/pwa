@@ -69,14 +69,14 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS production_stages (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS contact_messages (id SERIAL PRIMARY KEY, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, phone VARCHAR(255), subject TEXT NOT NULL, message TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS app_settings (key VARCHAR(255) PRIMARY KEY, value TEXT);
-            CREATE TABLE IF NOT EXISTS categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, description TEXT, icon_name VARCHAR(255));
-            CREATE TABLE IF NOT EXISTS packages (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price NUMERIC(10, 2) NOT NULL, category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL, is_published BOOLEAN DEFAULT FALSE, rich_description TEXT, rich_description_image_url TEXT);
-            CREATE TABLE IF NOT EXISTS package_addons (package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE, addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE, PRIMARY KEY (package_id, addon_id));
+            CREATE TABLE IF NOT EXISTS categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, description TEXT, icon_name VARCHAR(255), label VARCHAR(50));
+            CREATE TABLE IF NOT EXISTS packages (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price NUMERIC(10, 2) NOT NULL, category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL, is_published BOOLEAN DEFAULT FALSE, rich_description TEXT, rich_description_image_url TEXT, label VARCHAR(50), deposit_amount NUMERIC(10, 2) DEFAULT 0.00);
+            CREATE TABLE IF NOT EXISTS package_addons (package_id INTEGER REFERENCES packages(id) ON DELETE CASCADE, addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE, sort_order INTEGER DEFAULT 0, PRIMARY KEY (package_id, addon_id));
             CREATE TABLE IF NOT EXISTS addon_categories (addon_id INTEGER REFERENCES addons(id) ON DELETE CASCADE, category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE, PRIMARY KEY (addon_id, category_id));
             CREATE TABLE IF NOT EXISTS homepage_slides (id SERIAL PRIMARY KEY, image_url TEXT NOT NULL, title VARCHAR(255), subtitle VARCHAR(255), button_text VARCHAR(255), button_link VARCHAR(255), sort_order INTEGER DEFAULT 0);
             CREATE TABLE IF NOT EXISTS homepage_testimonials (id SERIAL PRIMARY KEY, author VARCHAR(255) NOT NULL, content TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS homepage_instagram (id SERIAL PRIMARY KEY, post_url TEXT NOT NULL, image_url TEXT NOT NULL, caption TEXT, sort_order INTEGER DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, invite_message TEXT, invite_image_url TEXT, contract_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY, access_key VARCHAR(4) REFERENCES access_keys(key), client_id VARCHAR(4) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, package_name VARCHAR(255) NOT NULL, total_price NUMERIC(10, 2) NOT NULL, selected_items JSONB, bride_name VARCHAR(255) NOT NULL, groom_name VARCHAR(255) NOT NULL, wedding_date DATE NOT NULL, bride_address TEXT, groom_address TEXT, church_location TEXT, venue_location TEXT, schedule TEXT, email VARCHAR(255) NOT NULL, phone_number VARCHAR(255), additional_info TEXT, discount_code VARCHAR(255), payment_status VARCHAR(50) DEFAULT 'pending', amount_paid NUMERIC(10, 2) DEFAULT 0.00, couple_photo_url TEXT, invite_message TEXT, invite_image_url TEXT, contract_url TEXT, deposit_amount NUMERIC(10, 2) DEFAULT 0.00, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS booking_stages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, stage_id INTEGER REFERENCES production_stages(id), status VARCHAR(50) DEFAULT 'pending', completed_at TIMESTAMP WITH TIME ZONE);
             CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE, sender VARCHAR(50) NOT NULL, content TEXT, attachment_url TEXT, attachment_type VARCHAR(100), is_read_by_admin BOOLEAN DEFAULT FALSE, is_read_by_client BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS films (id SERIAL PRIMARY KEY, youtube_url TEXT NOT NULL, title VARCHAR(255) NOT NULL, description TEXT, thumbnail_url TEXT, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -110,6 +110,14 @@ const runDbSetup = async (shouldDrop = false) => {
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS allowed_companions INTEGER DEFAULT 0 NOT NULL;');
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS companion_status JSONB;');
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS contract_url TEXT;');
+        
+        // New columns for offer improvements
+        await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS label VARCHAR(50);');
+        await client.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS label VARCHAR(50);');
+        await client.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
+        await client.query('ALTER TABLE package_addons ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;');
+        await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
+
         console.log('Schema checks complete.');
 
         const adminRes = await client.query('SELECT 1 FROM admins LIMIT 1');
@@ -250,24 +258,27 @@ app.get('/api/packages', async (req, res) => {
     try {
         const client = await getPool().connect();
         try {
-            const [categoriesRes, packagesRes, addonsRes, packageAddonsRes] = await Promise.all([
+            const [categoriesRes, packagesRes, addonsRes] = await Promise.all([
                 client.query('SELECT * FROM categories ORDER BY id'),
                 client.query('SELECT * FROM packages WHERE is_published = TRUE ORDER BY price ASC'),
-                client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY name ASC'),
-                client.query('SELECT * FROM package_addons')
+                client.query(`
+                    SELECT pa.package_id, a.* 
+                    FROM package_addons pa 
+                    JOIN addons a ON pa.addon_id = a.id 
+                    ORDER BY pa.sort_order ASC
+                `),
             ]);
 
-            const allAddons = addonsRes.rows.map(a => ({
+            const allAddonsRes = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY name ASC');
+            
+            const allAddons = allAddonsRes.rows.map(a => ({
                 ...a,
                 category_ids: a.category_ids[0] === null ? [] : a.category_ids
             }));
-
+            
             const packagesWithAddons = packagesRes.rows.map(pkg => {
-                const includedAddonIds = packageAddonsRes.rows
-                    .filter(pa => pa.package_id === pkg.id)
-                    .map(pa => pa.addon_id);
-                const included = allAddons
-                    .filter(addon => includedAddonIds.includes(addon.id))
+                const included = addonsRes.rows
+                    .filter(addon => addon.package_id === pkg.id)
                     .map(addon => ({ ...addon, locked: true }));
                 return { ...pkg, included };
             });
@@ -275,7 +286,7 @@ app.get('/api/packages', async (req, res) => {
             res.json({
                 categories: categoriesRes.rows,
                 packages: packagesWithAddons,
-                allAddons: allAddons
+                allAddons: allAddons,
             });
         } finally {
             client.release();
@@ -348,7 +359,7 @@ app.post('/api/bookings', async (req, res) => {
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const { accessKey, packageName, totalPrice, selectedItems, brideName, groomName, weddingDate, brideAddress, groomAddress, churchLocation, venueLocation, schedule, email, phoneNumber, additionalInfo, password, discountCode } = req.body;
+        const { accessKey, packageName, totalPrice, selectedItems, brideName, groomName, weddingDate, brideAddress, groomAddress, churchLocation, venueLocation, schedule, email, phoneNumber, additionalInfo, password, discountCode, depositAmount } = req.body;
 
         const keyResult = await client.query('SELECT * FROM access_keys WHERE key = $1', [accessKey]);
         if (keyResult.rowCount === 0) return res.status(400).json({ message: 'Nieprawidłowy klucz dostępu.' });
@@ -364,8 +375,8 @@ app.post('/api/bookings', async (req, res) => {
         const passwordHash = await bcrypt.hash(password, 10);
 
         const bookingResult = await client.query(
-            'INSERT INTO bookings (access_key, client_id, password_hash, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id',
-            [accessKey, clientId, passwordHash, packageName, totalPrice, JSON.stringify(selectedItems), brideName, groomName, weddingDate, brideAddress, groomAddress, churchLocation, venueLocation, schedule, email, phoneNumber, additionalInfo, discountCode]
+            'INSERT INTO bookings (access_key, client_id, password_hash, package_name, total_price, selected_items, bride_name, groom_name, wedding_date, bride_address, groom_address, church_location, venue_location, schedule, email, phone_number, additional_info, discount_code, deposit_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id',
+            [accessKey, clientId, passwordHash, packageName, totalPrice, JSON.stringify(selectedItems), brideName, groomName, weddingDate, brideAddress, groomAddress, churchLocation, venueLocation, schedule, email, phoneNumber, additionalInfo, discountCode, depositAmount]
         );
         const bookingId = bookingResult.rows[0].id;
 
@@ -1680,7 +1691,7 @@ app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
                 client.query('SELECT p.*, c.name as category_name FROM packages p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.name'),
                 client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id GROUP BY a.id ORDER BY a.name'),
                 client.query('SELECT * FROM categories ORDER BY name'),
-                client.query('SELECT * FROM package_addons'),
+                client.query('SELECT * FROM package_addons ORDER BY sort_order ASC'),
             ]);
 
             const packagesWithAddons = packagesRes.rows.map(pkg => ({
@@ -1703,16 +1714,16 @@ app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
 
 // Categories
 app.post('/api/admin/categories', authenticateAdmin, async (req, res) => {
-    const { name, description, icon_name } = req.body;
+    const { name, description, icon_name, label } = req.body;
     try {
-        const result = await getPool().query('INSERT INTO categories (name, description, icon_name) VALUES ($1, $2, $3) RETURNING *', [name, description, icon_name]);
+        const result = await getPool().query('INSERT INTO categories (name, description, icon_name, label) VALUES ($1, $2, $3, $4) RETURNING *', [name, description, icon_name, label]);
         res.status(201).json(result.rows[0]);
     } catch (err) { res.status(500).json({ message: 'Błąd tworzenia kategorii.' }); }
 });
 app.patch('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
-    const { name, description, icon_name } = req.body;
+    const { name, description, icon_name, label } = req.body;
     try {
-        const result = await getPool().query('UPDATE categories SET name=$1, description=$2, icon_name=$3 WHERE id=$4 RETURNING *', [name, description, icon_name, req.params.id]);
+        const result = await getPool().query('UPDATE categories SET name=$1, description=$2, icon_name=$3, label=$4 WHERE id=$5 RETURNING *', [name, description, icon_name, label, req.params.id]);
         res.json(result.rows[0]);
     } catch (err) { res.status(500).json({ message: 'Błąd aktualizacji kategorii.' }); }
 });
@@ -1733,7 +1744,7 @@ app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
         const addonId = addonRes.rows[0].id;
         if (category_ids && category_ids.length > 0) {
             for (const catId of category_ids) {
-                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, catId]);
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [addonId, parseInt(catId, 10)]);
             }
         }
         await client.query('COMMIT');
@@ -1741,7 +1752,8 @@ app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
         res.status(201).json(newAddon.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd tworzenia dodatku.' });
+        console.error("Error creating addon:", err);
+        res.status(500).json({ message: 'Błąd tworzenia dodatku.', details: err.message });
     } finally {
         client.release();
     }
@@ -1755,7 +1767,7 @@ app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
         await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [req.params.id]);
         if (category_ids && category_ids.length > 0) {
             for (const catId of category_ids) {
-                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [req.params.id, catId]);
+                await client.query('INSERT INTO addon_categories (addon_id, category_id) VALUES ($1, $2)', [req.params.id, parseInt(catId, 10)]);
             }
         }
         await client.query('COMMIT');
@@ -1763,7 +1775,8 @@ app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
         res.json(updatedAddon.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(500).json({ message: 'Błąd aktualizacji dodatku.' });
+        console.error("Error updating addon:", err);
+        res.status(500).json({ message: 'Błąd aktualizacji dodatku.', details: err.message });
     } finally {
         client.release();
     }
@@ -1777,15 +1790,15 @@ app.delete('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
 
 // Packages
 app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
-    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons, label, deposit_amount } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const pkgRes = await client.query('INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [name, description, price, category_id, is_published, rich_description, rich_description_image_url]);
+        const pkgRes = await client.query('INSERT INTO packages (name, description, price, category_id, is_published, rich_description, rich_description_image_url, label, deposit_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id', [name, description, price, category_id, is_published, rich_description, rich_description_image_url, label, deposit_amount]);
         const packageId = pkgRes.rows[0].id;
         if (addons && addons.length > 0) {
-            for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [packageId, addon.id]);
+            for (let i = 0; i < addons.length; i++) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id, sort_order) VALUES ($1, $2, $3)', [packageId, addons[i].id, i]);
             }
         }
         await client.query('COMMIT');
@@ -1798,15 +1811,15 @@ app.post('/api/admin/packages', authenticateAdmin, async (req, res) => {
     }
 });
 app.patch('/api/admin/packages/:id', authenticateAdmin, async (req, res) => {
-    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons } = req.body;
+    const { name, description, price, category_id, is_published, rich_description, rich_description_image_url, addons, label, deposit_amount } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        await client.query('UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7 WHERE id=$8', [name, description, price, category_id, is_published, rich_description, rich_description_image_url, req.params.id]);
+        await client.query('UPDATE packages SET name=$1, description=$2, price=$3, category_id=$4, is_published=$5, rich_description=$6, rich_description_image_url=$7, label=$8, deposit_amount=$9 WHERE id=$10', [name, description, price, category_id, is_published, rich_description, rich_description_image_url, label, deposit_amount, req.params.id]);
         await client.query('DELETE FROM package_addons WHERE package_id=$1', [req.params.id]);
         if (addons && addons.length > 0) {
-            for (const addon of addons) {
-                await client.query('INSERT INTO package_addons (package_id, addon_id) VALUES ($1, $2)', [req.params.id, addon.id]);
+            for (let i = 0; i < addons.length; i++) {
+                await client.query('INSERT INTO package_addons (package_id, addon_id, sort_order) VALUES ($1, $2, $3)', [req.params.id, addons[i].id, i]);
             }
         }
         await client.query('COMMIT');
@@ -2137,7 +2150,7 @@ app.patch('/api/admin/questionnaires/:id', authenticateAdmin, async (req, res) =
         if (is_default) {
             await client.query('UPDATE questionnaire_templates SET is_default = FALSE');
         }
-        const result = await client.query('UPDATE questionnaire_templates SET title=$1, is_default=$2 WHERE id=$3 RETURNING *', [title, is_default, req.params.id]);
+        const result = await getPool().query('UPDATE questionnaire_templates SET title=$1, is_default=$2 WHERE id=$3 RETURNING *', [title, is_default, req.params.id]);
         await client.query('COMMIT');
         res.json(result.rows[0]);
     } catch (err) {
