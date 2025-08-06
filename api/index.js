@@ -1694,23 +1694,50 @@ app.get('/api/admin/offer-data', authenticateAdmin, async (req, res) => {
                 client.query('SELECT * FROM package_addons ORDER BY sort_order ASC'),
             ]);
 
+            // Rigorously parse all IDs and numeric types to ensure they are numbers. The pg driver can return them as strings.
+            const parsedCategories = categoriesRes.rows.map(c => ({ 
+                ...c, 
+                id: parseInt(c.id, 10) 
+            }));
+
+            const parsedAddons = addonsRes.rows.map(a => ({
+                ...a,
+                id: parseInt(a.id, 10),
+                price: parseFloat(a.price),
+                category_ids: a.category_ids[0] === null ? [] : a.category_ids.map(id => parseInt(id, 10)),
+            }));
+
+            const parsedPackageAddons = packageAddonsRes.rows.map(pa => ({
+                ...pa,
+                package_id: parseInt(pa.package_id, 10),
+                addon_id: parseInt(pa.addon_id, 10),
+            }));
+
             const packagesWithAddons = packagesRes.rows.map(pkg => ({
                 ...pkg,
-                addons: packageAddonsRes.rows.filter(pa => pa.package_id === pkg.id).map(pa => ({ id: pa.addon_id }))
+                id: parseInt(pkg.id, 10),
+                price: parseFloat(pkg.price),
+                deposit_amount: parseFloat(pkg.deposit_amount),
+                category_id: pkg.category_id ? parseInt(pkg.category_id, 10) : null,
+                addons: parsedPackageAddons
+                    .filter(pa => pa.package_id === parseInt(pkg.id, 10))
+                    .map(pa => ({ id: pa.addon_id }))
             }));
 
             res.json({
                 packages: packagesWithAddons,
-                addons: addonsRes.rows.map(a => ({...a, category_ids: a.category_ids[0] === null ? [] : a.category_ids })),
-                categories: categoriesRes.rows
+                addons: parsedAddons,
+                categories: parsedCategories
             });
         } finally {
             client.release();
         }
     } catch (err) {
+        console.error("Error fetching offer data:", err);
         res.status(500).json({ message: 'Błąd pobierania danych oferty.' });
     }
 });
+
 
 // Categories
 app.post('/api/admin/categories', authenticateAdmin, async (req, res) => {
@@ -1748,8 +1775,15 @@ app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
             }
         }
         await client.query('COMMIT');
-        const newAddon = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [addonId]);
-        res.status(201).json(newAddon.rows[0]);
+        const newAddonQuery = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [addonId]);
+        const result = newAddonQuery.rows[0];
+        const parsedResult = {
+            ...result,
+            id: parseInt(result.id, 10),
+            price: parseFloat(result.price),
+            category_ids: result.category_ids[0] === null ? [] : result.category_ids.map(id => parseInt(id, 10)),
+        };
+        res.status(201).json(parsedResult);
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error creating addon:", err);
@@ -1771,8 +1805,15 @@ app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
             }
         }
         await client.query('COMMIT');
-        const updatedAddon = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [req.params.id]);
-        res.json(updatedAddon.rows[0]);
+        const updatedAddonQuery = await client.query('SELECT a.*, array_agg(ac.category_id) as category_ids FROM addons a LEFT JOIN addon_categories ac ON a.id = ac.addon_id WHERE a.id = $1 GROUP BY a.id', [req.params.id]);
+        const result = updatedAddonQuery.rows[0];
+        const parsedResult = {
+            ...result,
+            id: parseInt(result.id, 10),
+            price: parseFloat(result.price),
+            category_ids: result.category_ids[0] === null ? [] : result.category_ids.map(id => parseInt(id, 10)),
+        };
+        res.json(parsedResult);
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error updating addon:", err);
@@ -2150,7 +2191,7 @@ app.patch('/api/admin/questionnaires/:id', authenticateAdmin, async (req, res) =
         if (is_default) {
             await client.query('UPDATE questionnaire_templates SET is_default = FALSE');
         }
-        const result = await getPool().query('UPDATE questionnaire_templates SET title=$1, is_default=$2 WHERE id=$3 RETURNING *', [title, is_default, req.params.id]);
+        const result = await client.query('UPDATE questionnaire_templates SET title=$1, is_default=$2 WHERE id=$3 RETURNING *', [title, is_default, req.params.id]);
         await client.query('COMMIT');
         res.json(result.rows[0]);
     } catch (err) {
