@@ -426,7 +426,7 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
 // --- MAIN CREATOR APP ---
 const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
-const CalculatorPage: FC = () => {
+export const CalculatorPage: FC = () => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -881,5 +881,3 @@ const CalculatorPage: FC = () => {
         </div>
     );
 };
-
-export default CalculatorPage;
