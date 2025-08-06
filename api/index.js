@@ -111,12 +111,30 @@ const runDbSetup = async (shouldDrop = false) => {
         await client.query('ALTER TABLE guests ADD COLUMN IF NOT EXISTS companion_status JSONB;');
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS contract_url TEXT;');
         
-        // New columns for offer improvements
         await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS label VARCHAR(50);');
         await client.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS label VARCHAR(50);');
         await client.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
         await client.query('ALTER TABLE package_addons ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;');
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
+
+        // FIX: Recreate the foreign key for addon_categories to ensure it points to the correct 'categories' table.
+        // An old schema version might have incorrectly pointed to 'package_categories', causing foreign key violations.
+        try {
+            console.log('Attempting to fix addon_categories foreign key constraint...');
+            await client.query('ALTER TABLE addon_categories DROP CONSTRAINT IF EXISTS addon_categories_category_id_fkey;');
+            await client.query(`
+                ALTER TABLE addon_categories 
+                ADD CONSTRAINT addon_categories_category_id_fkey 
+                FOREIGN KEY (category_id) 
+                REFERENCES categories (id) 
+                ON DELETE CASCADE;
+            `);
+             console.log('Constraint addon_categories_category_id_fkey fixed successfully.');
+        } catch (constraintError) {
+             // This might fail if the constraint already exists and is correct, or if there's invalid data.
+             // We can log this but continue, as it might not be a fatal error for everyone.
+             console.warn('Could not recreate addon_categories foreign key. This may be okay if it already exists correctly.', constraintError.message);
+        }
 
         console.log('Schema checks complete.');
 
