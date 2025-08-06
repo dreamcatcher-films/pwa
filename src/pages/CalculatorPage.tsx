@@ -173,7 +173,7 @@ function PackageCard({ packageInfo, onSelect }: PackageCardProps) {
 interface CustomizationListItemProps {
     item: PackageAddon;
     isSelected: boolean;
-    onToggle?: (itemId: number) => void;
+    onToggle?: (item: PackageAddon) => void;
     value?: number;
     onValueChange?: (itemId: number, value: number) => void;
 }
@@ -201,8 +201,8 @@ function CustomizationListItem({ item, isSelected, onToggle, value, onValueChang
                 <div className="flex items-center">
                     {item.locked ? (
                         <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
-                    ) : type === 'static' && onToggle ? (
-                        <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
+                    ) : onToggle ? (
+                        <button onClick={() => onToggle(item)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
                             {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
                         </button>
                     ) : (
@@ -553,14 +553,40 @@ function CalculatorPage() {
         setStep('booked');
     };
 
-    const handleItemToggle = (itemId: number) => {
-        setCustomizedItems(prev =>
-            prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
-        );
+    const handleToggleAddon = (item: Addon) => {
+        if (item.type === 'static' || !item.type) {
+            setCustomizedItems(prev =>
+                prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+            );
+        } else {
+            setDynamicAddonValues(prev => {
+                const newValues = { ...prev };
+                if (newValues.hasOwnProperty(item.id)) {
+                    delete newValues[item.id];
+                } else {
+                    if (item.type === 'quantity') {
+                        newValues[item.id] = 1;
+                    } else if (item.type === 'range' && item.config.includedAmount !== undefined) {
+                        newValues[item.id] = item.config.includedAmount;
+                    }
+                }
+                return newValues;
+            });
+        }
     };
     
     const handleDynamicValueChange = (itemId: number, value: number) => {
-        setDynamicAddonValues(prev => ({...prev, [itemId]: value}));
+        setDynamicAddonValues(prev => {
+            const newValues = { ...prev };
+            const item = offerData?.allAddons.find(a => a.id === itemId);
+
+            if (item?.type === 'quantity' && value <= 0) {
+                delete newValues[itemId];
+            } else {
+                newValues[itemId] = value;
+            }
+            return newValues;
+        });
     };
 
     const getAvailableAddons = (): PackageAddon[] => {
@@ -780,7 +806,7 @@ function CalculatorPage() {
                                                 key={addon.id} 
                                                 item={addon} 
                                                 isSelected={customizedItems.includes(addon.id) || dynamicAddonValues.hasOwnProperty(addon.id)} 
-                                                onToggle={handleItemToggle}
+                                                onToggle={handleToggleAddon}
                                                 value={dynamicAddonValues[addon.id]}
                                                 onValueChange={handleDynamicValueChange}
                                              />
