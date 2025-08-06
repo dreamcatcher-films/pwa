@@ -64,7 +64,7 @@ const runDbSetup = async (shouldDrop = false) => {
             CREATE TABLE IF NOT EXISTS admins (id SERIAL PRIMARY KEY, email VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, notification_email VARCHAR(255), created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS availability (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, description TEXT, start_time TIMESTAMP WITH TIME ZONE NOT NULL, end_time TIMESTAMP WITH TIME ZONE NOT NULL, is_all_day BOOLEAN DEFAULT FALSE, resource JSONB);
             CREATE TABLE IF NOT EXISTS galleries (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, description TEXT, image_url TEXT NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-            CREATE TABLE IF NOT EXISTS addons (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, price NUMERIC(10, 2) NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS addons (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, price NUMERIC(10, 2) NOT NULL, type VARCHAR(50) DEFAULT 'static' NOT NULL, config JSONB, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS discount_codes (id SERIAL PRIMARY KEY, code VARCHAR(255) UNIQUE NOT NULL, type VARCHAR(50) NOT NULL, value NUMERIC(10, 2) NOT NULL, usage_limit INTEGER, times_used INTEGER DEFAULT 0, expires_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS production_stages (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS contact_messages (id SERIAL PRIMARY KEY, first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, phone VARCHAR(255), subject TEXT NOT NULL, message TEXT NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -116,6 +116,9 @@ const runDbSetup = async (shouldDrop = false) => {
         await client.query('ALTER TABLE packages ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
         await client.query('ALTER TABLE package_addons ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;');
         await client.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10, 2) DEFAULT 0.00;');
+        
+        await client.query("ALTER TABLE addons ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'static' NOT NULL;");
+        await client.query('ALTER TABLE addons ADD COLUMN IF NOT EXISTS config JSONB;');
 
         // FIX: Recreate the foreign key for addon_categories to ensure it points to the correct 'categories' table.
         // An old schema version might have incorrectly pointed to 'package_categories', causing foreign key violations.
@@ -1781,11 +1784,11 @@ app.delete('/api/admin/categories/:id', authenticateAdmin, async (req, res) => {
 
 // Addons
 app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
-    const { name, price, category_ids } = req.body;
+    const { name, price, category_ids, type, config } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        const addonRes = await client.query('INSERT INTO addons (name, price) VALUES ($1, $2) RETURNING id', [name, price]);
+        const addonRes = await client.query('INSERT INTO addons (name, price, type, config) VALUES ($1, $2, $3, $4) RETURNING id', [name, price, type, config]);
         const addonId = addonRes.rows[0].id;
         if (category_ids && category_ids.length > 0) {
             for (const catId of category_ids) {
@@ -1811,11 +1814,11 @@ app.post('/api/admin/addons', authenticateAdmin, async (req, res) => {
     }
 });
 app.patch('/api/admin/addons/:id', authenticateAdmin, async (req, res) => {
-    const { name, price, category_ids } = req.body;
+    const { name, price, category_ids, type, config } = req.body;
     const client = await getPool().connect();
     try {
         await client.query('BEGIN');
-        await client.query('UPDATE addons SET name=$1, price=$2 WHERE id=$3', [name, price, req.params.id]);
+        await client.query('UPDATE addons SET name=$1, price=$2, type=$3, config=$4 WHERE id=$5', [name, price, type, config, req.params.id]);
         await client.query('DELETE FROM addon_categories WHERE addon_id = $1', [req.params.id]);
         if (category_ids && category_ids.length > 0) {
             for (const catId of category_ids) {
