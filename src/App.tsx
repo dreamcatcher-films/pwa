@@ -3,7 +3,7 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage.tsx';
-import CalculatorPage from './pages/CalculatorPage.tsx';
+import { CalculatorPage } from './pages/CalculatorPage.tsx';
 import Header from './components/Header.tsx';
 import SideMenu from './components/SideMenu.tsx';
 import LoginPage from './pages/LoginPage.tsx';
