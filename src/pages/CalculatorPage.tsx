@@ -68,94 +68,108 @@ const iconMap: { [key: string]: React.ReactNode } = {
     'default': <PhotoIcon className="w-8 h-8 text-indigo-500" />
 };
 
-const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentStep, steps }) => (
-    <nav aria-label="Progress">
-        <ol role="list" className="flex items-center">
-            {steps.map((step, stepIdx) => (
-                <li key={step} className={`relative ${stepIdx !== steps.length - 1 ? 'pr-8 sm:pr-20' : ''}`}>
-                    {stepIdx < currentStep ? (
-                        <>
-                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                                <div className="h-0.5 w-full bg-indigo-600" />
-                            </div>
-                            <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600">
-                                <CheckCircleIcon className="h-5 w-5 text-white" />
-                            </div>
-                            <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
-                        </>
-                    ) : stepIdx === currentStep ? (
-                        <>
-                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                                <div className="h-0.5 w-full bg-slate-200" />
-                            </div>
-                            <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-indigo-600 bg-white">
-                                <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />
-                            </div>
-                             <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
-                        </>
-                    ) : (
-                        <>
-                             <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                                <div className="h-0.5 w-full bg-slate-200" />
-                            </div>
-                            <div className="group relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
-                                <span className="h-2.5 w-2.5 rounded-full bg-transparent" />
-                            </div>
-                             <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-slate-500">{step}</span>
-                        </>
-                    )}
-                </li>
-            ))}
-        </ol>
-    </nav>
-);
+interface StepIndicatorProps {
+    currentStep: number;
+    steps: string[];
+}
+function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
+    return (
+        <nav aria-label="Progress">
+            <ol role="list" className="flex items-center">
+                {steps.map((step, stepIdx) => (
+                    <li key={step} className={`relative ${stepIdx !== steps.length - 1 ? 'pr-8 sm:pr-20' : ''}`}>
+                        {stepIdx < currentStep ? (
+                            <>
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="h-0.5 w-full bg-indigo-600" />
+                                </div>
+                                <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600">
+                                    <CheckCircleIcon className="h-5 w-5 text-white" />
+                                </div>
+                                <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
+                            </>
+                        ) : stepIdx === currentStep ? (
+                            <>
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="h-0.5 w-full bg-slate-200" />
+                                </div>
+                                <div className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-indigo-600 bg-white">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />
+                                </div>
+                                <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-indigo-600">{step}</span>
+                            </>
+                        ) : (
+                            <>
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="h-0.5 w-full bg-slate-200" />
+                                </div>
+                                <div className="group relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 bg-white">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-transparent" />
+                                </div>
+                                <span className="absolute -bottom-7 left-4 -translate-x-1/2 whitespace-nowrap text-center text-xs font-semibold text-slate-500">{step}</span>
+                            </>
+                        )}
+                    </li>
+                ))}
+            </ol>
+        </nav>
+    );
+}
 
-const ServiceTypeCard: FC<{ category: Category; onClick: () => void }> = ({ category, onClick }) => (
-    <div
-        onClick={onClick}
-        className="group relative cursor-pointer rounded-2xl border-2 border-slate-200 bg-white p-8 text-center transition-all duration-300 hover:border-indigo-400 hover:shadow-xl hover:-translate-y-2"
-    >
-        {category.label && (
-            <div className="absolute top-4 right-4 bg-green-100 text-green-800 text-xs font-bold px-2.5 py-1 rounded-full">{category.label}</div>
-        )}
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-indigo-100">
-            {iconMap[category.icon_name] || iconMap.default}
+interface ServiceTypeCardProps {
+    category: Category;
+    onClick: () => void;
+}
+function ServiceTypeCard({ category, onClick }: ServiceTypeCardProps) {
+    return (
+        <div
+            onClick={onClick}
+            className="group relative cursor-pointer rounded-2xl border-2 border-slate-200 bg-white p-8 text-center transition-all duration-300 hover:border-indigo-400 hover:shadow-xl hover:-translate-y-2"
+        >
+            {category.label && (
+                <div className="absolute top-4 right-4 bg-green-100 text-green-800 text-xs font-bold px-2.5 py-1 rounded-full">{category.label}</div>
+            )}
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-indigo-100">
+                {iconMap[category.icon_name] || iconMap.default}
+            </div>
+            <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{category.name}</h3>
         </div>
-        <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{category.name}</h3>
-    </div>
-);
+    );
+}
 
 interface PackageCardProps {
     packageInfo: Package;
     onSelect: (pkg: Package) => void;
 }
-
-const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
-    <div
-        onClick={() => onSelect(packageInfo)}
-        className="relative cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1 flex flex-col"
-    >
-        {packageInfo.label && (
-             <div className={`absolute top-0 -translate-y-1/2 left-6 text-xs font-bold px-3 py-1 rounded-full ${packageInfo.label.toLowerCase() === 'bestseller' ? 'bg-amber-400 text-amber-900' : 'bg-indigo-500 text-white'}`}>{packageInfo.label}</div>
-        )}
-        <div className="flex-grow">
-            <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
-            <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
-            <p className="text-2xl font-bold text-slate-900 mt-4">{formatCurrency(packageInfo.price)}</p>
-            <ul className="mt-4 space-y-2 text-sm">
-                {packageInfo.included.slice(0, 4).map(item => (
-                    <li key={item.id} className="flex items-center text-slate-600">
-                        <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-2 flex-shrink-0" />
-                        <span>{item.name}</span>
-                    </li>
-                ))}
-            </ul>
+function PackageCard({ packageInfo, onSelect }: PackageCardProps) {
+    return (
+        <div
+            onClick={() => onSelect(packageInfo)}
+            className="relative cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1 flex flex-col"
+        >
+            {packageInfo.label && (
+                <div className={`absolute top-0 -translate-y-1/2 left-6 text-xs font-bold px-3 py-1 rounded-full ${packageInfo.label.toLowerCase() === 'bestseller' ? 'bg-amber-400 text-amber-900' : 'bg-indigo-500 text-white'}`}>{packageInfo.label}</div>
+            )}
+            <div className="flex-grow">
+                <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
+                <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-4">{formatCurrency(packageInfo.price)}</p>
+                <ul className="mt-4 space-y-2 text-sm">
+                    {packageInfo.included.slice(0, 4).map(item => (
+                        <li key={item.id} className="flex items-center text-slate-600">
+                            <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-2 flex-shrink-0" />
+                            <span>{item.name}</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {packageInfo.included.length > 4 && (
+                <p className="text-xs text-slate-500 font-semibold mt-3 text-center">+ {packageInfo.included.length - 4} innych elementów</p>
+            )}
         </div>
-        {packageInfo.included.length > 4 && (
-            <p className="text-xs text-slate-500 font-semibold mt-3 text-center">+ {packageInfo.included.length - 4} innych elementów</p>
-        )}
-    </div>
-);
+    );
+}
+
 interface CustomizationListItemProps {
     item: PackageAddon;
     isSelected: boolean;
@@ -163,7 +177,7 @@ interface CustomizationListItemProps {
     value?: number;
     onValueChange?: (itemId: number, value: number) => void;
 }
-const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelected, onToggle, value, onValueChange }) => {
+function CustomizationListItem({ item, isSelected, onToggle, value, onValueChange }: CustomizationListItemProps) {
     const { type, config } = item;
     
     const handleValueChange = (newValue: number) => {
@@ -182,51 +196,52 @@ const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelecte
     };
     
     return (
-     <div className={`p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
-         <div className="flex items-center justify-between">
-            <div className="flex items-center">
-                {item.locked ? (
-                    <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
-                ) : type === 'static' && onToggle ? (
-                     <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
-                        {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
-                    </button>
-                ) : (
-                    <div className="w-6 h-6 mr-3"></div>
-                )}
-                <div>
-                     <span className="font-medium text-slate-800">{item.name}</span>
-                     {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">W pakiecie</span>}
+        <div className={`p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                    {item.locked ? (
+                        <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
+                    ) : type === 'static' && onToggle ? (
+                        <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
+                            {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
+                        </button>
+                    ) : (
+                        <div className="w-6 h-6 mr-3"></div>
+                    )}
+                    <div>
+                        <span className="font-medium text-slate-800">{item.name}</span>
+                        {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">W pakiecie</span>}
+                    </div>
+                </div>
+                <div className="text-right">
+                    {type === 'static' && item.price > 0 && !item.locked && (
+                        <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
+                    )}
                 </div>
             </div>
-            <div className="text-right">
-                {type === 'static' && item.price > 0 && !item.locked && (
-                    <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
-                )}
-            </div>
-        </div>
-        {isSelected && (type === 'quantity' || type === 'range') && (
-            <div className="mt-3 pl-9">
-                {type === 'quantity' && config.pricePerUnit && (
-                    <div className="flex items-center gap-2">
-                        <input type="number" value={value || 0} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center" />
-                        <span className="text-sm text-slate-600">{config.unitName || 'szt.'} x {formatCurrency(config.pricePerUnit)}</span>
-                    </div>
-                )}
-                {type === 'range' && config.includedAmount !== undefined && (
-                     <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                            <input type="range" min={config.includedAmount} max={config.maxAmount} value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-full" step={config.blockSize || 1} />
-                            <input type="number" value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center"/>
-                            <span className="text-sm text-slate-600">{config.unitName || 'km'}</span>
+            {isSelected && (type === 'quantity' || type === 'range') && (
+                <div className="mt-3 pl-9">
+                    {type === 'quantity' && config.pricePerUnit && (
+                        <div className="flex items-center gap-2">
+                            <input type="number" value={value || 0} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center" />
+                            <span className="text-sm text-slate-600">{config.unitName || 'szt.'} x {formatCurrency(config.pricePerUnit)}</span>
                         </div>
-                        <p className="text-xs text-slate-500">W pakiecie: {config.includedAmount} {config.unitName}. Każde dodatkowe {config.blockSize} {config.unitName} kosztuje {formatCurrency(config.pricePerBlock || 0)}.</p>
-                    </div>
-                )}
-            </div>
-        )}
-    </div>
-);
+                    )}
+                    {type === 'range' && config.includedAmount !== undefined && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                                <input type="range" min={config.includedAmount} max={config.maxAmount} value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-full" step={config.blockSize || 1} />
+                                <input type="number" value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center"/>
+                                <span className="text-sm text-slate-600">{config.unitName || 'km'}</span>
+                            </div>
+                            <p className="text-xs text-slate-500">W pakiecie: {config.includedAmount} {config.unitName}. Każde dodatkowe {config.blockSize} {config.unitName} kosztuje {formatCurrency(config.pricePerBlock || 0)}.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 interface ModalProps {
     isOpen: boolean;
@@ -234,7 +249,7 @@ interface ModalProps {
     children: ReactNode;
     size?: 'md' | 'lg';
 }
-const Modal: FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' }) => {
+function Modal({ isOpen, onClose, children, size = 'md' }: ModalProps) {
     if (!isOpen) return null;
     const sizeClass = size === 'lg' ? 'max-w-2xl' : 'max-w-md';
 
@@ -248,7 +263,7 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' }) => {
             </div>
         </div>
     );
-};
+}
 
 interface BookingModalProps {
     isOpen: boolean;
@@ -256,7 +271,7 @@ interface BookingModalProps {
     onKeyValidated: (accessKey: string) => void;
     onHelpClick: () => void;
 }
-const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated, onHelpClick }) => {
+function BookingModal({ isOpen, onClose, onKeyValidated, onHelpClick }: BookingModalProps) {
     const [accessKey, setAccessKey] = useState('');
     const [error, setError] = useState('');
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -264,14 +279,12 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated, 
     const handleConfirm = async () => {
         setError('');
         setStatus('loading');
-
         try {
             const response = await fetch('/api/validate-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: accessKey }),
             });
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Nieprawidłowy klucz dostępu.');
@@ -352,14 +365,14 @@ const BookingModal: FC<BookingModalProps> = ({ isOpen, onClose, onKeyValidated, 
             {renderContent()}
         </Modal>
     );
-};
+}
 
 interface HelpModalProps {
     isOpen: boolean;
     onClose: () => void;
     contactPhone?: string;
 }
-const HelpModal: FC<HelpModalProps> = ({ isOpen, onClose, contactPhone }) => {
+function HelpModal({ isOpen, onClose, contactPhone }: HelpModalProps) {
     const navigate = useNavigate();
 
     const goToContactForm = () => {
@@ -391,14 +404,14 @@ const HelpModal: FC<HelpModalProps> = ({ isOpen, onClose, contactPhone }) => {
             </div>
         </Modal>
     );
-};
+}
 
 interface MarketingModalProps {
     pkg: Package | null;
     onClose: () => void;
     onContinue: () => void;
 }
-const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) => {
+function MarketingModal({ pkg, onClose, onContinue }: MarketingModalProps) {
     if (!pkg) return null;
     return (
         <Modal isOpen={!!pkg} onClose={onClose} size="lg">
@@ -419,13 +432,12 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
             </div>
         </Modal>
     );
-};
-
+}
 
 // --- MAIN CREATOR APP ---
 const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
-const CalculatorPage: FC = () => {
+function CalculatorPage() {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -462,7 +474,6 @@ const CalculatorPage: FC = () => {
         }
     };
     
-
     useEffect(() => {
         if (!selectedPackage || !offerData) {
             setTotalPrice(0);
@@ -879,6 +890,6 @@ const CalculatorPage: FC = () => {
             />
         </div>
     );
-};
+}
 
 export default CalculatorPage;
