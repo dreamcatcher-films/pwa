@@ -9,11 +9,24 @@ import remarkGfm from 'remark-gfm';
 import { getPackages, getContactDetails } from '../api.ts';
 
 // --- DATA STRUCTURE ---
+type AddonType = 'static' | 'quantity' | 'range';
+
+interface AddonConfig {
+    unitName?: string;
+    pricePerUnit?: number;
+    includedAmount?: number;
+    pricePerBlock?: number;
+    blockSize?: number;
+    maxAmount?: number;
+}
+
 interface Addon {
     id: number;
     name: string;
     price: number;
     category_ids?: number[];
+    type: AddonType;
+    config: AddonConfig;
 }
 
 interface PackageAddon extends Addon {
@@ -47,6 +60,7 @@ interface OfferData {
     allAddons: Addon[];
 }
 
+// --- UI COMPONENTS ---
 const iconMap: { [key: string]: React.ReactNode } = {
     'FilmIcon': <FilmIcon className="w-8 h-8 text-indigo-500" />,
     'CameraIcon': <CameraIcon className="w-8 h-8 text-indigo-500" />,
@@ -54,7 +68,6 @@ const iconMap: { [key: string]: React.ReactNode } = {
     'default': <PhotoIcon className="w-8 h-8 text-indigo-500" />
 };
 
-// --- UI COMPONENTS ---
 const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentStep, steps }) => (
     <nav aria-label="Progress">
         <ol role="list" className="flex items-center">
@@ -97,7 +110,6 @@ const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentSt
     </nav>
 );
 
-
 const ServiceTypeCard: FC<{ category: Category; onClick: () => void }> = ({ category, onClick }) => (
     <div
         onClick={onClick}
@@ -112,7 +124,6 @@ const ServiceTypeCard: FC<{ category: Category; onClick: () => void }> = ({ cate
         <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{category.name}</h3>
     </div>
 );
-
 
 const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
     <div
@@ -149,28 +160,72 @@ interface PackageCardProps {
 interface CustomizationListItemProps {
     item: PackageAddon;
     isSelected: boolean;
-    onToggle: (itemId: number) => void;
+    onToggle?: (itemId: number) => void;
+    value?: number;
+    onValueChange?: (itemId: number, value: number) => void;
 }
-const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelected, onToggle }) => (
-     <div className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
-        <div className="flex items-center">
-            {item.locked ? (
-                <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
-            ) : (
-                 <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
-                    {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
-                </button>
-            )}
-            <div>
-                 <span className="font-medium text-slate-800">{item.name}</span>
-                 {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">W pakiecie</span>}
+const CustomizationListItem: FC<CustomizationListItemProps> = ({ item, isSelected, onToggle, value, onValueChange }) => {
+    const { type, config } = item;
+    
+    const handleValueChange = (newValue: number) => {
+        if (!onValueChange) return;
+
+        let clampedValue = newValue;
+        if (type === 'range') {
+            const min = config.includedAmount || 0;
+            const max = config.maxAmount || Infinity;
+            clampedValue = Math.max(min, Math.min(max, newValue));
+        } else if (type === 'quantity') {
+            clampedValue = Math.max(0, newValue);
+        }
+        
+        onValueChange(item.id, clampedValue);
+    };
+    
+    return (
+     <div className={`p-4 border rounded-lg transition-all duration-200 ${isSelected ? 'bg-indigo-50 border-indigo-300' : 'bg-white'}`}>
+         <div className="flex items-center justify-between">
+            <div className="flex items-center">
+                {item.locked ? (
+                    <CheckCircleIcon className="w-6 h-6 text-green-500 mr-3" />
+                ) : type === 'static' && onToggle ? (
+                     <button onClick={() => onToggle(item.id)} className="mr-3 focus:outline-none" aria-label={isSelected ? `Usuń ${item.name}` : `Dodaj ${item.name}`}>
+                        {isSelected ? <MinusCircleIcon className="w-6 h-6 text-red-500 hover:text-red-700" /> : <PlusCircleIcon className="w-6 h-6 text-green-500 hover:text-green-700" />}
+                    </button>
+                ) : (
+                    <div className="w-6 h-6 mr-3"></div>
+                )}
+                <div>
+                     <span className="font-medium text-slate-800">{item.name}</span>
+                     {item.locked && <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">W pakiecie</span>}
+                </div>
+            </div>
+            <div className="text-right">
+                {type === 'static' && item.price > 0 && !item.locked && (
+                    <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
+                )}
             </div>
         </div>
-        <div className="text-right">
-            {item.price > 0 && !item.locked && (
-                <span className="font-semibold text-slate-800">{formatCurrency(item.price)}</span>
-            )}
-        </div>
+        {isSelected && (type === 'quantity' || type === 'range') && (
+            <div className="mt-3 pl-9">
+                {type === 'quantity' && config.pricePerUnit && (
+                    <div className="flex items-center gap-2">
+                        <input type="number" value={value || 0} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center" />
+                        <span className="text-sm text-slate-600">{config.unitName || 'szt.'} x {formatCurrency(config.pricePerUnit)}</span>
+                    </div>
+                )}
+                {type === 'range' && config.includedAmount !== undefined && (
+                     <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <input type="range" min={config.includedAmount} max={config.maxAmount} value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-full" step={config.blockSize || 1} />
+                            <input type="number" value={value} onChange={(e) => handleValueChange(Number(e.target.value))} className="w-24 p-1 border-slate-300 rounded-md text-center"/>
+                            <span className="text-sm text-slate-600">{config.unitName || 'km'}</span>
+                        </div>
+                        <p className="text-xs text-slate-500">W pakiecie: {config.includedAmount} {config.unitName}. Każde dodatkowe {config.blockSize} {config.unitName} kosztuje {formatCurrency(config.pricePerBlock || 0)}.</p>
+                    </div>
+                )}
+            </div>
+        )}
     </div>
 );
 
@@ -371,11 +426,12 @@ const MarketingModal: FC<MarketingModalProps> = ({ pkg, onClose, onContinue }) =
 // --- MAIN CREATOR APP ---
 const STEPS = ['Usługa', 'Pakiet', 'Dostosuj', 'Rezerwuj'];
 
-const CalculatorPage: FC = () => {
+export const CalculatorPage: FC = () => {
     const [step, setStep] = useState<'serviceType' | 'selection' | 'customization' | 'form' | 'booked'>('serviceType');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
     const [customizedItems, setCustomizedItems] = useState<number[]>([]);
+    const [dynamicAddonValues, setDynamicAddonValues] = useState<Record<number, number>>({});
     const [totalPrice, setTotalPrice] = useState(0);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
@@ -416,18 +472,36 @@ const CalculatorPage: FC = () => {
 
         let finalPrice = Number(selectedPackage.price);
 
-        const addonMap: Map<number, PackageAddon> = new Map(offerData.allAddons.map(a => [a.id, { ...a, locked: false }]));
-        selectedPackage.included.forEach(i => addonMap.set(i.id, i));
+        const addonMap = new Map(offerData.allAddons.map(a => [a.id, a]));
 
+        // Calculate price for static addons
         customizedItems.forEach(itemId => {
             const item = addonMap.get(itemId);
-            if (item && !item.locked) {
+            const isIncluded = selectedPackage.included.some(inc => inc.id === itemId);
+            if (item && !isIncluded && item.type === 'static') {
                 finalPrice += Number(item.price);
             }
         });
 
+        // Calculate price for dynamic addons
+        for (const addonId in dynamicAddonValues) {
+            const item = addonMap.get(Number(addonId));
+            const value = dynamicAddonValues[addonId];
+            if (item && item.config) {
+                 if (item.type === 'quantity' && item.config.pricePerUnit) {
+                    finalPrice += value * item.config.pricePerUnit;
+                } else if (item.type === 'range' && item.config.includedAmount !== undefined) {
+                    const extra = value - item.config.includedAmount;
+                    if (extra > 0 && item.config.blockSize && item.config.pricePerBlock) {
+                        const blocks = Math.ceil(extra / item.config.blockSize);
+                        finalPrice += blocks * item.config.pricePerBlock;
+                    }
+                }
+            }
+        }
         setTotalPrice(finalPrice);
-    }, [selectedPackage, customizedItems, offerData]);
+
+    }, [selectedPackage, customizedItems, dynamicAddonValues, offerData]);
 
     const handleSelectServiceType = (categoryId: number) => {
         setSelectedCategoryId(categoryId);
@@ -441,8 +515,17 @@ const CalculatorPage: FC = () => {
     const handleContinueFromMarketing = () => {
         if (marketingModalPkg) {
             setSelectedPackage(marketingModalPkg);
-            const initialItems = marketingModalPkg.included.map(i => i.id) || [];
-            setCustomizedItems(initialItems);
+            
+            const initialStaticItems = marketingModalPkg.included.filter(i => i.type === 'static' || !i.type).map(i => i.id);
+            const initialDynamicAddons: Record<number, number> = {};
+            marketingModalPkg.included.forEach(item => {
+                if (item.type === 'range' && item.config.includedAmount !== undefined) {
+                    initialDynamicAddons[item.id] = item.config.includedAmount;
+                }
+            });
+
+            setCustomizedItems(initialStaticItems);
+            setDynamicAddonValues(initialDynamicAddons);
             setStep('customization');
             setMarketingModalPkg(null);
         }
@@ -465,6 +548,10 @@ const CalculatorPage: FC = () => {
             prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
         );
     };
+    
+    const handleDynamicValueChange = (itemId: number, value: number) => {
+        setDynamicAddonValues(prev => ({...prev, [itemId]: value}));
+    };
 
     const getAvailableAddons = (): PackageAddon[] => {
         if (!selectedPackage || !offerData || !selectedCategoryId) return [];
@@ -472,20 +559,38 @@ const CalculatorPage: FC = () => {
         
         return offerData.allAddons
             .filter(addon => {
-                // Filter out items already in the package
                 if (packageItemIds.has(addon.id)) {
                     return false;
                 }
-                
-                // If an addon has no assigned categories, it's available for all.
                 if (!addon.category_ids || addon.category_ids.length === 0) {
                     return true;
                 }
-                
-                // If it has assigned categories, check if the current category is one of them.
                 return addon.category_ids.includes(selectedCategoryId);
             })
             .map(addon => ({ ...addon, locked: false }));
+    };
+    
+    const getFinalSelectedItems = () => {
+        if (!offerData) return { static: [], dynamic: [] };
+        
+        const addonMap = new Map(offerData.allAddons.map(a => [a.id, a]));
+        
+        const staticItems = customizedItems
+            .map(id => addonMap.get(id)?.name)
+            .filter(Boolean) as string[];
+
+        const dynamicItems = Object.entries(dynamicAddonValues).map(([id, value]) => {
+            const addon = addonMap.get(Number(id));
+            if (!addon) return null;
+            return {
+                id: addon.id,
+                name: addon.name,
+                value: value,
+                unit: addon.config.unitName || ''
+            };
+        }).filter(Boolean);
+
+        return { static: staticItems, dynamic: dynamicItems };
     };
     
     const resetCalculator = () => {
@@ -493,6 +598,7 @@ const CalculatorPage: FC = () => {
         setSelectedCategoryId(null);
         setSelectedPackage(null);
         setCustomizedItems([]);
+        setDynamicAddonValues({});
         setTotalPrice(0);
         setFinalBookingId(null);
         setFinalClientId(null);
@@ -634,7 +740,7 @@ const CalculatorPage: FC = () => {
                 headerContent = (
                     <header className="text-center">
                         <h1 className="text-4xl font-bold tracking-tight text-slate-900">Dostosuj swój pakiet</h1>
-                        <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dodaj lub usuń elementy poniżej.</p>
+                        <p className="mt-2 text-lg text-slate-600">Wybrałeś <span className="font-bold text-indigo-600">{selectedPackage.name}</span>. Dostosuj elementy poniżej.</p>
                     </header>
                 );
                 mainContent = (
@@ -644,7 +750,13 @@ const CalculatorPage: FC = () => {
                                 <h2 className="text-xl font-semibold text-slate-800 mb-4">Elementy w Twoim pakiecie</h2>
                                  <div className="space-y-3">
                                     {selectedPackage.included.map(item => (
-                                        <CustomizationListItem key={item.id} item={item} isSelected={customizedItems.includes(item.id)} onToggle={handleItemToggle} />
+                                        <CustomizationListItem 
+                                            key={item.id} 
+                                            item={item} 
+                                            isSelected={true}
+                                            value={dynamicAddonValues[item.id]}
+                                            onValueChange={handleDynamicValueChange}
+                                        />
                                     ))}
                                 </div>
                             </section>
@@ -654,7 +766,14 @@ const CalculatorPage: FC = () => {
                                     <h2 className="text-xl font-semibold text-slate-800 mb-4">Dostępne dodatki</h2>
                                     <div className="space-y-3">
                                         {availableAddons.map(addon => (
-                                             <CustomizationListItem key={addon.id} item={addon} isSelected={customizedItems.includes(addon.id)} onToggle={handleItemToggle} />
+                                             <CustomizationListItem 
+                                                key={addon.id} 
+                                                item={addon} 
+                                                isSelected={customizedItems.includes(addon.id) || dynamicAddonValues.hasOwnProperty(addon.id)} 
+                                                onToggle={handleItemToggle}
+                                                value={dynamicAddonValues[addon.id]}
+                                                onValueChange={handleDynamicValueChange}
+                                             />
                                         ))}
                                     </div>
                                 </section>
@@ -722,7 +841,7 @@ const CalculatorPage: FC = () => {
                             accessKey: validatedAccessKey,
                             packageName: selectedPackage?.name || '',
                             totalPrice: totalPrice,
-                            selectedItems: customizedItems.map(id => offerData.allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
+                            selectedItems: getFinalSelectedItems(),
                             depositAmount: selectedPackage?.deposit_amount || 0,
                         }}
                         onBookingComplete={handleBookingComplete}
@@ -762,5 +881,3 @@ const CalculatorPage: FC = () => {
         </div>
     );
 };
-
-export default CalculatorPage;
