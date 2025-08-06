@@ -11,6 +11,7 @@ interface BookingDetails {
     packageName: string;
     totalPrice: number;
     selectedItems: string[];
+    depositAmount: number;
 }
 
 interface BookingFormProps {
