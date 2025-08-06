@@ -6,11 +6,20 @@ import { formatCurrency } from '../utils.ts';
 import { InputField, TextAreaField } from './FormControls.tsx';
 import { validateDiscount, createBooking } from '../api.ts';
 
+interface SelectedItems {
+    static: string[];
+    dynamic: {
+        id: number;
+        name: string;
+        value: number;
+        unit: string;
+    }[];
+}
 interface BookingDetails {
     accessKey: string;
     packageName: string;
     totalPrice: number;
-    selectedItems: string[];
+    selectedItems: SelectedItems;
     depositAmount: number;
 }
 
@@ -97,7 +106,16 @@ const BookingForm: React.FC<BookingFormProps> = ({ bookingDetails, onBookingComp
                 <h2 className="text-xl font-bold text-slate-800 mb-4">Podsumowanie Twojego wyboru</h2>
                 <div className="space-y-3">
                     <div className="flex justify-between items-center"><span className="text-slate-600">Wybrany pakiet:</span><span className="font-bold text-slate-900">{bookingDetails.packageName}</span></div>
+                    
+                    {bookingDetails.selectedItems.dynamic.map(item => (
+                        <div key={item.id} className="flex justify-between items-center text-sm">
+                            <span className="text-slate-500">{item.name}</span>
+                            <span className="font-medium text-slate-700">{item.value} {item.unit}</span>
+                        </div>
+                    ))}
+
                     <div className="flex justify-between items-center"><span className="text-slate-600">Cena bazowa:</span><span className="font-medium text-slate-700">{formatCurrency(initialPrice)}</span></div>
+                    
                     {appliedDiscount && (
                          <div className="flex justify-between items-center text-green-600">
                              <span>Rabat ({appliedDiscount.code}):</span>
