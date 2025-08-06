@@ -1,7 +1,7 @@
 import React, { useState, useEffect, FC, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, EngagementRingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon } from '../components/Icons.tsx';
+import { CheckCircleIcon, PlusCircleIcon, MinusCircleIcon, EngagementRingSpinner, XMarkIcon, ArrowLeftIcon, ClipboardIcon, FilmIcon, CameraIcon, PhotoIcon, InformationCircleIcon } from '../components/Icons.tsx';
 import BookingForm from '../components/BookingForm.tsx';
 import { formatCurrency, copyToClipboard } from '../utils.ts';
 import ReactMarkdown from 'react-markdown';
@@ -25,6 +25,7 @@ interface Category {
     name: string;
     description: string;
     icon_name: string;
+    label: string | null;
 }
 
 interface Package {
@@ -36,6 +37,8 @@ interface Package {
     included: PackageAddon[];
     rich_description: string;
     rich_description_image_url: string;
+    label: string | null;
+    deposit_amount: number;
 }
 
 interface OfferData {
@@ -95,15 +98,18 @@ const StepIndicator: FC<{ currentStep: number; steps: string[] }> = ({ currentSt
 );
 
 
-const ServiceTypeCard: FC<{ title: string; icon: ReactNode; onClick: () => void }> = ({ title, icon, onClick }) => (
+const ServiceTypeCard: FC<{ category: Category; onClick: () => void }> = ({ category, onClick }) => (
     <div
         onClick={onClick}
-        className="group cursor-pointer rounded-2xl border-2 border-slate-200 bg-white p-8 text-center transition-all duration-300 hover:border-indigo-400 hover:shadow-xl hover:-translate-y-2"
+        className="group relative cursor-pointer rounded-2xl border-2 border-slate-200 bg-white p-8 text-center transition-all duration-300 hover:border-indigo-400 hover:shadow-xl hover:-translate-y-2"
     >
+        {category.label && (
+            <div className="absolute top-4 right-4 bg-green-100 text-green-800 text-xs font-bold px-2.5 py-1 rounded-full">{category.label}</div>
+        )}
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-indigo-100">
-            {icon}
+            {iconMap[category.icon_name] || iconMap.default}
         </div>
-        <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{title}</h3>
+        <h3 className="mt-6 text-xl font-bold text-slate-800 transition-colors group-hover:text-indigo-600">{category.name}</h3>
     </div>
 );
 
@@ -111,19 +117,27 @@ const ServiceTypeCard: FC<{ title: string; icon: ReactNode; onClick: () => void 
 const PackageCard: FC<PackageCardProps> = ({ packageInfo, onSelect }) => (
     <div
         onClick={() => onSelect(packageInfo)}
-        className="cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1"
+        className="relative cursor-pointer border-2 p-6 rounded-2xl transition-all duration-300 bg-white hover:border-indigo-400 hover:shadow-xl transform hover:-translate-y-1 flex flex-col"
     >
-        <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
-        <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
-        <p className="text-2xl font-bold text-slate-900 mt-4">{formatCurrency(packageInfo.price)}</p>
-        <ul className="mt-4 space-y-2 text-sm">
-            {packageInfo.included.slice(0, 3).map(item => (
-                <li key={item.id} className="flex items-center text-slate-600">
-                    <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-2 flex-shrink-0" />
-                    <span>{item.name}</span>
-                </li>
-            ))}
-        </ul>
+        {packageInfo.label && (
+             <div className={`absolute top-0 -translate-y-1/2 left-6 text-xs font-bold px-3 py-1 rounded-full ${packageInfo.label.toLowerCase() === 'bestseller' ? 'bg-amber-400 text-amber-900' : 'bg-indigo-500 text-white'}`}>{packageInfo.label}</div>
+        )}
+        <div className="flex-grow">
+            <h3 className="text-xl font-bold text-slate-800">{packageInfo.name}</h3>
+            <p className="text-sm text-slate-500 mt-2 min-h-[40px]">{packageInfo.description}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-4">{formatCurrency(packageInfo.price)}</p>
+            <ul className="mt-4 space-y-2 text-sm">
+                {packageInfo.included.slice(0, 4).map(item => (
+                    <li key={item.id} className="flex items-center text-slate-600">
+                        <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-2 flex-shrink-0" />
+                        <span>{item.name}</span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+        {packageInfo.included.length > 4 && (
+            <p className="text-xs text-slate-500 font-semibold mt-3 text-center">+ {packageInfo.included.length - 4} innych elementów</p>
+        )}
     </div>
 );
 interface PackageCardProps {
@@ -569,9 +583,9 @@ const CalculatorPage: FC = () => {
                 </header>
             );
             mainContent = (
-                <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
                     {offerData.categories.map(cat => (
-                        <ServiceTypeCard key={cat.id} title={cat.name} icon={iconMap[cat.icon_name] || iconMap.default} onClick={() => handleSelectServiceType(cat.id)} />
+                        <ServiceTypeCard key={cat.id} category={cat} onClick={() => handleSelectServiceType(cat.id)} />
                     ))}
                 </div>
             );
@@ -593,7 +607,7 @@ const CalculatorPage: FC = () => {
             );
             mainContent = (
                 <div className="max-w-7xl mx-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {filteredPackages.map(pkg => (
                             <PackageCard key={pkg.id} packageInfo={pkg} onSelect={handleSelectPackage} />
                         ))}
@@ -651,7 +665,22 @@ const CalculatorPage: FC = () => {
                                 <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Twoja wycena</h3>
                                 <p className="text-center text-sm text-slate-500 mb-6">Na podstawie <span className="font-semibold">{selectedPackage.name}</span></p>
                                 
-                                <div className="mt-6 border-t border-slate-200 pt-6">
+                                <div className="space-y-3">
+                                    {selectedPackage.deposit_amount > 0 && (
+                                        <div className="flex justify-between items-center text-md">
+                                            <span className="text-slate-600 flex items-center gap-1.5">
+                                                Zadatek
+                                                <div className="group relative">
+                                                    <InformationCircleIcon className="w-4 h-4 text-slate-400"/>
+                                                    <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 text-center text-xs bg-slate-700 text-white p-2 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">Wpłata zadatku jest warunkiem przyjęcia rezerwacji.</span>
+                                                </div>
+                                            </span>
+                                            <span className="font-semibold text-slate-800">{formatCurrency(selectedPackage.deposit_amount)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="mt-3 border-t border-slate-200 pt-4">
                                     <div className="flex justify-between items-center text-2xl font-bold">
                                         <span className="text-slate-900">Suma</span>
                                         <span className="text-indigo-600">{formatCurrency(totalPrice)}</span>
@@ -694,6 +723,7 @@ const CalculatorPage: FC = () => {
                             packageName: selectedPackage?.name || '',
                             totalPrice: totalPrice,
                             selectedItems: customizedItems.map(id => offerData.allAddons.find(a => a.id === id)?.name || '').filter(Boolean),
+                            depositAmount: selectedPackage?.deposit_amount || 0,
                         }}
                         onBookingComplete={handleBookingComplete}
                     />
