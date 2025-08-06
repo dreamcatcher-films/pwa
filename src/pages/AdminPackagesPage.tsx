@@ -13,11 +13,23 @@ interface Category {
     label: string | null;
 }
 
+type AddonType = 'static' | 'quantity' | 'range';
+
+interface AddonConfig {
+    unitName?: string;
+    pricePerUnit?: number;
+    includedAmount?: number;
+    pricePerBlock?: number;
+    blockSize?: number;
+    maxAmount?: number;
+}
 interface Addon {
     id: number;
     name: string;
     price: number;
     category_ids?: number[];
+    type: AddonType;
+    config: AddonConfig;
 }
 
 interface PackageAddon {
@@ -201,7 +213,7 @@ const AddonsManager: FC<{ addons: Addon[], categories: Category[], onDataChange:
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-slate-800">Zarządzaj Dodatkami</h3>
-                <button onClick={() => setEditingAddon({ name: '', price: 0, category_ids: [] })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                <button onClick={() => setEditingAddon({ name: '', price: 0, category_ids: [], type: 'static', config: {} })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
                     <PlusCircleIcon className="w-5 h-5"/> Dodaj Dodatek
                 </button>
             </div>
@@ -292,14 +304,27 @@ const CategoriesManager: FC<{ categories: Category[], onDataChange: () => void, 
 
 // --- ADDON EDITOR MODAL ---
 const AddonEditor: FC<{ addon: Partial<Addon>, allCategories: Category[], onClose: () => void, onSave: (data: Partial<Addon>) => void }> = ({ addon, allCategories, onClose, onSave }) => {
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<Partial<Addon>>({
         ...addon,
-        category_ids: addon.category_ids || []
+        category_ids: addon.category_ids || [],
+        type: addon.type || 'static',
+        config: addon.config || {}
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormData(prev => ({...prev, [e.target.name]: e.target.value}));
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        if (name.startsWith('config.')) {
+            const configField = name.split('.')[1];
+            setFormData(prev => ({ ...prev, config: { ...prev.config, [configField]: value } }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+    
+    const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newType = e.target.value as AddonType;
+        setFormData(prev => ({ ...prev, type: newType, config: {} })); // Reset config on type change
     };
 
     const handleCategoryToggle = (categoryId: number) => {
@@ -320,16 +345,44 @@ const AddonEditor: FC<{ addon: Partial<Addon>, allCategories: Category[], onClos
 
     return (
         <Modal onClose={onClose} size="md">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
                 <h3 className="text-xl font-bold text-slate-800">{addon.id ? `Edytuj Dodatek` : `Nowy Dodatek`}</h3>
                 <div>
                     <label htmlFor="name" className="block text-sm font-medium text-slate-700">Nazwa</label>
                     <input name="name" type="text" value={formData.name || ''} onChange={handleChange} className={inputClasses} required />
                 </div>
                  <div>
-                    <label htmlFor="price" className="block text-sm font-medium text-slate-700">Cena</label>
-                    <input name="price" type="number" step="0.01" value={formData.price || ''} onChange={handleChange} className={inputClasses} required />
+                    <label htmlFor="price" className="block text-sm font-medium text-slate-700">Cena Bazowa</label>
+                     <p className="text-xs text-slate-500 mb-1">Dla dodatków statycznych jest to cena końcowa. Dla innych jest to cena startowa/darmowa.</p>
+                    <input name="price" type="number" step="0.01" value={formData.price || 0} onChange={handleChange} className={inputClasses} required />
                 </div>
+                 <div>
+                    <label htmlFor="type" className="block text-sm font-medium text-slate-700">Typ Dodatku</label>
+                    <select name="type" value={formData.type} onChange={handleTypeChange} className={inputClasses}>
+                        <option value="static">Statyczny (jednorazowy wybór)</option>
+                        <option value="quantity">Ilościowy (np. odbitki)</option>
+                        <option value="range">Zakresowy (np. dojazd)</option>
+                    </select>
+                </div>
+
+                {formData.type === 'quantity' && (
+                    <div className="p-3 border rounded-md bg-slate-50 space-y-2">
+                        <h4 className="font-semibold text-sm">Konfiguracja ilościowa</h4>
+                        <input name="config.pricePerUnit" value={formData.config?.pricePerUnit || ''} onChange={handleChange} type="number" step="0.01" className={inputClasses} placeholder="Cena za sztukę" required/>
+                        <input name="config.unitName" value={formData.config?.unitName || ''} onChange={handleChange} className={inputClasses} placeholder="Nazwa jednostki (np. szt.)" required/>
+                    </div>
+                )}
+                 {formData.type === 'range' && (
+                    <div className="p-3 border rounded-md bg-slate-50 space-y-2">
+                        <h4 className="font-semibold text-sm">Konfiguracja zakresowa</h4>
+                        <input name="config.includedAmount" value={formData.config?.includedAmount || ''} onChange={handleChange} type="number" className={inputClasses} placeholder="Ilość wliczona w cenę bazową" required/>
+                        <input name="config.pricePerBlock" value={formData.config?.pricePerBlock || ''} onChange={handleChange} type="number" step="0.01" className={inputClasses} placeholder="Cena za dodatkowy blok" required/>
+                        <input name="config.blockSize" value={formData.config?.blockSize || ''} onChange={handleChange} type="number" className={inputClasses} placeholder="Wielkość bloku (np. 10 dla 10km)" required/>
+                        <input name="config.unitName" value={formData.config?.unitName || ''} onChange={handleChange} className={inputClasses} placeholder="Nazwa jednostki (np. km)" required/>
+                        <input name="config.maxAmount" value={formData.config?.maxAmount || ''} onChange={handleChange} type="number" className={inputClasses} placeholder="Wartość maksymalna (np. 500)" required/>
+                    </div>
+                )}
+
                 <div>
                     <label className="block text-sm font-medium text-slate-700">Dostępny w kategoriach</label>
                     <p className="text-xs text-slate-500 mb-2">Jeśli żadna kategoria nie jest zaznaczona, dodatek będzie dostępny dla wszystkich pakietów.</p>
