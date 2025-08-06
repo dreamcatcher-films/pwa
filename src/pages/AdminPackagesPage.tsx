@@ -1,5 +1,5 @@
 import React, { useState, useEffect, FC } from 'react';
-import { LoadingSpinner, CheckCircleIcon, TrashIcon, PencilSquareIcon, PlusCircleIcon, TagIcon, CircleStackIcon, XMarkIcon } from '../components/Icons.tsx';
+import { LoadingSpinner, CheckCircleIcon, TrashIcon, PencilSquareIcon, PlusCircleIcon, TagIcon, CircleStackIcon, XMarkIcon, ArrowUpIcon, ArrowDownIcon } from '../components/Icons.tsx';
 import { formatCurrency } from '../utils.ts';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,6 +10,7 @@ interface Category {
     name: string;
     description: string;
     icon_name: string;
+    label: string | null;
 }
 
 interface Addon {
@@ -34,6 +35,8 @@ interface Package {
     rich_description: string;
     rich_description_image_url: string;
     addons: PackageAddon[];
+    label: string | null;
+    deposit_amount: number;
 }
 
 type AdminTab = 'packages' | 'addons' | 'categories';
@@ -137,7 +140,7 @@ const PackagesManager: FC<{ packages: Package[], addons: Addon[], categories: Ca
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-slate-800">Zarządzaj Pakietami</h3>
-                <button onClick={() => setEditingPackage({ name: '', description: '', price: 0, addons: [], category_id: null, is_published: false, rich_description: '', rich_description_image_url: '' })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
+                <button onClick={() => setEditingPackage({ name: '', description: '', price: 0, addons: [], category_id: null, is_published: false, rich_description: '', rich_description_image_url: '', label: null, deposit_amount: 0 })} className="flex items-center gap-2 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">
                     <PlusCircleIcon className="w-5 h-5"/> Dodaj Pakiet
                 </button>
             </div>
@@ -148,7 +151,7 @@ const PackagesManager: FC<{ packages: Package[], addons: Addon[], categories: Ca
                             <div className="flex items-center gap-4">
                                 <span className={`w-3 h-3 rounded-full ${pkg.is_published ? 'bg-green-500' : 'bg-slate-400'}`} title={pkg.is_published ? 'Opublikowany' : 'Szkic'}></span>
                                 <div>
-                                    <p className="font-bold text-slate-800">{pkg.name}</p>
+                                    <p className="font-bold text-slate-800 flex items-center gap-2">{pkg.name} {pkg.label && <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{pkg.label}</span>}</p>
                                     <p className="text-sm text-slate-500">{pkg.category_name || 'Brak kategorii'}</p>
                                 </div>
                             </div>
@@ -271,7 +274,7 @@ const CategoriesManager: FC<{ categories: Category[], onDataChange: () => void, 
                     {categories.map(cat => (
                         <li key={cat.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
                             <div>
-                                <p className="font-medium text-slate-800">{cat.name}</p>
+                                <p className="font-medium text-slate-800 flex items-center gap-2">{cat.name} {cat.label && <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{cat.label}</span>}</p>
                                 <p className="text-sm text-slate-500">{cat.description}</p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -282,7 +285,7 @@ const CategoriesManager: FC<{ categories: Category[], onDataChange: () => void, 
                     ))}
                 </ul>
             </div>
-            {editingCategory && <SimpleEditor item={editingCategory} onClose={() => setEditingCategory(null)} onSave={handleSave} title="Kategoria" fields={[{ name: 'name', label: 'Nazwa' }, { name: 'description', label: 'Opis' }, { name: 'icon_name', label: 'Nazwa ikony' }]} />}
+            {editingCategory && <SimpleEditor item={editingCategory} onClose={() => setEditingCategory(null)} onSave={handleSave} title="Kategoria" fields={[{ name: 'name', label: 'Nazwa' }, { name: 'description', label: 'Opis' }, { name: 'icon_name', label: 'Nazwa ikony' }, { name: 'label', label: 'Etykieta (np. Bestseller)', required: false }]} />}
         </div>
     );
 };
@@ -357,7 +360,7 @@ const AddonEditor: FC<{ addon: Partial<Addon>, allCategories: Category[], onClos
 
 
 // --- SIMPLE EDITOR MODAL (for Categories) ---
-const SimpleEditor: FC<{ item: any, onClose: () => void, onSave: (item: any) => void, title: string, fields: {name: string, label: string, type?: string}[] }> = ({ item, onClose, onSave, title, fields }) => {
+const SimpleEditor: FC<{ item: any, onClose: () => void, onSave: (item: any) => void, title: string, fields: {name: string, label: string, type?: string, required?: boolean}[] }> = ({ item, onClose, onSave, title, fields }) => {
     const [formData, setFormData] = useState(item);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -379,7 +382,7 @@ const SimpleEditor: FC<{ item: any, onClose: () => void, onSave: (item: any) => 
                 {fields.map(field => (
                     <div key={field.name}>
                         <label htmlFor={field.name} className="block text-sm font-medium text-slate-700">{field.label}</label>
-                        <input name={field.name} type={field.type || 'text'} value={formData[field.name] || ''} onChange={handleChange} className={inputClasses} required />
+                        <input name={field.name} type={field.type || 'text'} value={formData[field.name] || ''} onChange={handleChange} className={inputClasses} required={field.required !== false} />
                     </div>
                 ))}
                  <div className="flex justify-end gap-3 pt-4 border-t">
@@ -408,7 +411,7 @@ const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Categ
         if (type === 'checkbox') {
              setFormData(p => ({ ...p, [name]: (e.target as HTMLInputElement).checked }));
         } else {
-             setFormData(p => ({ ...p, [name]: name === 'price' || name === 'category_id' ? Number(value) : value }));
+             setFormData(p => ({ ...p, [name]: (name === 'price' || name === 'category_id' || name === 'deposit_amount') ? (value === '' ? '' : Number(value)) : value }));
         }
     };
 
@@ -419,6 +422,21 @@ const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Categ
         } else {
             setFormData(p => ({...p, addons: [...p.addons, { id: addonId }]}));
         }
+    };
+
+    const handleReorderAddon = (addonId: number, direction: 'up' | 'down') => {
+        setFormData(p => {
+            const addons = [...p.addons];
+            const index = addons.findIndex(a => a.id === addonId);
+            if (index === -1) return p;
+            const newIndex = direction === 'up' ? index - 1 : index + 1;
+            if (newIndex < 0 || newIndex >= addons.length) return p;
+            
+            const [movedItem] = addons.splice(index, 1);
+            addons.splice(newIndex, 0, movedItem);
+
+            return { ...p, addons };
+        });
     };
     
     const handleSubmit = async (e: React.FormEvent) => {
@@ -471,7 +489,7 @@ const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Categ
 
     return (
         <Modal onClose={onClose} size="xl">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6 max-h-[85vh] overflow-y-auto pr-4">
                  <h3 className="text-xl font-bold text-slate-800">{isEditing ? 'Edytuj Pakiet' : 'Nowy Pakiet'}</h3>
                  {error && <p className="text-red-500 bg-red-50 p-2 rounded-md text-sm">{error}</p>}
                 
@@ -482,6 +500,10 @@ const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Categ
                         <option value="">-- Wybierz kategorię --</option>
                         {allCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input name="label" value={formData.label || ''} onChange={handleChange} placeholder="Etykieta marketingowa (np. Bestseller)" className={inputClasses} />
+                    <input name="deposit_amount" type="number" step="0.01" value={formData.deposit_amount} onChange={handleChange} placeholder="Kwota zadatku" className={inputClasses} required />
                 </div>
                 <textarea name="description" value={formData.description} onChange={handleChange} placeholder="Krótki opis (dla listy)" className={inputClasses} rows={2}></textarea>
                 
@@ -516,16 +538,22 @@ const PackageEditor: FC<{ pkg: Package, allAddons: Addon[], allCategories: Categ
                     <div>
                         <h4 className="font-semibold mb-2">Dodatki w pakiecie</h4>
                         <ul className="space-y-2 max-h-60 overflow-y-auto pr-2 border rounded-lg p-2">
-                            {formData.addons.map(includedAddon => {
+                            {formData.addons.map((includedAddon, index) => {
                                 const addonDetails = allAddons.find(a => a.id === includedAddon.id);
                                 if (!addonDetails) return null;
                                 return (
                                     <li key={includedAddon.id} className="flex justify-between items-center p-2 bg-indigo-50 rounded-md">
-                                        <div className="flex-grow">
-                                            <span>{addonDetails.name}</span>
-                                            {parseFloat(addonDetails.price.toString()) === 0 && (
-                                                <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">Darmowy</span>
-                                            )}
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex flex-col">
+                                                <button type="button" onClick={() => handleReorderAddon(includedAddon.id, 'up')} disabled={index === 0} className="disabled:opacity-25"><ArrowUpIcon className="w-4 h-4"/></button>
+                                                <button type="button" onClick={() => handleReorderAddon(includedAddon.id, 'down')} disabled={index === formData.addons.length - 1} className="disabled:opacity-25"><ArrowDownIcon className="w-4 h-4"/></button>
+                                            </div>
+                                            <div className="flex-grow">
+                                                <span>{addonDetails.name}</span>
+                                                {parseFloat(addonDetails.price.toString()) === 0 && (
+                                                    <span className="text-xs font-semibold bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full ml-2">Darmowy</span>
+                                                )}
+                                            </div>
                                         </div>
                                         <button type="button" onClick={() => handleAddonToggle(includedAddon.id)} className="p-1 text-red-500 hover:text-red-700"><TrashIcon/></button>
                                     </li>
