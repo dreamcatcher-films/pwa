@@ -42,7 +42,21 @@ export const validateAccessKey = (key: string) => apiFetch('/api/validate-key', 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key }),
 });
-export const createBooking = (bookingData: any) => apiFetch('/api/bookings', {
+
+interface SelectedItemsPayload {
+    static: string[];
+    dynamic: { id: number; name: string; value: number; unit: string; }[] | null;
+}
+interface BookingDataPayload {
+    accessKey: string;
+    packageName: string;
+    totalPrice: number;
+    selectedItems: SelectedItemsPayload;
+    depositAmount: number;
+    // plus other form fields
+}
+
+export const createBooking = (bookingData: BookingDataPayload) => apiFetch('/api/bookings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(bookingData),
@@ -362,72 +376,18 @@ export const uploadAdminAttachment = async (file: File) => {
     if (!response.ok) throw new Error(await response.text());
     return response.json();
 };
+export const getNotificationCount = () => apiFetch('/api/admin/notifications/count', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
+
 export const sendAdminMessage = ({ bookingId, data }: { bookingId: string, data: any }) => apiFetch(`/api/admin/messages/${bookingId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` },
     body: JSON.stringify(data),
 });
-export const getAdminUnreadCount = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/unread-count`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const markAdminMessagesAsRead = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/messages/mark-as-read`, {
+
+export const markAdminMessagesAsRead = (bookingId: string) => apiFetchNoJson(`/api/admin/bookings/${bookingId}/messages/mark-as-read`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${getAdminToken()}` },
 });
-
-// Admin Homepage
-export const getHomepageSlides = () => apiFetch('/api/admin/homepage/slides', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const uploadHomepageSlideImage = async (file: File) => {
-    const response = await fetch('/api/admin/homepage/slides/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name },
-        body: file,
-    });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-};
-export const createHomepageSlide = (data: any) => apiFetch('/api/admin/homepage/slides', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-export const updateHomepageSlide = ({ id, data }: { id: any, data: any }) => apiFetch(`/api/admin/homepage/slides/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-export const deleteHomepageSlide = (id: number) => apiFetchNoJson(`/api/admin/homepage/slides/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const reorderHomepageSlides = (orderedIds: number[]) => apiFetch('/api/admin/homepage/slides/order', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify({ orderedIds }) });
-
-export const getHomepageAbout = () => apiFetch('/api/admin/homepage/about', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const uploadHomepageAboutImage = async (file: File) => {
-    const response = await fetch('/api/admin/homepage/about/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name },
-        body: file,
-    });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-};
-export const updateHomepageAbout = (data: any) => apiFetch('/api/admin/homepage/about', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-
-export const getHomepageTestimonials = () => apiFetch('/api/admin/homepage/testimonials', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const createHomepageTestimonial = (data: any) => apiFetch('/api/admin/homepage/testimonials', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-export const updateHomepageTestimonial = ({ id, data }: { id: any, data: any }) => apiFetch(`/api/admin/homepage/testimonials/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-export const deleteHomepageTestimonial = (id: number) => apiFetchNoJson(`/api/admin/homepage/testimonials/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-
-export const getHomepageInstagram = () => apiFetch('/api/admin/homepage/instagram', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const uploadHomepageInstagramImage = async (file: File) => {
-    const response = await fetch('/api/admin/homepage/instagram/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-vercel-filename': file.name },
-        body: file,
-    });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-};
-export const createHomepageInstagramPost = (data: any) => apiFetch('/api/admin/homepage/instagram', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
-export const deleteHomepageInstagramPost = (id: number) => apiFetchNoJson(`/api/admin/homepage/instagram/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const reorderHomepageInstagramPosts = (orderedIds: number[]) => apiFetch('/api/admin/homepage/instagram/order', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify({ orderedIds }) });
-
-// Admin Inbox
-export const getInboxMessages = () => apiFetch('/api/admin/inbox', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const markInboxMessageAsRead = (id: number) => apiFetchNoJson(`/api/admin/inbox/${id}/read`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const deleteInboxMessage = (id: number) => apiFetchNoJson(`/api/admin/inbox/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-
-// Admin Notifications
-export const getNotifications = () => apiFetch('/api/admin/notifications', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
-export const getNotificationCount = () => apiFetch('/api/admin/notifications/count', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 
 // Admin Guest Management
 export const getAdminGuests = (bookingId: string) => apiFetch(`/api/admin/bookings/${bookingId}/guests`, { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
@@ -460,7 +420,7 @@ export const sendAdminGuestInvites = ({ bookingId }: { bookingId: string }) => a
     headers: { 'Authorization': `Bearer ${getAdminToken()}` },
 });
 
-// Admin Questionnaire
+// Admin Questionnaire Management
 export const getQuestionnaireTemplates = () => apiFetch('/api/admin/questionnaires', { headers: { 'Authorization': `Bearer ${getAdminToken()}` } });
 export const createQuestionnaireTemplate = (data: any) => apiFetch('/api/admin/questionnaires', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
 export const updateQuestionnaireTemplate = ({ id, data }: { id: number, data: any }) => apiFetch(`/api/admin/questionnaires/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}` }, body: JSON.stringify(data) });
